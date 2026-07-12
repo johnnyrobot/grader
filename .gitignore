@@ -77,6 +77,8 @@ latest.json
 
 # Tauri build
 app/src-tauri/target/
+app/test-results/
+app/playwright-report/
 
 # Python venv in app (sidecar)
 app/src-tauri/resources/

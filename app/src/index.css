@@ -12,12 +12,14 @@
   --surface-inset: #e5eeeb;
   --ink-strong: #12334a;
   --ink: #294555;
-  --ink-muted: #607681;
+  --ink-muted: #4f6873;
   --line: #cfddd8;
   --line-strong: #9fbab2;
-  --accent: #007f73;
-  --accent-strong: #00665d;
+  --accent: #006f65;
+  --accent-strong: #005b53;
   --accent-soft: #d9f1ec;
+  --solid-accent: #006f65;
+  --solid-accent-hover: #005b53;
   --focus: #2458c6;
   --success: #187447;
   --success-soft: #dff1e7;
@@ -52,6 +54,8 @@
   --accent: #65d4c4;
   --accent-strong: #8ce1d5;
   --accent-soft: #214d4a;
+  --solid-accent: #006b61;
+  --solid-accent-hover: #00574f;
   --focus: #8fb2ff;
   --success: #7ad9a4;
   --success-soft: #224737;
@@ -123,8 +127,8 @@ button { color: inherit; }
   .field-control { background: var(--surface-paper); border: 1px solid var(--line-strong); color: var(--ink-strong); @apply w-full rounded-xl px-3.5 py-2.5 text-sm transition; }
   .field-control::placeholder { color: var(--ink-muted); }
   .field-control:hover { border-color: var(--accent); }
-  .button-primary { background: var(--accent); color: white; @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-bold transition; }
-  .button-primary:hover { background: var(--accent-strong); transform: translateY(-1px); }
+  .button-primary { background: var(--solid-accent); color: white; @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-bold transition; }
+  .button-primary:hover { background: var(--solid-accent-hover); transform: translateY(-1px); }
   .button-secondary { background: var(--surface-paper); border: 1px solid var(--line-strong); color: var(--ink-strong); @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition; }
   .button-secondary:hover { border-color: var(--accent); background: var(--surface-soft); }
   .button-quiet { color: var(--ink-muted); @apply inline-flex min-h-10 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold transition; }
@@ -216,7 +220,7 @@ button { color: inherit; }
   .score-option { @apply relative cursor-pointer; }
   .score-option input { @apply absolute inset-0 h-full w-full cursor-pointer opacity-0; }
   .score-option span { background: var(--surface-paper); border: 1px solid var(--line-strong); color: var(--ink-muted); @apply grid min-h-10 place-items-center rounded-lg text-sm font-bold transition; }
-  .score-option input:checked + span { background: var(--accent); border-color: var(--accent); color: white; box-shadow: inset 0 -2px 0 rgb(0 0 0 / 0.12); }
+  .score-option input:checked + span { background: var(--solid-accent); border-color: var(--solid-accent); color: white; box-shadow: inset 0 -2px 0 rgb(0 0 0 / 0.12); }
   .score-option input:focus-visible + span { outline: 3px solid var(--focus); outline-offset: 2px; }
   .feedback-editor-block { border-top: 1px solid var(--line); @apply mt-5 pt-5; }
   .field-help { color: var(--ink-muted); @apply -mt-0.5 mb-2 text-xs; }
