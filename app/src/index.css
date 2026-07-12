@@ -135,4 +135,64 @@ button { color: inherit; }
   .status-standard { background: var(--warning-soft); color: var(--warning); }
   .status-confident { background: var(--success-soft); color: var(--success); }
   .status-info { background: var(--info-soft); color: var(--info); }
+  .skip-link { position: fixed; left: 1rem; top: -5rem; z-index: 100; background: var(--ink-strong); color: var(--surface-paper); @apply rounded-lg px-4 py-2 font-bold; }
+  .skip-link:focus { top: 1rem; }
+  .app-header { background: color-mix(in srgb, var(--surface-paper) 94%, transparent); border-bottom: 1px solid var(--line); @apply sticky top-0 z-40 flex min-h-[76px] items-center justify-between gap-5 px-5 py-3 backdrop-blur-xl md:px-8; }
+  .app-header__brand { @apply flex items-center gap-3; }
+  .brand-mark { background: var(--ink-strong); color: var(--surface-paper); box-shadow: inset 0 -3px 0 var(--accent); @apply grid h-11 w-11 place-items-center rounded-xl text-lg font-black; }
+  .brand-name { color: var(--ink-strong); @apply m-0 text-lg font-extrabold leading-none; }
+  .app-header__actions { @apply flex flex-wrap items-center justify-end gap-2; }
+  .app-toolbar { background: var(--surface-soft); border-bottom: 1px solid var(--line); @apply px-5 py-3 md:px-8; }
+  .app-main { @apply mx-auto w-full max-w-5xl px-5 py-8 md:px-8 md:py-12; }
+  .app-main--wide { @apply max-w-[1480px]; }
+  .page-intro { @apply mb-8 flex items-end justify-between gap-6; }
+  .page-intro .display-title { @apply mb-2 mt-1 text-4xl font-extrabold leading-tight md:text-5xl; }
+  .page-subtitle { color: var(--ink-muted); @apply m-0 max-w-3xl text-base md:text-lg; }
+  .app-footer { background: var(--surface-paper); border-top: 1px solid var(--line); color: var(--ink-muted); @apply px-5 py-3 text-center text-xs md:px-8; }
+  .app-footer kbd { background: var(--surface-soft); border: 1px solid var(--line); color: var(--ink-strong); @apply mx-0.5 rounded px-1.5 py-0.5 font-bold; }
+  .queue-toolbar { @apply mx-auto flex w-full max-w-[1480px] flex-col gap-3 lg:flex-row lg:items-end lg:justify-between; }
+  .assignment-field { @apply block min-w-64; }
+  .assignment-field > span { color: var(--ink-strong); @apply mb-1 block text-xs font-bold uppercase tracking-wider; }
+  .filter-group { @apply flex flex-wrap gap-2; }
+  .filter-chip { border: 1px solid var(--line-strong); color: var(--ink-muted); background: var(--surface-paper); @apply min-h-10 rounded-full px-3.5 py-2 text-sm font-semibold transition; }
+  .filter-chip:hover { border-color: var(--accent); color: var(--ink-strong); }
+  .filter-chip[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-strong); box-shadow: inset 0 0 0 1px var(--accent); }
+  .notice-row { background: var(--info-soft); border-left: 4px solid var(--info); color: var(--ink-strong); @apply mb-7 flex flex-wrap justify-between gap-2 rounded-r-xl px-4 py-3 text-sm; }
+  .notice-row p { @apply m-0; }
+  .queue-overview, .submissions-section { @apply mb-9; }
+  .section-heading { @apply mb-4 flex flex-col justify-between gap-2 sm:flex-row sm:items-end; }
+  .section-heading h2 { color: var(--ink-strong); @apply m-0 text-2xl font-extrabold tracking-tight; }
+  .section-heading p { @apply m-0; }
+  .triage-grid { @apply grid gap-4 md:grid-cols-3; }
+  .triage-card { @apply relative overflow-hidden rounded-2xl p-5; }
+  .triage-card::after { content: ""; background: var(--accent); opacity: 0.16; @apply absolute -right-7 -top-7 h-24 w-24 rounded-full; }
+  .triage-count { color: var(--ink-strong); @apply my-4 block text-5xl font-black leading-none; }
+  .triage-card p { color: var(--ink-muted); @apply m-0 max-w-xs text-sm; }
+  .submission-table-wrap { @apply overflow-x-auto rounded-2xl; }
+  .submission-table { border-collapse: collapse; @apply w-full min-w-[980px] text-left; }
+  .submission-table th { background: var(--surface-soft); color: var(--ink-muted); border-bottom: 1px solid var(--line); @apply px-4 py-3 text-xs font-bold uppercase tracking-wider; }
+  .submission-table td { border-bottom: 1px solid var(--line); color: var(--ink); @apply px-4 py-4 align-middle text-sm; }
+  .submission-table tr:last-child td { border-bottom: 0; }
+  .submission-table tbody tr { transition: background 160ms ease; }
+  .submission-table tbody tr:hover { background: var(--surface-soft); }
+  .submission-link { color: var(--ink-strong); @apply flex min-w-44 flex-col items-start text-left font-bold; }
+  .submission-link > span { color: var(--accent); @apply mt-1 text-xs font-bold; }
+  .signal-list { @apply flex max-w-xs flex-wrap gap-1.5; }
+  .signal-tag { background: var(--warning-soft); color: var(--warning); @apply rounded-full px-2.5 py-1 text-xs font-bold; }
+  .decision-approved { color: var(--success); @apply font-bold; }
+  .empty-state { @apply rounded-2xl px-6 py-16 text-center; }
+  .empty-state__mark { background: var(--accent-soft); color: var(--accent); @apply mx-auto mb-5 grid h-14 w-14 place-items-center rounded-2xl text-2xl font-black; }
+  .empty-state h2 { color: var(--ink-strong); @apply mb-2 text-2xl font-extrabold; }
+  .empty-state p { color: var(--ink-muted); @apply mx-auto mb-0 max-w-xl; }
+}
+
+@media (max-width: 900px) {
+  .app-header { @apply static items-start; }
+  .app-header__actions { @apply max-w-[65%]; }
+}
+
+@media (max-width: 640px) {
+  .app-header { @apply flex-col; }
+  .app-header__actions { @apply w-full max-w-none justify-start; }
+  .app-header__actions .button-primary { @apply flex-1; }
 }

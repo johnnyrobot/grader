@@ -23,7 +23,8 @@ async function getEngineToken(): Promise<string | null> {
 }
 
 export default function App() {
-  const [screen, setScreen] = useState<Screen>("wizard");
+  const onboardingComplete = localStorage.getItem("grader_onboarding_complete") === "true";
+  const [screen, setScreen] = useState<Screen>(onboardingComplete ? "queue" : "wizard");
   const [engineReady, setEngineReady] = useState(false);
   const [queueData, setQueueData] = useState<QueueData | null>(null);
   const [currentItem, setCurrentItem] = useState<GradeItem | null>(null);
@@ -38,7 +39,7 @@ export default function App() {
       const ok = await checkHealth();
       if (ok) {
         setEngineReady(true);
-        setScreen("queue");
+        if (onboardingComplete) setScreen("queue");
         return;
       }
       await new Promise(r => setTimeout(r, 1000));
@@ -71,6 +72,7 @@ export default function App() {
   const handleWizardComplete = async (t: string) => {
     const engineT = await getEngineToken();
     setToken(engineT || t);
+    localStorage.setItem("grader_onboarding_complete", "true");
     setEngineReady(true);
     setScreen("queue");
   };
