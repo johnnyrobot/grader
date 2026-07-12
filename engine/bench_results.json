@@ -1,0 +1,16 @@
+[
+  {
+    "model": "qwen3:8b",
+    "mode": "tool",
+    "success_rate": 1.0,
+    "median_seconds": 29.806948083569296,
+    "mean_totals": {
+      "strong": 17.0,
+      "middling": 10.0,
+      "weak": 2.0,
+      "barely": 2.0
+    },
+    "rank_order_correct": true,
+    "max_spread_at_temp0": 0.0
+  }
+]

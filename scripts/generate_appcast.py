@@ -1,0 +1,174 @@
+#!/usr/bin/env python3
+"""Generate the Tauri updater manifest (latest.json) for a release.
+
+Tauri's built-in updater (tauri-plugin-updater) uses a JSON manifest, not
+Sparkle's XML appcast. This script generates the manifest from a built +
+    signed DMG or .app.
+
+The manifest is uploaded to GitHub Releases as the `latest.json` asset.
+The app's tauri.conf.json points to:
+  https://github.com/laccd/grader/releases/latest/download/latest.json
+
+Usage:
+  # Generate from a signed DMG
+  uv run python scripts/generate_appcast.py \
+    --dmg app/src-tauri/target/release/bundle/dmg/Grader.dmg \
+    --version 0.1.0 \
+    --output latest.json
+
+  # Generate from a signed .app (creates a zip)
+  uv run python scripts/generate_appcast.py \
+    --app app/src-tauri/target/release/bundle/macos/Grader.app \
+    --version 0.1.0 \
+    --output latest.json
+
+  # With a signing key (generates signature)
+  uv run python scripts/generate_appcast.py \
+    --dmg Grader.dmg --version 0.1.0 \
+    --signing-key /path/to/key.pem \
+    --output latest.json
+
+Prerequisites:
+  - Tauri updater CLI for signing: cargo install tauri-cli
+  - Generate a key pair: tauri signer generate -w /path/to/key.pem
+  - Store the public key in tauri.conf.json plugins.updater.pubkey
+"""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import subprocess
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+
+
+def _file_size(path: Path) -> int:
+    return path.stat().st_size
+
+
+def _sha256(path: Path) -> str:
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(8192), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _sign_file(path: Path, key_path: Path) -> str | None:
+    """Sign a file using tauri CLI. Returns the signature string."""
+    try:
+        result = subprocess.run(
+            ["cargo", "tauri", "signer", "sign", "--key", str(key_path),
+             "--file", str(path)],
+            capture_output=True, text=True, check=True,
+        )
+        for line in result.stdout.splitlines():
+            if line.strip().startswith("Signature:"):
+                return line.split(":", 1)[1].strip()
+        # If no explicit "Signature:" line, return the whole stdout
+        return result.stdout.strip()
+    except FileNotFoundError:
+        print("WARN: tauri CLI not found — skipping signature")
+        print("  Install: cargo install tauri-cli")
+        return None
+    except subprocess.CalledProcessError as e:
+        print(f"WARN: signing failed: {e.stderr}")
+        return None
+
+
+def generate_manifest(
+    artifact_path: Path,
+    version: str,
+    output: Path,
+    signing_key: Path | None = None,
+    release_url: str | None = None,
+) -> None:
+    """Generate the Tauri updater manifest (latest.json)."""
+
+    if not artifact_path.exists():
+        print(f"ERROR: artifact not found: {artifact_path}")
+        sys.exit(1)
+
+    size = _file_size(artifact_path)
+    sha256 = _sha256(artifact_path)
+
+    signature = None
+    if signing_key:
+        signature = _sign_file(artifact_path, signing_key)
+
+    if release_url is None:
+        release_url = f"https://github.com/laccd/grader/releases/download/v{version}/{artifact_path.name}"
+
+    pub_date = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    manifest: dict = {
+        "version": version,
+        "notes": f"Grader v{version}",
+        "pub_date": pub_date,
+        "platforms": {
+            "darwin-aarch64": {
+                "signature": signature or "",
+                "url": release_url,
+            },
+            "darwin-x86_64": {
+                "signature": signature or "",
+                "url": release_url,
+            },
+        },
+    }
+
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(json.dumps(manifest, indent=2))
+    print(f"Generated: {output}")
+    print(f"  version: {version}")
+    print(f"  artifact: {artifact_path.name} ({size / 1024 / 1024:.1f} MB)")
+    print(f"  sha256: {sha256}")
+    if signature:
+        print(f"  signature: {signature[:40]}...")
+    else:
+        print("  signature: (none — set --signing-key to sign)")
+    print(f"  url: {release_url}")
+    print()
+    print("Upload to GitHub Releases:")
+    print(f"  gh release create v{version} {artifact_path} {output} --title 'v{version}' --notes '...'")
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Generate Tauri updater manifest (latest.json)"
+    )
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument("--dmg", type=Path, help="Path to signed DMG")
+    group.add_argument("--app", type=Path, help="Path to signed .app (will be zipped)")
+    parser.add_argument("--version", required=True, help="Version string (e.g. 0.1.0)")
+    parser.add_argument("--output", type=Path, default=Path("latest.json"),
+                        help="Output manifest path (default: latest.json)")
+    parser.add_argument("--signing-key", type=Path, default=None,
+                        help="Path to Tauri signing key (.pem)")
+    parser.add_argument("--release-url", default=None,
+                        help="Download URL (default: GitHub releases URL)")
+
+    args = parser.parse_args()
+
+    if args.dmg:
+        artifact = args.dmg
+    else:
+        artifact = args.app
+        if not artifact.exists():
+            print(f"ERROR: app not found: {artifact}")
+            sys.exit(1)
+
+    generate_manifest(
+        artifact_path=artifact,
+        version=args.version,
+        output=args.output,
+        signing_key=args.signing_key,
+        release_url=args.release_url,
+    )
+
+
+if __name__ == "__main__":
+    main()

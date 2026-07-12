@@ -1,0 +1,670 @@
+{
+  "name": "grader-citation-fixtures",
+  "version": "1.0",
+  "generated_from": "Crossref REST API (real works) + Retraction Watch",
+  "note": "Real metadata, deliberately corrupted. No student data. Regenerate with generate_fixtures.py.",
+  "verdicts_under_test": [
+    "verified",
+    "metadata_mismatch",
+    "not_found",
+    "claim_unsupported",
+    "unreachable"
+  ],
+  "orthogonal_flags": [
+    "retracted"
+  ],
+  "counts": {
+    "verified": 9,
+    "metadata_mismatch": 7,
+    "not_found": 6,
+    "claim_unsupported": 3,
+    "unreachable": 4
+  },
+  "total": 29,
+  "fixtures": [
+    {
+      "id": "CIT-001",
+      "field": "psychology",
+      "verdict": "verified",
+      "corruption": "none",
+      "reference_text": "T.Jason Druzgal, et al. (2001). Activity in fusiform face area modulated as a function of working memory load. Cognitive Brain Research. https://doi.org/10.1016/s0926-6410(00)00056-2",
+      "doi": "10.1016/s0926-6410(00)00056-2",
+      "in_text_claim": "Prior work has examined activity in fusiform face area modulated as a function of wo...",
+      "ground_truth": {
+        "doi": "10.1016/s0926-6410(00)00056-2",
+        "title": "Activity in fusiform face area modulated as a function of working memory load",
+        "first_author": "Druzgal",
+        "first_author_given": "T.Jason",
+        "all_authors": [
+          "T.Jason Druzgal",
+          "Mark D’Esposito"
+        ],
+        "year": "2001",
+        "journal": "Cognitive Brain Research",
+        "url": "https://doi.org/10.1016/s0926-6410(00)00056-2"
+      },
+      "why": "Real DOI; metadata matches Crossref exactly; claim is a generic restatement of the title.",
+      "expected_resolution_layer": "L0-doi"
+    },
+    {
+      "id": "CIT-002",
+      "field": "history",
+      "verdict": "verified",
+      "corruption": "none",
+      "reference_text": "Adolf Sturmthal (1962). Book Review: Labor Conditions and Problems: European Socialism: A History of Ideas and Movements from the Industrial Revolution to Hitler's Seizure of Power. ILR Review. https://doi.org/10.1177/001979396201500422",
+      "doi": "10.1177/001979396201500422",
+      "in_text_claim": "Prior work has examined book review: labor conditions and problems: european sociali...",
+      "ground_truth": {
+        "doi": "10.1177/001979396201500422",
+        "title": "Book Review: Labor Conditions and Problems: European Socialism: A History of Ideas and Movements from the Industrial Revolution to Hitler's Seizure of Power",
+        "first_author": "Sturmthal",
+        "first_author_given": "Adolf",
+        "all_authors": [
+          "Adolf Sturmthal"
+        ],
+        "year": "1962",
+        "journal": "ILR Review",
+        "url": "https://doi.org/10.1177/001979396201500422"
+      },
+      "why": "Real DOI; metadata matches Crossref exactly; claim is a generic restatement of the title.",
+      "expected_resolution_layer": "L0-doi"
+    },
+    {
+      "id": "CIT-003",
+      "field": "biology",
+      "verdict": "verified",
+      "corruption": "none",
+      "reference_text": "Rui Lopes, et al. (2024). Beyond the promise: evaluating and mitigating off-target effects in CRISPR gene editing for safer therapeutics. Frontiers in Bioengineering and Biotechnology. https://doi.org/10.3389/fbioe.2023.1339189",
+      "doi": "10.3389/fbioe.2023.1339189",
+      "in_text_claim": "Prior work has examined beyond the promise: evaluating and mitigating off-target eff...",
+      "ground_truth": {
+        "doi": "10.3389/fbioe.2023.1339189",
+        "title": "Beyond the promise: evaluating and mitigating off-target effects in CRISPR gene editing for safer therapeutics",
+        "first_author": "Lopes",
+        "first_author_given": "Rui",
+        "all_authors": [
+          "Rui Lopes",
+          "Megana K. Prasad"
+        ],
+        "year": "2024",
+        "journal": "Frontiers in Bioengineering and Biotechnology",
+        "url": "https://doi.org/10.3389/fbioe.2023.1339189"
+      },
+      "why": "Real DOI; metadata matches Crossref exactly; claim is a generic restatement of the title.",
+      "expected_resolution_layer": "L0-doi"
+    },
+    {
+      "id": "CIT-004",
+      "field": "computer_science",
+      "verdict": "verified",
+      "corruption": "none",
+      "reference_text": "Faisal Alamri (2025). Improve Arabic–English translation using Arabic Language Attention Transformer. Data Technologies and Applications. https://doi.org/10.1108/dta-02-2025-0110",
+      "doi": "10.1108/dta-02-2025-0110",
+      "in_text_claim": "Prior work has examined improve arabic–english translation using arabic language att...",
+      "ground_truth": {
+        "doi": "10.1108/dta-02-2025-0110",
+        "title": "Improve Arabic–English translation using Arabic Language Attention Transformer",
+        "first_author": "Alamri",
+        "first_author_given": "Faisal",
+        "all_authors": [
+          "Faisal Alamri"
+        ],
+        "year": "2025",
+        "journal": "Data Technologies and Applications",
+        "url": "https://doi.org/10.1108/dta-02-2025-0110"
+      },
+      "why": "Real DOI; metadata matches Crossref exactly; claim is a generic restatement of the title.",
+      "expected_resolution_layer": "L0-doi"
+    },
+    {
+      "id": "CIT-005",
+      "field": "education",
+      "verdict": "verified",
+      "corruption": "none",
+      "reference_text": "Raudina Madina Simelane, et al. (2024). E-formative feedback in emergency remote learning: First-year student teachers' experiences and challenges. Interdisciplinary Journal of Education Research. https://doi.org/10.38140/ijer-2024.vol6.38",
+      "doi": "10.38140/ijer-2024.vol6.38",
+      "in_text_claim": "Prior work has examined e-formative feedback in emergency remote learning: first-yea...",
+      "ground_truth": {
+        "doi": "10.38140/ijer-2024.vol6.38",
+        "title": "E-formative feedback in emergency remote learning: First-year student teachers' experiences and challenges",
+        "first_author": "Simelane",
+        "first_author_given": "Raudina Madina",
+        "all_authors": [
+          "Raudina Madina Simelane",
+          "Preya Pillay"
+        ],
+        "year": "2024",
+        "journal": "Interdisciplinary Journal of Education Research",
+        "url": "https://doi.org/10.38140/ijer-2024.vol6.38"
+      },
+      "why": "Real DOI; metadata matches Crossref exactly; claim is a generic restatement of the title.",
+      "expected_resolution_layer": "L0-doi"
+    },
+    {
+      "id": "CIT-006",
+      "field": "biology",
+      "verdict": "verified",
+      "corruption": "none",
+      "reference_text": "Jiecong Lin, et al. (2018). Off-target predictions in CRISPR-Cas9 gene editing using deep learning. Bioinformatics. https://doi.org/10.1093/bioinformatics/bty554",
+      "doi": "10.1093/bioinformatics/bty554",
+      "in_text_claim": "Prior work has examined off-target predictions in crispr-cas9 gene editing using dee...",
+      "ground_truth": {
+        "doi": "10.1093/bioinformatics/bty554",
+        "title": "Off-target predictions in CRISPR-Cas9 gene editing using deep learning",
+        "first_author": "Lin",
+        "first_author_given": "Jiecong",
+        "all_authors": [
+          "Jiecong Lin",
+          "Ka-Chun Wong"
+        ],
+        "year": "2018",
+        "journal": "Bioinformatics",
+        "url": "https://doi.org/10.1093/bioinformatics/bty554"
+      },
+      "why": "Real DOI; metadata matches Crossref exactly; claim is a generic restatement of the title.",
+      "expected_resolution_layer": "L0-doi"
+    },
+    {
+      "id": "CIT-007",
+      "field": "history",
+      "verdict": "metadata_mismatch",
+      "corruption": "wrong_year",
+      "reference_text": "James W. Robinson (1968). Book Review: Labor Conditions and Problems: The Handloom Weavers: A Study in the English Cotton Industry during the Industrial Revolution. ILR Review. https://doi.org/10.1177/001979397002300214",
+      "doi": "10.1177/001979397002300214",
+      "in_text_claim": "As shown in Robinson (1968)...",
+      "ground_truth": {
+        "doi": "10.1177/001979397002300214",
+        "title": "Book Review: Labor Conditions and Problems: The Handloom Weavers: A Study in the English Cotton Industry during the Industrial Revolution",
+        "first_author": "Robinson",
+        "first_author_given": "James W.",
+        "all_authors": [
+          "James W. Robinson"
+        ],
+        "year": "1970",
+        "journal": "ILR Review",
+        "url": "https://doi.org/10.1177/001979397002300214"
+      },
+      "why": "DOI resolves, but the student's year (1968) contradicts Crossref (1970).",
+      "expected_resolution_layer": "L0-doi"
+    },
+    {
+      "id": "CIT-008",
+      "field": "psychology",
+      "verdict": "metadata_mismatch",
+      "corruption": "wrong_year",
+      "reference_text": "Zhenhong Hu, et al. (2021). Working Memory Capacity Is Negatively Associated with Memory Load Modulation of Alpha Oscillations in Retention of Verbal Working Memory. Journal of Cognitive Neuroscience. https://doi.org/10.1162/jocn_a_01461",
+      "doi": "10.1162/jocn_a_01461",
+      "in_text_claim": "As shown in Hu (2021)...",
+      "ground_truth": {
+        "doi": "10.1162/jocn_a_01461",
+        "title": "Working Memory Capacity Is Negatively Associated with Memory Load Modulation of Alpha Oscillations in Retention of Verbal Working Memory",
+        "first_author": "Hu",
+        "first_author_given": "Zhenhong",
+        "all_authors": [
+          "Zhenhong Hu",
+          "Christopher M. Barkley",
+          "Susan E. Marino",
+          "Chao Wang",
+          "Abhijit Rajan",
+          "Ke Bo"
+        ],
+        "year": "2019",
+        "journal": "Journal of Cognitive Neuroscience",
+        "url": "https://doi.org/10.1162/jocn_a_01461"
+      },
+      "why": "DOI resolves, but the student's year (2021) contradicts Crossref (2019).",
+      "expected_resolution_layer": "L0-doi"
+    },
+    {
+      "id": "CIT-009",
+      "field": "climate",
+      "verdict": "metadata_mismatch",
+      "corruption": "wrong_author",
+      "reference_text": "Fitzgerald, R. M. (2012). COMBINING COASTAL DESIGN-FLOOD ELEVATIONS AND SEA LEVEL RISE PROJECTIONS. Coastal Engineering Proceedings. https://doi.org/10.9753/icce.v33.management.26",
+      "doi": "10.9753/icce.v33.management.26",
+      "in_text_claim": "Fitzgerald (2012) argues that...",
+      "ground_truth": {
+        "doi": "10.9753/icce.v33.management.26",
+        "title": "COMBINING COASTAL DESIGN-FLOOD ELEVATIONS AND SEA LEVEL RISE PROJECTIONS",
+        "first_author": "Houston",
+        "first_author_given": "James",
+        "all_authors": [
+          "James Houston"
+        ],
+        "year": "2012",
+        "journal": "Coastal Engineering Proceedings",
+        "url": "https://doi.org/10.9753/icce.v33.management.26"
+      },
+      "why": "DOI resolves to a work whose first author is Houston, not Fitzgerald.",
+      "expected_resolution_layer": "L0-doi"
+    },
+    {
+      "id": "CIT-010",
+      "field": "climate",
+      "verdict": "metadata_mismatch",
+      "corruption": "wrong_author",
+      "reference_text": "Fitzgerald, R. M. (2023). Sea Level Rise and Future Projections in the Baltic Sea. Journal of Marine Science and Engineering. https://doi.org/10.3390/jmse11081514",
+      "doi": "10.3390/jmse11081514",
+      "in_text_claim": "Fitzgerald (2023) argues that...",
+      "ground_truth": {
+        "doi": "10.3390/jmse11081514",
+        "title": "Sea Level Rise and Future Projections in the Baltic Sea",
+        "first_author": "Kapsi",
+        "first_author_given": "Ivar",
+        "all_authors": [
+          "Ivar Kapsi",
+          "Tarmo Kall",
+          "Aive Liibusk"
+        ],
+        "year": "2023",
+        "journal": "Journal of Marine Science and Engineering",
+        "url": "https://doi.org/10.3390/jmse11081514"
+      },
+      "why": "DOI resolves to a work whose first author is Kapsi, not Fitzgerald.",
+      "expected_resolution_layer": "L0-doi"
+    },
+    {
+      "id": "CIT-011",
+      "field": "education",
+      "verdict": "metadata_mismatch",
+      "corruption": "wrong_journal",
+      "reference_text": "Joonas Merikko, et al. (2022). To Opt in or to Opt Out? Predicting Student Preference for Learning Analytics-Based Formative Feedback. Journal of Advanced Interdisciplinary Studies. https://doi.org/10.1109/access.2022.3207274",
+      "doi": "10.1109/access.2022.3207274",
+      "in_text_claim": "Published in the Journal of Advanced Interdisciplinary Studies, Merikko (2022) found...",
+      "ground_truth": {
+        "doi": "10.1109/access.2022.3207274",
+        "title": "To Opt in or to Opt Out? Predicting Student Preference for Learning Analytics-Based Formative Feedback",
+        "first_author": "Merikko",
+        "first_author_given": "Joonas",
+        "all_authors": [
+          "Joonas Merikko",
+          "Kwok Ng",
+          "Mohammed Saqr",
+          "Petri Ihantola"
+        ],
+        "year": "2022",
+        "journal": "IEEE Access",
+        "url": "https://doi.org/10.1109/access.2022.3207274"
+      },
+      "why": "DOI resolves but the container-title is 'IEEE Access', not the cited venue.",
+      "expected_resolution_layer": "L0-doi"
+    },
+    {
+      "id": "CIT-012",
+      "field": "education",
+      "verdict": "metadata_mismatch",
+      "corruption": "wrong_journal",
+      "reference_text": "Edward Aligula (2024). Rethinking Higher Education in Africa: Benefits of Formative Feedback in Enhancing Student Learning. Journal of Advanced Interdisciplinary Studies. https://doi.org/10.70619/vol4iss5pp23-34",
+      "doi": "10.70619/vol4iss5pp23-34",
+      "in_text_claim": "Published in the Journal of Advanced Interdisciplinary Studies, Aligula (2024) found...",
+      "ground_truth": {
+        "doi": "10.70619/vol4iss5pp23-34",
+        "title": "Rethinking Higher Education in Africa: Benefits of Formative Feedback in Enhancing Student Learning",
+        "first_author": "Aligula",
+        "first_author_given": "Edward",
+        "all_authors": [
+          "Edward Aligula"
+        ],
+        "year": "2024",
+        "journal": "Journal of Education",
+        "url": "https://doi.org/10.70619/vol4iss5pp23-34"
+      },
+      "why": "DOI resolves but the container-title is 'Journal of Education', not the cited venue.",
+      "expected_resolution_layer": "L0-doi"
+    },
+    {
+      "id": "CIT-013",
+      "field": "psychology",
+      "verdict": "metadata_mismatch",
+      "corruption": "doi_belongs_to_other_work",
+      "reference_text": "Naomi Langerock, et al. (2025). The cognitive load effect in working memory: Refreshing the empirical landscape, removing outdated explanations. Journal of Memory and Language. https://doi.org/10.3390/app14177898",
+      "doi": "10.3390/app14177898",
+      "in_text_claim": "Langerock (2025) reports...",
+      "ground_truth": {
+        "cited_as": {
+          "doi": "10.1016/j.jml.2024.104558",
+          "title": "The cognitive load effect in working memory: Refreshing the empirical landscape, removing outdated explanations",
+          "first_author": "Langerock",
+          "first_author_given": "Naomi",
+          "all_authors": [
+            "Naomi Langerock",
+            "Klaus Oberauer",
+            "Elena Throm",
+            "Evie Vergauwe"
+          ],
+          "year": "2025",
+          "journal": "Journal of Memory and Language",
+          "url": "https://doi.org/10.1016/j.jml.2024.104558"
+        },
+        "doi_actually_resolves_to": {
+          "doi": "10.3390/app14177898",
+          "title": "A Study on Performance Enhancement by Integrating Neural Topic Attention with Transformer-Based Language Model",
+          "first_author": "Um",
+          "first_author_given": "Taehum",
+          "all_authors": [
+            "Taehum Um",
+            "Namhyoung Kim"
+          ],
+          "year": "2024",
+          "journal": "Applied Sciences",
+          "url": "https://doi.org/10.3390/app14177898"
+        }
+      },
+      "why": "Both the described paper and the DOI are real, but they are different works. Requires comparing resolved metadata against the reference string, not just checking the DOI resolves.",
+      "expected_resolution_layer": "L0-doi"
+    },
+    {
+      "id": "CIT-014",
+      "field": "biology",
+      "verdict": "not_found",
+      "corruption": "fabricated_title_real_author",
+      "reference_text": "Congting Guo, et al. (2023). A Meta-Analytic Review of Off-target Effects Across Twelve Longitudinal Cohorts. Frontiers in Bioengineering and Biotechnology. https://doi.org/10.3389/fbioe.2023.1143157",
+      "doi": null,
+      "in_text_claim": "Guo (2023) demonstrated a large, robust effect...",
+      "ground_truth": {
+        "real_author": "Guo",
+        "real_journal": "Frontiers in Bioengineering and Biotechnology",
+        "fabricated": true
+      },
+      "why": "Author and journal are real; this specific title does not exist. Crossref bibliographic search should return no acceptable-score match.",
+      "expected_resolution_layer": "L0-crossref-bibliographic"
+    },
+    {
+      "id": "CIT-015",
+      "field": "psychology",
+      "verdict": "not_found",
+      "corruption": "fabricated_title_real_author",
+      "reference_text": "Meyi Duleme, et al. (2022). A Meta-Analytic Review of Stable Effects Across Twelve Longitudinal Cohorts. Cognitive Neuroscience. https://doi.org/10.1080/17588928.2022.2026312",
+      "doi": null,
+      "in_text_claim": "Duleme (2022) demonstrated a large, robust effect...",
+      "ground_truth": {
+        "real_author": "Duleme",
+        "real_journal": "Cognitive Neuroscience",
+        "fabricated": true
+      },
+      "why": "Author and journal are real; this specific title does not exist. Crossref bibliographic search should return no acceptable-score match.",
+      "expected_resolution_layer": "L0-crossref-bibliographic"
+    },
+    {
+      "id": "CIT-016",
+      "field": "education",
+      "verdict": "not_found",
+      "corruption": "fabricated_title_real_author",
+      "reference_text": "Tanya Nazaretsky, et al. (2025). A Meta-Analytic Review of Who Effects Across Twelve Longitudinal Cohorts. Journal of Computer Assisted Learning. https://doi.org/10.1111/jcal.70153",
+      "doi": null,
+      "in_text_claim": "Nazaretsky (2025) demonstrated a large, robust effect...",
+      "ground_truth": {
+        "real_author": "Nazaretsky",
+        "real_journal": "Journal of Computer Assisted Learning",
+        "fabricated": true
+      },
+      "why": "Author and journal are real; this specific title does not exist. Crossref bibliographic search should return no acceptable-score match.",
+      "expected_resolution_layer": "L0-crossref-bibliographic"
+    },
+    {
+      "id": "CIT-017",
+      "field": "climate",
+      "verdict": "not_found",
+      "corruption": "unregistered_doi",
+      "reference_text": "Alexander Nauels, et al. (2017). Adaptive Frameworks for Synthesizing Assessment. Geoscientific Model Development. https://doi.org/10.5194/531123.5917",
+      "doi": "10.5194/531123.5917",
+      "in_text_claim": "Recent work confirms this pattern...",
+      "ground_truth": {
+        "doi_prefix_is_real": "10.5194",
+        "suffix_fabricated": true
+      },
+      "why": "DOI is well-formed and carries a real registrant prefix, but resolves to nothing. Guards against a verifier that only regex-validates DOI shape.",
+      "expected_resolution_layer": "L0-doi"
+    },
+    {
+      "id": "CIT-018",
+      "field": "climate",
+      "verdict": "not_found",
+      "corruption": "unregistered_doi",
+      "reference_text": "A. K. Pardaens, et al. (2011). Adaptive Frameworks for Sea-level Assessment. Geophysical Research Letters. https://doi.org/10.1029/911771.6508",
+      "doi": "10.1029/911771.6508",
+      "in_text_claim": "Recent work confirms this pattern...",
+      "ground_truth": {
+        "doi_prefix_is_real": "10.1029",
+        "suffix_fabricated": true
+      },
+      "why": "DOI is well-formed and carries a real registrant prefix, but resolves to nothing. Guards against a verifier that only regex-validates DOI shape.",
+      "expected_resolution_layer": "L0-doi"
+    },
+    {
+      "id": "CIT-019",
+      "field": "education",
+      "verdict": "not_found",
+      "corruption": "wholly_fabricated",
+      "reference_text": "Marchetti, L. K., & Osei-Brandon, T. (2023). Rubric-anchored cognition and the transfer of evaluative judgment. Quarterly Review of Pedagogical Science, 41(2), 118-147. https://doi.org/10.1041/qrps.2023.0219",
+      "doi": "10.1041/qrps.2023.0219",
+      "in_text_claim": "Marchetti and Osei-Brandon (2023) found that rubric exposure alone improved transfer by 34%.",
+      "ground_truth": {
+        "fabricated": true,
+        "note": "Author, title, journal, and DOI are all invented."
+      },
+      "why": "The full-hallucination case: nothing resolves at any layer. The precise-sounding statistic is the tell that graders should catch.",
+      "expected_resolution_layer": "L0-doi"
+    },
+    {
+      "id": "CIT-020",
+      "field": "computer_science",
+      "verdict": "claim_unsupported",
+      "corruption": "claim_not_in_source",
+      "reference_text": "Hyunseung Kim, et al. (2021). Generative Chemical Transformer: Neural Machine Learning of Molecular Geometric Structures from Chemical Language via Attention. Journal of Chemical Information and Modeling. https://doi.org/10.1021/acs.jcim.1c01289",
+      "doi": "10.1021/acs.jcim.1c01289",
+      "in_text_claim": "According to Kim (2021), the phenomenon has been definitively refuted.",
+      "ground_truth": {
+        "doi": "10.1021/acs.jcim.1c01289",
+        "title": "Generative Chemical Transformer: Neural Machine Learning of Molecular Geometric Structures from Chemical Language via Attention",
+        "first_author": "Kim",
+        "first_author_given": "Hyunseung",
+        "all_authors": [
+          "Hyunseung Kim",
+          "Jonggeol Na",
+          "Won Bo Lee"
+        ],
+        "year": "2021",
+        "journal": "Journal of Chemical Information and Modeling",
+        "url": "https://doi.org/10.1021/acs.jcim.1c01289"
+      },
+      "why": "Citation resolves and matches perfectly — the failure is semantic. Only the fetch + local claim-check layer (L2/L3) can catch it; the metadata ladder will happily pass it.",
+      "expected_resolution_layer": "L3-local-claim-check"
+    },
+    {
+      "id": "CIT-021",
+      "field": "biology",
+      "verdict": "claim_unsupported",
+      "corruption": "claim_not_in_source",
+      "reference_text": "Robert W. Link, et al. (2018). Prediction of Human Immunodeficiency Virus Type 1 Subtype-Specific Off-Target Effects Arising from CRISPR-Cas9 Gene Editing Therapy. The CRISPR Journal. https://doi.org/10.1089/crispr.2018.0020",
+      "doi": "10.1089/crispr.2018.0020",
+      "in_text_claim": "Link (2018) reports a 97% success rate in every replication attempted.",
+      "ground_truth": {
+        "doi": "10.1089/crispr.2018.0020",
+        "title": "Prediction of Human Immunodeficiency Virus Type 1 Subtype-Specific Off-Target Effects Arising from CRISPR-Cas9 Gene Editing Therapy",
+        "first_author": "Link",
+        "first_author_given": "Robert W.",
+        "all_authors": [
+          "Robert W. Link",
+          "Michael R. Nonnemacher",
+          "Brian Wigdahl",
+          "Will Dampier"
+        ],
+        "year": "2018",
+        "journal": "The CRISPR Journal",
+        "url": "https://doi.org/10.1089/crispr.2018.0020"
+      },
+      "why": "Citation resolves and matches perfectly — the failure is semantic. Only the fetch + local claim-check layer (L2/L3) can catch it; the metadata ladder will happily pass it.",
+      "expected_resolution_layer": "L3-local-claim-check"
+    },
+    {
+      "id": "CIT-022",
+      "field": "psychology",
+      "verdict": "claim_unsupported",
+      "corruption": "claim_not_in_source",
+      "reference_text": "Timothy J. Ricker, et al. (2022). Boundary conditions for observing cognitive load effects in visual working memory. Memory &amp; Cognition. https://doi.org/10.3758/s13421-022-01320-3",
+      "doi": "10.3758/s13421-022-01320-3",
+      "in_text_claim": "Ricker (2022) proves that this effect holds universally across all populations and contexts.",
+      "ground_truth": {
+        "doi": "10.3758/s13421-022-01320-3",
+        "title": "Boundary conditions for observing cognitive load effects in visual working memory",
+        "first_author": "Ricker",
+        "first_author_given": "Timothy J.",
+        "all_authors": [
+          "Timothy J. Ricker",
+          "Evie Vergauwe"
+        ],
+        "year": "2022",
+        "journal": "Memory &amp; Cognition",
+        "url": "https://doi.org/10.3758/s13421-022-01320-3"
+      },
+      "why": "Citation resolves and matches perfectly — the failure is semantic. Only the fetch + local claim-check layer (L2/L3) can catch it; the metadata ladder will happily pass it.",
+      "expected_resolution_layer": "L3-local-claim-check"
+    },
+    {
+      "id": "CIT-023",
+      "field": "history",
+      "verdict": "unreachable",
+      "corruption": "paywalled",
+      "reference_text": "Leon Gooberman (2022). ‘Revolution in the coalfields’: industrial relations in wartime south Wales, 1939-45. Labor History. https://doi.org/10.1080/0023656x.2022.2056585",
+      "doi": "10.1080/0023656x.2022.2056585",
+      "in_text_claim": "Gooberman (2022) provides supporting evidence.",
+      "ground_truth": {
+        "doi": "10.1080/0023656x.2022.2056585",
+        "title": "‘Revolution in the coalfields’: industrial relations in wartime south Wales, 1939-45",
+        "first_author": "Gooberman",
+        "first_author_given": "Leon",
+        "all_authors": [
+          "Leon Gooberman"
+        ],
+        "year": "2022",
+        "journal": "Labor History",
+        "url": "https://doi.org/10.1080/0023656x.2022.2056585"
+      },
+      "why": "Metadata resolves (L0 succeeds) but full text sits behind a publisher paywall. The verifier must report 'verified metadata, claim unverifiable' — not a false 'not found'.",
+      "expected_resolution_layer": "L2-fetch"
+    },
+    {
+      "id": "CIT-024",
+      "field": "computer_science",
+      "verdict": "unreachable",
+      "corruption": "paywalled",
+      "reference_text": "Junrui Jiao, et al. (2025). Continuous Sign Language Recognition using CNN-Transformer with Adaptive Temporal Hierarchical Attention. Informatica. https://doi.org/10.31449/inf.v49i22.8403",
+      "doi": "10.31449/inf.v49i22.8403",
+      "in_text_claim": "Jiao (2025) provides supporting evidence.",
+      "ground_truth": {
+        "doi": "10.31449/inf.v49i22.8403",
+        "title": "Continuous Sign Language Recognition using CNN-Transformer with Adaptive Temporal Hierarchical Attention",
+        "first_author": "Jiao",
+        "first_author_given": "Junrui",
+        "all_authors": [
+          "Junrui Jiao",
+          "Meng Zhai"
+        ],
+        "year": "2025",
+        "journal": "Informatica",
+        "url": "https://doi.org/10.31449/inf.v49i22.8403"
+      },
+      "why": "Metadata resolves (L0 succeeds) but full text sits behind a publisher paywall. The verifier must report 'verified metadata, claim unverifiable' — not a false 'not found'.",
+      "expected_resolution_layer": "L2-fetch"
+    },
+    {
+      "id": "CIT-025",
+      "field": "history",
+      "verdict": "unreachable",
+      "corruption": "dead_link",
+      "reference_text": "Whitaker, J. (2011). Archival labor records of the Northern mills, 1840-1870. Regional History Working Papers. http://archive.northmill-history.org/wp/1840-1870.pdf",
+      "doi": null,
+      "in_text_claim": "Whitaker (2011) documents average shifts exceeding fourteen hours.",
+      "ground_truth": {
+        "host_resolves": false,
+        "note": "Web-only source; host is gone."
+      },
+      "why": "Non-academic web source with no DOI and a dead host. Tests the L1/L2 fallback path and ensures a dead link is reported as 'unreachable', not 'fabricated'.",
+      "expected_resolution_layer": "L2-fetch"
+    },
+    {
+      "id": "CIT-026",
+      "field": "computer_science",
+      "verdict": "unreachable",
+      "corruption": "js_rendered_only",
+      "reference_text": "Anthropic. (2026). Model context protocol specification. https://modelcontextprotocol.io/specification",
+      "doi": null,
+      "in_text_claim": "The specification defines tools, resources, and prompts as primitives.",
+      "ground_truth": {
+        "note": "Live source; content requires JS rendering."
+      },
+      "why": "Real, reachable source whose content only appears after JS execution. Exercises the crawl4ai/Playwright path; a naive httpx fetch would wrongly report it empty/unreachable.",
+      "expected_resolution_layer": "L2-fetch-js"
+    },
+    {
+      "id": "CIT-027",
+      "field": "retraction_check",
+      "verdict": "verified",
+      "corruption": "cites_retracted_work",
+      "flags": [
+        "retracted"
+      ],
+      "reference_text": "Zhu (2017). Long non-coding RNA TUG1 promotes cervical cancer progression by regulating the miR-138-5p-SIRT1 axis. Oncotarget. https://doi.org/10.18632/oncotarget.18224",
+      "doi": "10.18632/oncotarget.18224",
+      "in_text_claim": "Zhu (2017) established this result.",
+      "ground_truth": {
+        "doi": "10.18632/oncotarget.18224",
+        "title": "Long non-coding RNA TUG1 promotes cervical cancer progression by regulating the miR-138-5p-SIRT1 axis",
+        "first_author": "Zhu",
+        "year": "2017",
+        "journal": "Oncotarget",
+        "retraction_reason": "Euphemisms for Plagiarism;Investigation by Journal/Publisher;Investigation by Third Party;Plagiarism of Image",
+        "retracted": true
+      },
+      "why": "The citation resolves and its metadata matches — so the metadata ladder passes it. The finding is that the work was RETRACTED. Requires a Retraction Watch cross-check that is separate from resolution. A verifier without it will silently bless retracted science.",
+      "expected_resolution_layer": "L0-doi + retraction-watch"
+    },
+    {
+      "id": "CIT-028",
+      "field": "retraction_check",
+      "verdict": "verified",
+      "corruption": "cites_retracted_work",
+      "flags": [
+        "retracted"
+      ],
+      "reference_text": "Draganov (2020). Open set recognition through unsupervised and class-distance learning. WiseML '20: Proceedings of the 2nd ACM Workshop on Wireless Security and Machine Learning. https://doi.org/10.1145/3395352.3402901",
+      "doi": "10.1145/3395352.3402901",
+      "in_text_claim": "Draganov (2020) established this result.",
+      "ground_truth": {
+        "doi": "10.1145/3395352.3402901",
+        "title": "Open set recognition through unsupervised and class-distance learning",
+        "first_author": "Draganov",
+        "year": "2020",
+        "journal": "WiseML '20: Proceedings of the 2nd ACM Workshop on Wireless Security and Machine Learning",
+        "retraction_reason": "Concerns/Issues about Authorship/Affiliation;Euphemisms for Plagiarism;Investigation by Journal/Publisher;Plagiarism of/in Article",
+        "retracted": true
+      },
+      "why": "The citation resolves and its metadata matches — so the metadata ladder passes it. The finding is that the work was RETRACTED. Requires a Retraction Watch cross-check that is separate from resolution. A verifier without it will silently bless retracted science.",
+      "expected_resolution_layer": "L0-doi + retraction-watch"
+    },
+    {
+      "id": "CIT-029",
+      "field": "retraction_check",
+      "verdict": "verified",
+      "corruption": "cites_retracted_work",
+      "flags": [
+        "retracted"
+      ],
+      "reference_text": "Boutiba (2022). On enabling 5G dynamic TDD by leveraging deep reinforcement learning and O-RAN: demo. MobiHoc '22: Proceedings of the Twenty-Third International Symposium on Theory, Algorithmic Foundations, and Protocol Design for Mobile Networks and Mobile Computing. https://doi.org/10.1145/3492866.3561252",
+      "doi": "10.1145/3492866.3561252",
+      "in_text_claim": "Boutiba (2022) established this result.",
+      "ground_truth": {
+        "doi": "10.1145/3492866.3561252",
+        "title": "On enabling 5G dynamic TDD by leveraging deep reinforcement learning and O-RAN: demo",
+        "first_author": "Boutiba",
+        "year": "2022",
+        "journal": "MobiHoc '22: Proceedings of the Twenty-Third International Symposium on Theory, Algorithmic Foundations, and Protocol Design for Mobile Networks and Mobile Computing",
+        "retraction_reason": "Not Presented at Conference",
+        "retracted": true
+      },
+      "why": "The citation resolves and its metadata matches — so the metadata ladder passes it. The finding is that the work was RETRACTED. Requires a Retraction Watch cross-check that is separate from resolution. A verifier without it will silently bless retracted science.",
+      "expected_resolution_layer": "L0-doi + retraction-watch"
+    }
+  ]
+}

@@ -1,0 +1,90 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build:
+    name: Build + Sign + Notarize
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v3
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install frontend deps
+        working-directory: app
+        run: npm install
+
+      - name: Build frontend
+        working-directory: app
+        run: npm run build
+
+      - name: Build Rust app
+        working-directory: app/src-tauri
+        run: cargo build --release
+
+      - name: Sign and notarize
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_KEYCHAIN_PROFILE: ${{ secrets.APPLE_KEYCHAIN_PROFILE }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          # Store notarytool credentials if not already stored
+          xcrun notarytool store-credentials "$APPLE_KEYCHAIN_PROFILE" \
+            --apple-id "$APPLE_ID" \
+            --password "$APPLE_APP_SPECIFIC_PASSWORD" \
+            --team-id "$APPLE_TEAM_ID" || true
+
+          ./scripts/sign_and_notarize.sh --dmg \
+            --app-path app/src-tauri/target/release/bundle/macos/Grader.app
+
+      - name: Generate updater manifest
+        run: |
+          uv run python scripts/generate_appcast.py \
+            --dmg app/src-tauri/target/release/bundle/dmg/Grader.dmg \
+            --version ${{ github.ref_name }} \
+            --output latest.json \
+            --signing-key ${{ secrets.TAURI_SIGNING_KEY }} \
+            --release-url "https://github.com/laccd/grader/releases/download/${{ github.ref_name }}/Grader.dmg"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            app/src-tauri/target/release/bundle/dmg/Grader.dmg
+            latest.json
+          draft: false
+          prerelease: ${{ contains(github.ref_name, 'beta') }}
+          body: |
+            ## Grader ${{ github.ref_name }}
+
+            ### Installation
+            1. Download Grader.dmg
+            2. Drag Grader.app to Applications
+            3. Launch — no Gatekeeper warning (signed + notarized)
+            4. Complete the first-run wizard (Canvas token + rubric)
+
+            ### System Requirements
+            - macOS 13+ (Ventura or later)
+            - 16 GB RAM minimum
+            - Ollama installed (`brew install ollama`)
+
+            ### What's included
+            - Full grading engine (Pydantic AI + Ollama)
+            - Canvas integration (import + post grades)
+            - Document parsing (PDF, DOCX, handwriting)
+            - Citation verification (4-layer ladder)
+            - Annotated feedback export
+            - Network egress audit (privacy gate)

@@ -1,0 +1,409 @@
+{
+  "total": 29,
+  "correct": 14,
+  "accuracy": 0.483,
+  "false_positives": 0,
+  "false_positive_rate": 0.0,
+  "by_verdict": {
+    "verified": {
+      "total": 9,
+      "correct": 2,
+      "accuracy": 0.222
+    },
+    "metadata_mismatch": {
+      "total": 7,
+      "correct": 7,
+      "accuracy": 1.0
+    },
+    "not_found": {
+      "total": 6,
+      "correct": 3,
+      "accuracy": 0.5
+    },
+    "claim_unsupported": {
+      "total": 3,
+      "correct": 0,
+      "accuracy": 0.0
+    },
+    "unreachable": {
+      "total": 4,
+      "correct": 2,
+      "accuracy": 0.5
+    }
+  },
+  "retraction_check": {
+    "total": 3,
+    "caught": 0,
+    "accuracy": 0.0
+  },
+  "results": [
+    {
+      "id": "CIT-001",
+      "expected": "verified",
+      "got": "unreachable",
+      "correct": false,
+      "confidence": 0.6,
+      "resolution_layer": "L2-fetch",
+      "expected_layer": "L0-doi",
+      "flags": [
+        "paywalled"
+      ],
+      "retraction_caught": null,
+      "error": "Source metadata verified but full text unreachable \u2014 claim unverifiable"
+    },
+    {
+      "id": "CIT-002",
+      "expected": "verified",
+      "got": "unreachable",
+      "correct": false,
+      "confidence": 0.6,
+      "resolution_layer": "L2-fetch",
+      "expected_layer": "L0-doi",
+      "flags": [
+        "paywalled"
+      ],
+      "retraction_caught": null,
+      "error": "Source metadata verified but full text unreachable \u2014 claim unverifiable"
+    },
+    {
+      "id": "CIT-003",
+      "expected": "verified",
+      "got": "verified",
+      "correct": true,
+      "confidence": 0.9,
+      "resolution_layer": "L3-local-claim-check",
+      "expected_layer": "L0-doi",
+      "flags": [],
+      "retraction_caught": null,
+      "error": null
+    },
+    {
+      "id": "CIT-004",
+      "expected": "verified",
+      "got": "unreachable",
+      "correct": false,
+      "confidence": 0.6,
+      "resolution_layer": "L2-fetch",
+      "expected_layer": "L0-doi",
+      "flags": [
+        "paywalled"
+      ],
+      "retraction_caught": null,
+      "error": "Source metadata verified but full text unreachable \u2014 claim unverifiable"
+    },
+    {
+      "id": "CIT-005",
+      "expected": "verified",
+      "got": "verified",
+      "correct": true,
+      "confidence": 0.9,
+      "resolution_layer": "L3-local-claim-check",
+      "expected_layer": "L0-doi",
+      "flags": [],
+      "retraction_caught": null,
+      "error": null
+    },
+    {
+      "id": "CIT-006",
+      "expected": "verified",
+      "got": "unreachable",
+      "correct": false,
+      "confidence": 0.6,
+      "resolution_layer": "L2-fetch",
+      "expected_layer": "L0-doi",
+      "flags": [
+        "paywalled"
+      ],
+      "retraction_caught": null,
+      "error": "Source metadata verified but full text unreachable \u2014 claim unverifiable"
+    },
+    {
+      "id": "CIT-007",
+      "expected": "metadata_mismatch",
+      "got": "metadata_mismatch",
+      "correct": true,
+      "confidence": 0.85,
+      "resolution_layer": "L0-doi",
+      "expected_layer": "L0-doi",
+      "flags": [],
+      "retraction_caught": null,
+      "error": "DOI resolves to 'Book Review: Labor Conditions and Problems: The Handloom Weavers: A Study in the English Cotton Industry during the Industrial Revolution' but reference cites 'Robinson (1968)'"
+    },
+    {
+      "id": "CIT-008",
+      "expected": "metadata_mismatch",
+      "got": "metadata_mismatch",
+      "correct": true,
+      "confidence": 0.8,
+      "resolution_layer": "L0-doi",
+      "expected_layer": "L0-doi",
+      "flags": [],
+      "retraction_caught": null,
+      "error": null
+    },
+    {
+      "id": "CIT-009",
+      "expected": "metadata_mismatch",
+      "got": "metadata_mismatch",
+      "correct": true,
+      "confidence": 0.8,
+      "resolution_layer": "L0-doi",
+      "expected_layer": "L0-doi",
+      "flags": [],
+      "retraction_caught": null,
+      "error": null
+    },
+    {
+      "id": "CIT-010",
+      "expected": "metadata_mismatch",
+      "got": "metadata_mismatch",
+      "correct": true,
+      "confidence": 0.8,
+      "resolution_layer": "L0-doi",
+      "expected_layer": "L0-doi",
+      "flags": [],
+      "retraction_caught": null,
+      "error": null
+    },
+    {
+      "id": "CIT-011",
+      "expected": "metadata_mismatch",
+      "got": "metadata_mismatch",
+      "correct": true,
+      "confidence": 0.8,
+      "resolution_layer": "L0-doi",
+      "expected_layer": "L0-doi",
+      "flags": [],
+      "retraction_caught": null,
+      "error": null
+    },
+    {
+      "id": "CIT-012",
+      "expected": "metadata_mismatch",
+      "got": "metadata_mismatch",
+      "correct": true,
+      "confidence": 0.8,
+      "resolution_layer": "L0-doi",
+      "expected_layer": "L0-doi",
+      "flags": [],
+      "retraction_caught": null,
+      "error": null
+    },
+    {
+      "id": "CIT-013",
+      "expected": "metadata_mismatch",
+      "got": "metadata_mismatch",
+      "correct": true,
+      "confidence": 0.85,
+      "resolution_layer": "L0-doi",
+      "expected_layer": "L0-doi",
+      "flags": [],
+      "retraction_caught": null,
+      "error": "DOI resolves to 'A Study on Performance Enhancement by Integrating Neural Topic Attention with Transformer-Based Language Model' but reference cites 'The cognitive load effect in working memory: Refreshing the empirical landscape, removing outdated explanations'"
+    },
+    {
+      "id": "CIT-014",
+      "expected": "not_found",
+      "got": "metadata_mismatch",
+      "correct": false,
+      "confidence": 0.85,
+      "resolution_layer": "L0-doi",
+      "expected_layer": "L0-crossref-bibliographic",
+      "flags": [],
+      "retraction_caught": null,
+      "error": "DOI resolves to 'Off-target effects in CRISPR/Cas9 gene editing' but reference cites 'A Meta-Analytic Review of Off-target Effects Across Twelve Longitudinal Cohorts'"
+    },
+    {
+      "id": "CIT-015",
+      "expected": "not_found",
+      "got": "metadata_mismatch",
+      "correct": false,
+      "confidence": 0.85,
+      "resolution_layer": "L0-doi",
+      "expected_layer": "L0-crossref-bibliographic",
+      "flags": [],
+      "retraction_caught": null,
+      "error": "DOI resolves to 'Stable decoding of working memory load through frequency bands' but reference cites 'A Meta-Analytic Review of Stable Effects Across Twelve Longitudinal Cohorts'"
+    },
+    {
+      "id": "CIT-016",
+      "expected": "not_found",
+      "got": "metadata_mismatch",
+      "correct": false,
+      "confidence": 0.85,
+      "resolution_layer": "L0-doi",
+      "expected_layer": "L0-crossref-bibliographic",
+      "flags": [],
+      "retraction_caught": null,
+      "error": "DOI resolves to 'Who Gives Feedback Matters: Student Biases Towards Human and\n                    <scp>AI</scp>\n                    \u2010Generated Formative Feedback' but reference cites 'A Meta-Analytic Review of Who Effects Across Twelve Longitudinal Cohorts'"
+    },
+    {
+      "id": "CIT-017",
+      "expected": "not_found",
+      "got": "not_found",
+      "correct": true,
+      "confidence": 0.9,
+      "resolution_layer": "L0-doi",
+      "expected_layer": "L0-doi",
+      "flags": [],
+      "retraction_caught": null,
+      "error": "DOI 10.5194/531123.5917 did not resolve"
+    },
+    {
+      "id": "CIT-018",
+      "expected": "not_found",
+      "got": "not_found",
+      "correct": true,
+      "confidence": 0.9,
+      "resolution_layer": "L0-doi",
+      "expected_layer": "L0-doi",
+      "flags": [],
+      "retraction_caught": null,
+      "error": "DOI 10.1029/911771.6508 did not resolve"
+    },
+    {
+      "id": "CIT-019",
+      "expected": "not_found",
+      "got": "not_found",
+      "correct": true,
+      "confidence": 0.9,
+      "resolution_layer": "L0-doi",
+      "expected_layer": "L0-doi",
+      "flags": [],
+      "retraction_caught": null,
+      "error": "DOI 10.1041/qrps.2023.0219 did not resolve"
+    },
+    {
+      "id": "CIT-020",
+      "expected": "claim_unsupported",
+      "got": "unreachable",
+      "correct": false,
+      "confidence": 0.6,
+      "resolution_layer": "L2-fetch",
+      "expected_layer": "L3-local-claim-check",
+      "flags": [
+        "paywalled"
+      ],
+      "retraction_caught": null,
+      "error": "Source metadata verified but full text unreachable \u2014 claim unverifiable"
+    },
+    {
+      "id": "CIT-021",
+      "expected": "claim_unsupported",
+      "got": "metadata_mismatch",
+      "correct": false,
+      "confidence": 0.85,
+      "resolution_layer": "L0-doi",
+      "expected_layer": "L3-local-claim-check",
+      "flags": [],
+      "retraction_caught": null,
+      "error": "DOI resolves to 'Prediction of Human Immunodeficiency Virus Type 1 Subtype-Specific Off-Target Effects Arising from CRISPR-Cas9 Gene Editing Therapy' but reference cites 'Link, et al'"
+    },
+    {
+      "id": "CIT-022",
+      "expected": "claim_unsupported",
+      "got": "metadata_mismatch",
+      "correct": false,
+      "confidence": 0.85,
+      "resolution_layer": "L0-doi",
+      "expected_layer": "L3-local-claim-check",
+      "flags": [],
+      "retraction_caught": null,
+      "error": "DOI resolves to 'Boundary conditions for observing cognitive load effects in visual working memory' but reference cites 'Ricker, et al'"
+    },
+    {
+      "id": "CIT-023",
+      "expected": "unreachable",
+      "got": "unreachable",
+      "correct": true,
+      "confidence": 0.6,
+      "resolution_layer": "L2-fetch",
+      "expected_layer": "L2-fetch",
+      "flags": [
+        "paywalled"
+      ],
+      "retraction_caught": null,
+      "error": "Source metadata verified but full text unreachable \u2014 claim unverifiable"
+    },
+    {
+      "id": "CIT-024",
+      "expected": "unreachable",
+      "got": "claim_unsupported",
+      "correct": false,
+      "confidence": 0.75,
+      "resolution_layer": "L3-local-claim-check",
+      "expected_layer": "L2-fetch",
+      "flags": [],
+      "retraction_caught": null,
+      "error": null
+    },
+    {
+      "id": "CIT-025",
+      "expected": "unreachable",
+      "got": "unreachable",
+      "correct": true,
+      "confidence": 0.8,
+      "resolution_layer": "L2-fetch",
+      "expected_layer": "L2-fetch",
+      "flags": [
+        "dead_link"
+      ],
+      "retraction_caught": null,
+      "error": "Could not fetch http://archive.northmill-history.org/wp/1840-1870.pdf"
+    },
+    {
+      "id": "CIT-026",
+      "expected": "unreachable",
+      "got": "verified",
+      "correct": false,
+      "confidence": 0.8,
+      "resolution_layer": "L2-fetch",
+      "expected_layer": "L2-fetch-js",
+      "flags": [],
+      "retraction_caught": null,
+      "error": null
+    },
+    {
+      "id": "CIT-027",
+      "expected": "verified",
+      "got": "unreachable",
+      "correct": false,
+      "confidence": 0.6,
+      "resolution_layer": "L2-fetch",
+      "expected_layer": "L0-doi + retraction-watch",
+      "flags": [
+        "paywalled"
+      ],
+      "retraction_caught": false,
+      "error": "Source metadata verified but full text unreachable \u2014 claim unverifiable"
+    },
+    {
+      "id": "CIT-028",
+      "expected": "verified",
+      "got": "unreachable",
+      "correct": false,
+      "confidence": 0.6,
+      "resolution_layer": "L2-fetch",
+      "expected_layer": "L0-doi + retraction-watch",
+      "flags": [
+        "paywalled"
+      ],
+      "retraction_caught": false,
+      "error": "Source metadata verified but full text unreachable \u2014 claim unverifiable"
+    },
+    {
+      "id": "CIT-029",
+      "expected": "verified",
+      "got": "unreachable",
+      "correct": false,
+      "confidence": 0.6,
+      "resolution_layer": "L2-fetch",
+      "expected_layer": "L0-doi + retraction-watch",
+      "flags": [
+        "paywalled"
+      ],
+      "retraction_caught": false,
+      "error": "Source metadata verified but full text unreachable \u2014 claim unverifiable"
+    }
+  ]
+}

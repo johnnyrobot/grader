@@ -1,0 +1,41 @@
+# SCRIPTS
+
+Infrastructure scripts: model baking and Canvas sandbox seeding. Both have safety-critical guards.
+
+## STRUCTURE
+
+```
+scripts/
+├── make_models.sh              # bake context-capped Ollama variants (CRITICAL for 16 GB tier)
+└── seed_canvas_sandbox.py      # Canvas round-trip seeder/verifier (dry-run by default)
+```
+
+## WHERE TO LOOK
+
+| Task | Location | Notes |
+|------|----------|-------|
+| Fix OOM on 16 GB machines | `make_models.sh` | Caps `num_ctx=16384`, sets `temperature=0` |
+| Seed Canvas sandbox | `seed_canvas_sandbox.py` | `--apply --students 6` to create + exercise |
+| Tear down sandbox | `seed_canvas_sandbox.py` | `--teardown --course-id 106 --apply` |
+| Understand Canvas API quirks | `seed_canvas_sandbox.py` | All 4 gotchas encoded in code comments |
+
+## CONVENTIONS
+
+- **`make_models.sh`**: `CTX` env var override: `GRADER_CTX=8192 ./scripts/make_models.sh`
+- **`seed_canvas_sandbox.py`**: dry-run by default. `--apply` to write. Refuses courses without `ZZ-GRADER-TEST` marker.
+- Fake students use `ZZGraderTest` prefix + `.invalid` email domain (RFC 2606 — can never resolve)
+- Canvas credentials: env vars (`CANVAS_BASE_URL`, `CANVAS_API_TOKEN`) or canvas-pp-cli's `credentials.toml`
+
+## ANTI-PATTERNS
+
+- **NEVER pipe `ollama list` into `grep -q` under `set -o pipefail`** — SIGPIPE makes installed models look missing. `make_models.sh:25` snapshots to a variable first.
+- **NEVER run `seed_canvas_sandbox.py` without `--apply` expecting writes** — it stubs every write in dry-run mode.
+- **NEVER point `seed_canvas_sandbox.py` at a real course** — `guard_sandbox()` checks for `ZZ-GRADER-TEST` marker in course name.
+- **NEVER delete users not starting with `ZZGraderTest`** — teardown's `--delete-users` filters by prefix.
+
+## NOTES
+
+- **Why `make_models.sh` exists**: Ollama loads at full default context. Qwen3-VL's 262k default → 4B model consumed 41 GB. Capping at 16k → ~6 GB. Grading needs ~5,500 tokens.
+- **Canvas gotchas in code**: bulk-update is async (poll Progress); submission files need `as_user_id` masquerade; Canvas returns HTML without `Accept: application/json`; Canvas Free-for-Teacher is dead.
+- Live sandbox: course 106, assignment 2836, rubric 189, test student 8, cohort 9-14
+- `seed_canvas_sandbox.py` is 621 lines — the cohort section (C1-C5) exercises multi-student paths the Test Student can't reach

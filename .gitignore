@@ -1,0 +1,86 @@
+# ---------------------------------------------------------------------------
+# Student data & licensed corpora — NEVER COMMIT
+#
+# Two separate reasons, both hard rules:
+#   1. FERPA — real student work must not enter a public repo, even de-identified.
+#   2. Licensing — PERSUADE 2.0, ELLIPSE, AAC&U VALUE, and IAM are CC BY-NC-SA / NC.
+#      We may develop and evaluate against them; we may not redistribute them here
+#      or ship them as sample data. See docs/DATA-PLAN.md §1.
+#
+# Downloaded corpora live under fixtures/corpora/ and are fetched by script, never
+# committed. Synthetic + permissively-licensed fixtures ARE committed (see below).
+# ---------------------------------------------------------------------------
+
+# Downloaded datasets (all of them — fetch via script, never vendor)
+fixtures/corpora/
+fixtures/**/*.csv
+fixtures/**/*.parquet
+fixtures/**/*.zip
+fixtures/**/*.tar.gz
+
+# Real student work, in any form
+fixtures/teacher-goldset/
+fixtures/handwriting-samples/
+fixtures/golden_set/*.json
+!fixtures/golden_set/FORMAT.json
+!fixtures/golden_set/generate_sample.py
+private/
+*.student.*
+
+# Signing keys & credentials
+*.pem
+*.key
+*.p12
+*.p8
+signing_key*
+
+# Canvas credentials & tokens
+credentials.toml
+.env
+.env.*
+!.env.example
+
+# ...but DO keep the synthetic, self-generated citation fixtures (no license, no PII)
+!fixtures/citations/
+!fixtures/citations/*.json
+!fixtures/citations/*.md
+!fixtures/citations/*.py
+
+# ---------------------------------------------------------------------------
+# Build & tooling
+# ---------------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.uv/
+node_modules/
+dist/
+build/
+target/
+*.db
+*.sqlite
+*.sqlite3
+.DS_Store
+.idea/
+.vscode/
+*.log
+
+# Generated: local Canvas sandbox ids + instance URL
+fixtures/canvas_sandbox.json
+
+# Updater manifest + signing artifacts
+latest.json
+*.sig
+*.dmg
+
+# Tauri build
+app/src-tauri/target/
+
+# Python venv in app (sidecar)
+app/src-tauri/resources/
+
+# OS artifacts
+*.swp
+*.swo
+*~

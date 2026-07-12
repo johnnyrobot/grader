@@ -1,0 +1,27 @@
+{
+  "$schema": "golden_set_item_format",
+  "description": "Golden set item format for quality and bias gates. Each file in this directory is one graded item. Files are gitignored (FERPA — real student work). Use generate_sample.py to create a non-sensitive template.",
+  "fields": {
+    "id": "string — unique identifier (e.g. 'G001')",
+    "text": "string — the submission text the AI grades",
+    "rubric_title": "string — title matching a rubric in the rubric store",
+    "rubric": "object — full Rubric schema (same as grader.schema.Rubric). Omit if rubric_title matches a stored rubric.",
+    "human_scores": "object — {criterion_id: score} from the teacher",
+    "ai_scores": "object — {criterion_id: score} from the AI (filled after grading). Omit for new items.",
+    "perturbed_scores": "object — optional pre-computed perturbed scores for bias gate. Omit unless pre-computed.",
+    "assignment_type": "string — essay|problem_set|lab_report|code|handwritten",
+    "notes": "string — optional teacher notes"
+  },
+  "example": {
+    "id": "G001",
+    "text": "The experiment demonstrated that...",
+    "rubric_title": "Lab Report Rubric",
+    "human_scores": {"content": 4, "evidence": 3, "clarity": 5, "mechanics": 4},
+    "assignment_type": "lab_report"
+  },
+  "gate_usage": {
+    "quality": "quality.py loads all *.json files, computes QWK between human_scores and ai_scores totals. Need >=5 items.",
+    "bias": "bias.py perturbs text, re-grades, measures score delta. Needs ai_scores pre-computed."
+  },
+  "ferpa_notice": "These files contain real student work. They are gitignored. Never commit. Never share. The teacher who graded them owns them."
+}

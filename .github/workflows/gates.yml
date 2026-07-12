@@ -1,0 +1,89 @@
+name: Ship Gates
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  quality:
+    name: Quality Gate (QWK ≥ 0.70)
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+      - run: uv sync
+      - run: uv run python engine/gates/quality.py
+
+  fairness:
+    name: Fairness Gate (style perturbation)
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+      - run: uv sync
+      - run: uv run python engine/gates/bias.py
+
+  privacy:
+    name: Privacy Gate (egress audit)
+    runs-on: macos-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+      - run: uv sync
+      - run: uv run python engine/gates/egress.py --capture-duration 15
+
+  performance:
+    name: Performance Gate (16 GB floor)
+    runs-on: macos-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+      - run: uv sync
+      - run: uv run python engine/gates/perf.py --memory-floor 16
+
+  tests:
+    name: Unit Tests
+    runs-on: macos-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+      - run: uv sync
+      - run: uv run pytest engine/tests/ -v
+
+  citation-verification:
+    name: Citation Verification (29 fixtures)
+    runs-on: macos-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+      - run: uv sync
+      - run: uv run python engine/verify_citations.py --fixtures fixtures/citations/citation_fixtures.json
+
+  build-frontend:
+    name: Frontend Build (tsc + vite)
+    runs-on: macos-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: cd app && npm install
+      - run: cd app && npx tsc --noEmit
+      - run: cd app && npx vite build
+
+  build-rust:
+    name: Rust Build (cargo check)
+    runs-on: macos-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - run: cd app/src-tauri && cargo check

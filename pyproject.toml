@@ -1,0 +1,31 @@
+[project]
+name = "grader"
+version = "0.1.0"
+description = "Local-first AI grading copilot for instructors"
+requires-python = ">=3.12"
+dependencies = [
+    "pydantic-ai-slim[openai]>=0.0.20",
+    "pydantic>=2.9",
+    "docling>=2.0",
+    "httpx>=0.27",
+    "pandas>=3.0.3",
+    "pyarrow>=25.0.0",
+    "fastapi>=0.139.0",
+    "uvicorn>=0.51.0",
+    "trafilatura>=2.1.0",
+    "python-docx>=1.2.0",
+    "pypdf>=6.14.2",
+    "openpyxl>=3.1.5",
+    "docxtpl>=0.20.2",
+    "ocrmac>=1.0.1",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[tool.pytest.ini_options]
+testpaths = ["engine/tests"]
+pythonpath = ["engine"]
+
+[tool.uv]
+package = false
