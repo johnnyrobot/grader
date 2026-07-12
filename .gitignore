@@ -64,6 +64,7 @@ target/
 .DS_Store
 .idea/
 .vscode/
+.worktrees/
 *.log
 
 # Generated: local Canvas sandbox ids + instance URL
