@@ -1,41 +1,57 @@
-import { useState, useEffect, useCallback } from "react";
-import { GradeItem, approveGrade, overrideGrade, fetchQueue } from "../api";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { GradeItem, approveGrade, overrideGrade } from "../api";
+import { AppShell } from "../components/AppShell";
 
 interface Props {
   item: GradeItem;
   onBack: () => void;
 }
 
-const LANE_LABELS: Record<string, { label: string; color: string }> = {
-  review_first: { label: "Review First", color: "text-red-400" },
-  standard: { label: "Standard", color: "text-amber-400" },
-  high_confidence: { label: "High Confidence", color: "text-green-400" },
+const LANE_META: Record<string, { label: string; className: string }> = {
+  review_first: { label: "Needs teacher review", className: "status-review" },
+  standard: { label: "Standard review", className: "status-standard" },
+  high_confidence: { label: "High confidence", className: "status-confident" },
 };
 
+function titleCase(value: string) {
+  return value.replace(/_/g, " ").replace(/\b\w/g, char => char.toUpperCase());
+}
+
+function total(scores: Record<string, number>) {
+  return Object.values(scores).reduce((sum, score) => sum + score, 0);
+}
+
 export function SplitView({ item, onBack }: Props) {
-  const [scores, setScores] = useState<Record<string, number>>(item.ai_scores || {});
-  const [feedback, setFeedback] = useState(item.ai_feedback || "");
+  const initialScores = item.teacher_scores || item.ai_scores || {};
+  const initialFeedback = item.teacher_feedback || item.ai_feedback || "";
+  const [scores, setScores] = useState<Record<string, number>>(initialScores);
+  const [feedback, setFeedback] = useState(initialFeedback);
   const [approved, setApproved] = useState(item.approved);
-  const [overridden, setOverridden] = useState(!!item.teacher_scores);
   const [saving, setSaving] = useState(false);
-  const [msg, setMsg] = useState("");
+  const [message, setMessage] = useState("");
   const [feedbackFocused, setFeedbackFocused] = useState(false);
 
   useEffect(() => {
     setScores(item.teacher_scores || item.ai_scores || {});
     setFeedback(item.teacher_feedback || item.ai_feedback || "");
     setApproved(item.approved);
-    setOverridden(!!item.teacher_scores);
+    setMessage("");
   }, [item]);
+
+  const changed = useMemo(
+    () => JSON.stringify(scores) !== JSON.stringify(initialScores) || feedback !== initialFeedback,
+    [scores, feedback, initialScores, initialFeedback],
+  );
 
   const handleApprove = useCallback(async () => {
     setSaving(true);
+    setMessage("");
     try {
       await approveGrade(item.id);
       setApproved(true);
-      setMsg("Approved");
-    } catch (e: any) {
-      setMsg(`Error: ${e.message}`);
+      setMessage("Grade approved. It is ready for your next posting step.");
+    } catch (error) {
+      setMessage(`Approval was not saved. ${(error as Error).message} Your edits are still here.`);
     } finally {
       setSaving(false);
     }
@@ -43,186 +59,191 @@ export function SplitView({ item, onBack }: Props) {
 
   const handleOverride = useCallback(async () => {
     setSaving(true);
+    setMessage("");
     try {
       const result = await overrideGrade(item.id, scores, feedback);
-      setOverridden(true);
       setApproved(true);
-      setMsg(`Overridden — AI ${result.ai_total} → Teacher ${result.teacher_total}`);
       if (result.refinement_proposals?.length > 0) {
-        setMsg(`Overridden. ${result.refinement_proposals.length} rubric refinement proposal(s) available.`);
+        setMessage(`Your changes are approved. ${result.refinement_proposals.length} rubric refinement proposal${result.refinement_proposals.length === 1 ? " is" : "s are"} ready to review.`);
+      } else {
+        setMessage(`Your changes are approved. Score updated from ${result.ai_total} to ${result.teacher_total}.`);
       }
-    } catch (e: any) {
-      setMsg(`Error: ${e.message}`);
+    } catch (error) {
+      setMessage(`Your changes were not saved. ${(error as Error).message} Your scores and feedback are still here.`);
     } finally {
       setSaving(false);
     }
   }, [item.id, scores, feedback]);
 
-  const handleKey = useCallback(
-    (e: KeyboardEvent) => {
-      if (feedbackFocused) return;
-      if (e.key === "a" || e.key === "A") {
-        e.preventDefault();
-        handleApprove();
-      }
-      if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
-        e.preventDefault();
-        if (overridden || !approved) handleOverride();
-        else handleApprove();
-      }
-      if (e.key === "Escape") {
-        e.preventDefault();
-        onBack();
-      }
-      if (e.key === "e" || e.key === "E") {
-        e.preventDefault();
-        document.getElementById("feedback-editor")?.focus();
-      }
-    },
-    [handleApprove, handleOverride, onBack, overridden, approved, feedbackFocused]
-  );
+  const handleKey = useCallback((event: KeyboardEvent) => {
+    if (feedbackFocused) return;
+    if (event.key.toLowerCase() === "a") {
+      event.preventDefault();
+      handleApprove();
+    }
+    if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+      event.preventDefault();
+      changed ? handleOverride() : handleApprove();
+    }
+    if (event.key === "Escape") {
+      event.preventDefault();
+      onBack();
+    }
+    if (event.key.toLowerCase() === "e") {
+      event.preventDefault();
+      document.getElementById("feedback-editor")?.focus();
+    }
+  }, [changed, feedbackFocused, handleApprove, handleOverride, onBack]);
 
   useEffect(() => {
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
   }, [handleKey]);
 
+  const lane = item.lane ? LANE_META[item.lane] : null;
   const criteriaIds = Object.keys(scores);
-  const lane = item.lane ? LANE_LABELS[item.lane] : null;
+  const aiTotal = total(item.ai_scores || {});
+  const currentTotal = total(scores);
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white flex flex-col" role="application" aria-label="Grade review">
-      <header className="border-b border-gray-800 px-6 py-3 flex items-center justify-between flex-shrink-0" role="banner">
-        <div className="flex items-center gap-4">
-          <button
-            onClick={onBack}
-            className="px-3 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-sm"
-            aria-label="Back to queue"
-          >
-            ← Back
+    <AppShell
+      eyebrow="Teacher decision"
+      title={`Review ${item.submission_id}`}
+      subtitle="Compare the draft with the rubric, make any changes, then approve only when the grade reflects your judgment."
+      actions={(
+        <>
+          <button type="button" className="button-quiet" onClick={onBack}>← Back to queue</button>
+          <button type="button" className="button-secondary" onClick={handleApprove} disabled={saving || approved || changed} aria-label="Approve AI draft" title={changed ? "Save your teacher changes instead" : undefined}>
+            {approved && !changed ? "Approved" : "Approve AI draft"}
           </button>
-          {lane && (
-            <div className="flex items-center gap-2" role="status" aria-label={`Triage lane: ${lane.label}`}>
-              <div className={`w-2 h-2 rounded-full ${lane.color.replace("text", "bg")}`} aria-hidden="true" />
-              <span className={`text-sm ${lane.color}`}>{lane.label}</span>
-            </div>
-          )}
-          {item.confidence !== null && (
-            <span
-              className={`text-sm ${item.confidence < 0.7 ? "text-red-400" : item.confidence >= 0.85 ? "text-green-400" : "text-amber-400"}`}
-              role="status"
-              aria-label={`AI confidence: ${(item.confidence * 100).toFixed(0)} percent`}
-            >
-              Confidence: {(item.confidence * 100).toFixed(0)}%
-            </span>
-          )}
+        </>
+      )}
+      toolbar={(
+        <div className="review-statusbar">
+          <span className="status-pill status-info">AI suggestion — teacher decision required</span>
+          {lane && <span className={`status-pill ${lane.className}`}>{lane.label}</span>}
+          {item.confidence !== null && <span className="confidence-copy">{Math.round(item.confidence * 100)}% confidence</span>}
+          <span className="privacy-copy">Processed locally · nothing posts without approval</span>
         </div>
-        <div className="flex items-center gap-3">
-          {msg && <span className="text-sm text-gray-400" role="status" aria-live="polite">{msg}</span>}
-          {approved && <span className="text-sm text-green-400" role="status">✓ Approved</span>}
-          <button
-            onClick={handleApprove}
-            disabled={saving || approved}
-            className="px-4 py-1.5 rounded-lg bg-green-600 hover:bg-green-700 disabled:bg-gray-700 text-sm font-medium"
-            aria-label={approved ? "Grade approved" : "Approve AI grade"}
-            aria-disabled={saving || approved}
-          >
-            {approved ? "Approved" : "Approve"}
-          </button>
-          <button
-            onClick={handleOverride}
-            disabled={saving}
-            className="px-4 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:bg-gray-700 text-sm font-medium"
-            aria-label="Override AI grade with your scores"
-            aria-disabled={saving}
-          >
-            Override
-          </button>
+      )}
+      footer={(
+        <p><strong>Shortcuts:</strong> <kbd>A</kbd> approve draft · <kbd>E</kbd> edit feedback · <kbd>⌘ Enter</kbd> save decision · <kbd>Esc</kbd> return</p>
+      )}
+    >
+      {message && (
+        <div className={message.includes("not saved") ? "decision-notice decision-notice--error" : "decision-notice"} role="status" aria-live="polite">
+          {message}
         </div>
-      </header>
+      )}
 
-      <div className="flex flex-1 overflow-hidden">
-        <div className="flex-1 overflow-auto p-6 border-r border-gray-800" role="region" aria-label="Student submission and AI feedback">
-          <h3 className="text-sm text-gray-500 mb-3">Submission</h3>
-          <div className="bg-gray-850 rounded-lg p-6 text-gray-300 whitespace-pre-wrap">
-            {item.submission_id}
-          </div>
-          <div className="mt-4">
-            <h3 className="text-sm text-gray-500 mb-2">AI Feedback Draft</h3>
-            <div className="bg-gray-850 rounded-lg p-4 text-gray-400 text-sm whitespace-pre-wrap">
-              {item.ai_feedback || "(no feedback)"}
+      <div className="review-grid">
+        <section className="review-document" aria-labelledby="submission-heading">
+          <div className="section-heading">
+            <div>
+              <p className="eyebrow">Source material</p>
+              <h2 id="submission-heading">Submission</h2>
             </div>
+            <span className="muted">Original remains unchanged</span>
           </div>
-          {item.flags.length > 0 && (
-            <div className="mt-4" role="status" aria-label="AI flags">
-              <h3 className="text-sm text-gray-500 mb-2">Flags</h3>
-              <div className="flex gap-2">
-                {item.flags.map((f) => (
-                  <span key={f} className="text-xs px-2 py-1 rounded bg-yellow-900 text-yellow-200" role="badge">
-                    {f.replace(/_/g, " ")}
-                  </span>
-                ))}
+          <article className="submission-paper paper-panel">
+            <div className="submission-paper__rule" aria-hidden="true" />
+            <p className="submission-reference">Submission reference</p>
+            <p className="submission-identity">{item.submission_id}</p>
+            <p className="muted">The parsed submission content appears here when it is available from the grading engine.</p>
+          </article>
+
+          <article className="feedback-draft soft-panel" aria-labelledby="ai-feedback-heading">
+            <div className="feedback-draft__header">
+              <div>
+                <p className="eyebrow">Draft, not final</p>
+                <h2 id="ai-feedback-heading">AI feedback suggestion</h2>
+              </div>
+              <span className="status-pill status-info">Review before use</span>
+            </div>
+            <p>{item.ai_feedback || "No feedback suggestion was generated."}</p>
+          </article>
+
+          <section className="signals-panel" aria-labelledby="signals-heading">
+            <div className="section-heading">
+              <div>
+                <p className="eyebrow">Review signals</p>
+                <h2 id="signals-heading">What needs attention</h2>
               </div>
             </div>
-          )}
-        </div>
+            <div className="signal-list">
+              {item.flags.length
+                ? item.flags.map(flag => <span key={flag} className="signal-tag">{titleCase(flag)}</span>)
+                : <p className="muted">No additional review signals were raised.</p>}
+            </div>
+          </section>
+        </section>
 
-        <div className="w-[420px] flex-shrink-0 overflow-auto p-6" role="region" aria-label="Rubric scoring">
-          <h3 className="text-sm text-gray-500 mb-4" role="heading" aria-level={2}>Rubric Scorer</h3>
-          <div className="space-y-4">
-            {criteriaIds.map((cid) => (
-              <div key={cid} className="bg-gray-850 rounded-xl p-4" role="group" aria-label={`Criterion: ${cid}`}>
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium text-gray-300">{cid}</span>
-                  <span className="text-lg font-bold text-white" aria-label={`Score: ${scores[cid]?.toFixed(1) || "not set"}`}>
-                    {scores[cid]?.toFixed(1) || "—"}
-                  </span>
+        <aside className="rubric-inspector paper-panel" aria-labelledby="rubric-heading">
+          <div className="rubric-inspector__header">
+            <div>
+              <p className="eyebrow">Your rubric</p>
+              <h2 id="rubric-heading">Score and feedback</h2>
+            </div>
+            <div className="score-total" aria-label={`Current total ${currentTotal} points`}>
+              <strong>{currentTotal}</strong>
+              <span>points</span>
+            </div>
+          </div>
+          {changed && <p className="unsaved-note" role="status">Teacher changes not saved yet.</p>}
+
+          <div className="criteria-list">
+            {criteriaIds.map(criterion => (
+              <fieldset key={criterion} className="criterion-card soft-panel">
+                <legend>{criterion}</legend>
+                <div className="criterion-meta">
+                  <span>AI suggested {item.ai_scores?.[criterion]?.toFixed(1) ?? "—"}</span>
+                  <strong>{scores[criterion]?.toFixed(1) ?? "—"}</strong>
                 </div>
-                <div className="flex gap-1" role="radiogroup" aria-label={`Score for ${cid}`}>
-                  {[0, 1, 2, 3, 4, 5].map((n) => (
-                    <button
-                      key={n}
-                      onClick={() => setScores({ ...scores, [cid]: n })}
-                      className={`flex-1 py-1.5 rounded text-sm ${
-                        scores[cid] === n
-                          ? "bg-blue-600 text-white"
-                          : "bg-gray-800 text-gray-400 hover:bg-gray-700"
-                      }`}
-                      role="radio"
-                      aria-checked={scores[cid] === n}
-                      aria-label={`${n} points`}
-                    >
-                      {n}
-                    </button>
+                <div className="score-options">
+                  {[0, 1, 2, 3, 4, 5].map(value => (
+                    <label key={value} className="score-option">
+                      <input
+                        type="radio"
+                        name={`score-${criterion}`}
+                        value={value}
+                        checked={scores[criterion] === value}
+                        onChange={() => setScores(current => ({ ...current, [criterion]: value }))}
+                        aria-label={`${value} points for ${criterion}`}
+                        aria-checked={scores[criterion] === value}
+                      />
+                      <span>{value}</span>
+                    </label>
                   ))}
                 </div>
-              </div>
+              </fieldset>
             ))}
           </div>
 
-          <div className="mt-6">
-            <h3 className="text-sm text-gray-500 mb-2" role="heading" aria-level={2}>Feedback Editor</h3>
+          <div className="feedback-editor-block">
+            <label className="field-label" htmlFor="feedback-editor">Feedback for {item.submission_id}</label>
+            <p className="field-help">Keep it specific: what worked, what to revise, and the next useful action.</p>
             <textarea
               id="feedback-editor"
               value={feedback}
-              onChange={(e) => setFeedback(e.target.value)}
+              onChange={event => setFeedback(event.target.value)}
               onFocus={() => setFeedbackFocused(true)}
               onBlur={() => setFeedbackFocused(false)}
-              rows={6}
-              className="w-full px-4 py-3 rounded-lg bg-gray-800 border border-gray-700 text-white text-sm focus:border-blue-500 focus:outline-none resize-none"
-              placeholder="Edit feedback for the student..."
-              aria-label="Feedback editor for student"
+              rows={8}
+              className="field-control feedback-textarea"
+              aria-label={`Feedback for ${item.submission_id}`}
             />
           </div>
 
-          <div className="mt-4 p-3 rounded-lg bg-gray-850 text-xs text-gray-500" role="note" aria-label="Keyboard shortcuts">
-            <p>Keyboard: <kbd className="px-1 bg-gray-800 rounded">A</kbd> approve ·
-            <kbd className="ml-1 px-1 bg-gray-800 rounded">E</kbd> edit feedback ·
-            <kbd className="ml-1 px-1 bg-gray-800 rounded">⌘⏎</kbd> override+approve ·
-            <kbd className="ml-1 px-1 bg-gray-800 rounded">Esc</kbd> back</p>
+          <div className="score-comparison" aria-label="Score comparison">
+            <span>AI draft <strong>{aiTotal}</strong></span>
+            <span aria-hidden="true">→</span>
+            <span>Your total <strong>{currentTotal}</strong></span>
           </div>
-        </div>
+          <button type="button" className="button-primary review-save" onClick={handleOverride} disabled={saving} aria-label="Save changes and approve">
+            {saving ? "Saving decision…" : "Save changes & approve"}
+          </button>
+        </aside>
       </div>
-    </div>
+    </AppShell>
   );
 }

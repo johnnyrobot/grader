@@ -184,6 +184,46 @@ button { color: inherit; }
   .empty-state__mark { background: var(--accent-soft); color: var(--accent); @apply mx-auto mb-5 grid h-14 w-14 place-items-center rounded-2xl text-2xl font-black; }
   .empty-state h2 { color: var(--ink-strong); @apply mb-2 text-2xl font-extrabold; }
   .empty-state p { color: var(--ink-muted); @apply mx-auto mb-0 max-w-xl; }
+  .review-statusbar { @apply mx-auto flex w-full max-w-[1480px] flex-wrap items-center gap-2; }
+  .confidence-copy { color: var(--ink-strong); @apply text-sm font-bold; }
+  .privacy-copy { color: var(--ink-muted); @apply ml-auto text-xs font-semibold; }
+  .decision-notice { background: var(--success-soft); border-left: 4px solid var(--success); color: var(--success); @apply mb-6 rounded-r-xl px-4 py-3 text-sm font-bold; }
+  .decision-notice--error { background: var(--danger-soft); border-color: var(--danger); color: var(--danger); }
+  .review-grid { @apply grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_470px]; }
+  .review-document { @apply min-w-0 space-y-6; }
+  .submission-paper { min-height: 300px; @apply relative overflow-hidden rounded-2xl p-7 md:p-10; }
+  .submission-paper__rule { background: var(--accent); @apply absolute left-0 top-0 h-full w-1.5; }
+  .submission-reference { color: var(--ink-muted); @apply mb-1 text-xs font-bold uppercase tracking-widest; }
+  .submission-identity { color: var(--ink-strong); @apply mb-5 text-2xl font-extrabold; }
+  .feedback-draft { @apply rounded-2xl p-6; }
+  .feedback-draft__header { @apply mb-4 flex flex-wrap items-start justify-between gap-3; }
+  .feedback-draft h2, .signals-panel h2 { color: var(--ink-strong); @apply m-0 text-xl font-extrabold; }
+  .feedback-draft > p { color: var(--ink); @apply m-0 whitespace-pre-wrap text-[15px] leading-7; }
+  .signals-panel { @apply rounded-2xl border border-transparent p-1; }
+  .rubric-inspector { @apply rounded-2xl p-5 xl:sticky xl:top-24; }
+  .rubric-inspector__header { border-bottom: 1px solid var(--line); @apply mb-4 flex items-start justify-between gap-4 pb-4; }
+  .rubric-inspector h2 { color: var(--ink-strong); @apply m-0 text-2xl font-extrabold tracking-tight; }
+  .score-total { background: var(--ink-strong); color: var(--surface-paper); @apply flex min-w-20 flex-col items-center rounded-xl px-3 py-2; }
+  .score-total strong { @apply text-2xl leading-none; }
+  .score-total span { @apply mt-1 text-[10px] font-bold uppercase tracking-wider; }
+  .unsaved-note { background: var(--warning-soft); color: var(--warning); @apply mb-4 rounded-lg px-3 py-2 text-xs font-bold; }
+  .criteria-list { @apply space-y-3; }
+  .criterion-card { @apply min-w-0 rounded-xl p-4; }
+  .criterion-card legend { color: var(--ink-strong); @apply px-1 text-sm font-extrabold; }
+  .criterion-meta { color: var(--ink-muted); @apply mb-3 flex items-center justify-between text-xs; }
+  .criterion-meta strong { color: var(--ink-strong); @apply text-lg; }
+  .score-options { @apply grid grid-cols-6 gap-1.5; }
+  .score-option { @apply relative cursor-pointer; }
+  .score-option input { @apply absolute inset-0 h-full w-full cursor-pointer opacity-0; }
+  .score-option span { background: var(--surface-paper); border: 1px solid var(--line-strong); color: var(--ink-muted); @apply grid min-h-10 place-items-center rounded-lg text-sm font-bold transition; }
+  .score-option input:checked + span { background: var(--accent); border-color: var(--accent); color: white; box-shadow: inset 0 -2px 0 rgb(0 0 0 / 0.12); }
+  .score-option input:focus-visible + span { outline: 3px solid var(--focus); outline-offset: 2px; }
+  .feedback-editor-block { border-top: 1px solid var(--line); @apply mt-5 pt-5; }
+  .field-help { color: var(--ink-muted); @apply -mt-0.5 mb-2 text-xs; }
+  .feedback-textarea { @apply min-h-40 resize-y leading-6; }
+  .score-comparison { background: var(--surface-soft); color: var(--ink-muted); @apply mt-4 flex items-center justify-center gap-3 rounded-xl px-3 py-2 text-xs; }
+  .score-comparison strong { color: var(--ink-strong); @apply ml-1 text-base; }
+  .review-save { @apply mt-3 w-full; }
 }
 
 @media (max-width: 900px) {
