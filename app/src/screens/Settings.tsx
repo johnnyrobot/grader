@@ -1,26 +1,33 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { getSettings, updateSettings, listRubrics, getRubric, saveRubric } from "../api";
+import { AppShell } from "../components/AppShell";
+import { useTheme } from "../theme";
 
-interface Props {
-  onClose: () => void;
-}
+interface Props { onClose: () => void; }
+type SettingsTab = "general" | "appearance" | "models" | "rubrics";
+
+const TABS: { id: SettingsTab; label: string; description: string }[] = [
+  { id: "general", label: "General", description: "Canvas and review thresholds" },
+  { id: "appearance", label: "Appearance", description: "Mode, spacing, and motion" },
+  { id: "models", label: "Model defaults", description: "Local grading model tags" },
+  { id: "rubrics", label: "Rubrics", description: "Saved and imported rubrics" },
+];
 
 export function SettingsScreen({ onClose }: Props) {
   const [settings, setSettings] = useState<Record<string, string | number>>({});
   const [rubrics, setRubrics] = useState<{ title: string; version: number }[]>([]);
-  const [savedMsg, setSavedMsg] = useState("");
-  const [activeTab, setActiveTab] = useState<"general" | "models" | "rubrics">("general");
+  const [message, setMessage] = useState("");
+  const [activeTab, setActiveTab] = useState<SettingsTab>("general");
   const [pasteText, setPasteText] = useState("");
   const [pasteTitle, setPasteTitle] = useState("");
 
   const refresh = async () => {
     try {
-      const s = await getSettings();
-      setSettings(s);
-      const r = await listRubrics();
-      setRubrics(r);
-    } catch (e) {
-      setSavedMsg(`Error: ${(e as Error).message}`);
+      const [nextSettings, nextRubrics] = await Promise.all([getSettings(), listRubrics()]);
+      setSettings(nextSettings);
+      setRubrics(nextRubrics);
+    } catch (error) {
+      setMessage(`Settings could not be loaded. ${(error as Error).message}`);
     }
   };
 
@@ -29,314 +36,180 @@ export function SettingsScreen({ onClose }: Props) {
   const handleSave = async (updates: Record<string, string | number>) => {
     try {
       await updateSettings(updates);
-      setSavedMsg("Saved");
-      setTimeout(() => setSavedMsg(""), 2000);
-      refresh();
-    } catch (e) {
-      setSavedMsg(`Error: ${(e as Error).message}`);
+      setMessage("Settings saved on this Mac.");
+      await refresh();
+    } catch (error) {
+      setMessage(`Settings were not saved. ${(error as Error).message}`);
     }
   };
 
   const handlePasteRubric = async () => {
     if (!pasteText.trim() || !pasteTitle.trim()) {
-      setSavedMsg("Need both title and rubric text");
+      setMessage("Add both a title and rubric text before saving.");
       return;
     }
     try {
       await saveRubric({ text: pasteText, title: pasteTitle });
-      setSavedMsg("Rubric saved");
+      setMessage(`Rubric “${pasteTitle}” saved.`);
       setPasteText("");
       setPasteTitle("");
-      refresh();
-    } catch (e) {
-      setSavedMsg(`Error: ${(e as Error).message}`);
+      await refresh();
+    } catch (error) {
+      setMessage(`Rubric was not saved. ${(error as Error).message}`);
     }
   };
 
   const loadRubric = async (title: string) => {
     try {
-      const r = await getRubric(title);
-      setPasteTitle(r.title);
-      setPasteText(JSON.stringify(r, null, 2));
-    } catch (e) {
-      setSavedMsg(`Error: ${(e as Error).message}`);
+      const rubric = await getRubric(title);
+      setPasteTitle(rubric.title);
+      setPasteText(JSON.stringify(rubric, null, 2));
+      setMessage(`Loaded “${title}” into the editor.`);
+    } catch (error) {
+      setMessage(`Rubric could not be loaded. ${(error as Error).message}`);
     }
   };
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white">
-      <header className="border-b border-gray-800 px-6 py-4 flex items-center justify-between" role="banner">
-        <h1 className="text-xl font-bold" role="heading" aria-level={1}>Settings</h1>
-        <div className="flex items-center gap-4">
-          {savedMsg && <span className="text-sm text-green-400" role="status" aria-live="polite">{savedMsg}</span>}
-          <button
-            onClick={onClose}
-            className="px-3 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-sm"
-            aria-label="Back to queue"
-          >
-            Back
-          </button>
-        </div>
-      </header>
-
-      <div className="flex">
-        <nav className="w-48 border-r border-gray-800 py-4 px-2" role="navigation" aria-label="Settings tabs">
-          {(["general", "models", "rubrics"] as const).map((tab) => (
+    <AppShell
+      eyebrow="Workspace preferences"
+      title="Settings"
+      subtitle="Keep the interface comfortable, the grading rules explicit, and every local connection understandable."
+      actions={<button className="button-secondary" onClick={onClose}>← Back to queue</button>}
+      toolbar={(
+        <nav className="settings-tabs" role="tablist" aria-label="Settings sections">
+          {TABS.map(tab => (
             <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`w-full text-left px-4 py-2 rounded-lg text-sm capitalize mb-1 ${
-                activeTab === tab ? "bg-blue-600 text-white" : "text-gray-400 hover:bg-gray-800"
-              }`}
+              key={tab.id}
+              type="button"
               role="tab"
-              aria-selected={activeTab === tab}
-              aria-controls={`${tab}-panel`}
+              aria-label={tab.label}
+              aria-selected={activeTab === tab.id}
+              aria-controls={`${tab.id}-panel`}
+              onClick={() => setActiveTab(tab.id)}
             >
-              {tab}
+              <strong>{tab.label}</strong><span>{tab.description}</span>
             </button>
           ))}
         </nav>
-
-        <main className="flex-1 p-6">
-          {activeTab === "general" && (
-            <div role="tabpanel" id="general-panel" aria-label="General settings">
-              <GeneralPanel settings={settings} onSave={handleSave} />
-            </div>
-          )}
-          {activeTab === "models" && (
-            <div role="tabpanel" id="models-panel" aria-label="Model settings">
-              <ModelsPanel settings={settings} onSave={handleSave} />
-            </div>
-          )}
-          {activeTab === "rubrics" && (
-            <div role="tabpanel" id="rubrics-panel" aria-label="Rubric management">
-              <RubricsPanel
-                rubrics={rubrics}
-                pasteText={pasteText}
-                setPasteText={setPasteText}
-                pasteTitle={pasteTitle}
-                setPasteTitle={setPasteTitle}
-                onSave={handlePasteRubric}
-                onLoad={loadRubric}
-              />
-            </div>
-          )}
-        </main>
+      )}
+      wide={false}
+    >
+      {message && <div className="settings-message" role="status" aria-live="polite">{message}</div>}
+      <div className="settings-panel paper-panel" role="tabpanel" id={`${activeTab}-panel`} aria-label={`${TABS.find(tab => tab.id === activeTab)?.label} settings`}>
+        {activeTab === "general" && <GeneralPanel settings={settings} onSave={handleSave} />}
+        {activeTab === "appearance" && <AppearancePanel />}
+        {activeTab === "models" && <ModelsPanel settings={settings} onSave={handleSave} />}
+        {activeTab === "rubrics" && (
+          <RubricsPanel rubrics={rubrics} pasteText={pasteText} setPasteText={setPasteText} pasteTitle={pasteTitle} setPasteTitle={setPasteTitle} onSave={handlePasteRubric} onLoad={loadRubric} />
+        )}
       </div>
+    </AppShell>
+  );
+}
+
+function PanelHeader({ eyebrow, title, description }: { eyebrow: string; title: string; description: string }) {
+  return <header className="settings-panel__header"><p className="eyebrow">{eyebrow}</p><h2>{title}</h2><p>{description}</p></header>;
+}
+
+function AppearancePanel() {
+  const { preferences, updatePreferences, resetPreferences } = useTheme();
+  return (
+    <div>
+      <PanelHeader eyebrow="Reading comfort" title="A workspace that fits how you read" description="Changes preview immediately and are stored only on this Mac." />
+      <div className="settings-section">
+        <fieldset className="choice-fieldset">
+          <legend>Color mode</legend>
+          <p className="field-help">Light mode is the calm default. Dark mode remains available for lower-light rooms.</p>
+          <div className="preview-options preview-options--two">
+            <label className="preview-choice preview-choice--light"><input type="radio" name="settings-mode" checked={preferences.mode === "light"} onChange={() => updatePreferences({ mode: "light" })} aria-label="Light mode" /><span className="preview-swatch"><i /><i /><i /></span><strong>Light</strong><small>Paper-like and bright</small></label>
+            <label className="preview-choice preview-choice--dark"><input type="radio" name="settings-mode" checked={preferences.mode === "dark"} onChange={() => updatePreferences({ mode: "dark" })} aria-label="Dark mode" /><span className="preview-swatch"><i /><i /><i /></span><strong>Dark</strong><small>Lower ambient light</small></label>
+          </div>
+        </fieldset>
+      </div>
+      <div className="settings-section settings-grid--two">
+        <fieldset className="choice-fieldset">
+          <legend>Reading space</legend>
+          <p className="field-help">Increase whitespace without hiding important controls.</p>
+          <div className="segmented-options"><label><input type="radio" name="settings-density" checked={preferences.density === "comfortable"} onChange={() => updatePreferences({ density: "comfortable" })} aria-label="Comfortable density" /><span>Comfortable</span></label><label><input type="radio" name="settings-density" checked={preferences.density === "spacious"} onChange={() => updatePreferences({ density: "spacious" })} aria-label="Spacious density" /><span>Spacious</span></label></div>
+        </fieldset>
+        <div>
+          <p className="field-label">Motion</p>
+          <label className="check-choice"><input type="checkbox" checked={preferences.motion === "reduced"} onChange={event => updatePreferences({ motion: event.target.checked ? "reduced" : "system" })} aria-label="Reduce interface motion" /><span><strong>Reduce interface motion</strong><small>Disables non-essential transitions.</small></span></label>
+        </div>
+      </div>
+      <div className="settings-actions"><span className="saved-locally">✓ Appearance is saved automatically</span><button type="button" className="button-secondary" onClick={resetPreferences}>Restore appearance defaults</button></div>
     </div>
   );
 }
 
-function GeneralPanel({ settings, onSave }: {
-  settings: Record<string, string | number>;
-  onSave: (s: Record<string, string | number>) => void;
-}) {
+function GeneralPanel({ settings, onSave }: { settings: Record<string, string | number>; onSave: (settings: Record<string, string | number>) => void }) {
   const [canvasToken, setCanvasToken] = useState("");
   const [canvasUrl, setCanvasUrl] = useState("");
   const [dataDir, setDataDir] = useState("");
-
+  const [autoThreshold, setAutoThreshold] = useState(0.95);
+  const [reviewThreshold, setReviewThreshold] = useState(0.7);
   useEffect(() => {
     setCanvasUrl(String(settings.canvas_url || ""));
     setDataDir(String(settings.data_dir || ""));
+    setAutoThreshold(Number(settings.auto_approve_threshold ?? 0.95));
+    setReviewThreshold(Number(settings.review_first_threshold ?? 0.7));
   }, [settings]);
-
   return (
-    <div className="space-y-6 max-w-2xl">
-      <section>
-        <h2 className="text-lg font-semibold mb-3" role="heading" aria-level={2}>Canvas Integration</h2>
-        <label className="block text-sm text-gray-400 mb-1" htmlFor="canvas-url">Canvas URL</label>
-        <input
-          id="canvas-url"
-          type="text"
-          value={canvasUrl}
-          onChange={(e) => setCanvasUrl(e.target.value)}
-          placeholder="https://canvas.instructure.com"
-          className="w-full px-3 py-2 bg-gray-800 rounded-lg text-sm border border-gray-700 focus:border-blue-500 focus:outline-none"
-        />
-        <label className="block text-sm text-gray-400 mb-1 mt-3" htmlFor="canvas-token">Canvas Token {settings.canvas_token_masked ? `(current: ${settings.canvas_token_masked})` : ""}</label>
-        <input
-          id="canvas-token"
-          type="password"
-          value={canvasToken}
-          onChange={(e) => setCanvasToken(e.target.value)}
-          placeholder="Paste new Canvas token"
-          className="w-full px-3 py-2 bg-gray-800 rounded-lg text-sm border border-gray-700 focus:border-blue-500 focus:outline-none"
-        />
-        <p className="text-xs text-gray-500 mt-1">Leave blank to keep existing token. Get your token from Canvas → Settings → Approved Integration Tokens.</p>
+    <div>
+      <PanelHeader eyebrow="Connections and review" title="General grading settings" description="Canvas credentials stay local. Confidence lanes organize review but never replace approval." />
+      <section className="settings-section" aria-labelledby="canvas-settings-heading">
+        <h3 id="canvas-settings-heading">Canvas connection</h3>
+        <div className="settings-form-grid">
+          <label><span className="field-label">Canvas URL</span><input className="field-control" value={canvasUrl} onChange={event => setCanvasUrl(event.target.value)} placeholder="https://canvas.instructure.com" /></label>
+          <label><span className="field-label">Canvas token {settings.canvas_token_masked ? `(current: ${settings.canvas_token_masked})` : ""}</span><input type="password" className="field-control" value={canvasToken} onChange={event => setCanvasToken(event.target.value)} placeholder="Paste a new token" /><small>Leave blank to keep the current token.</small></label>
+          <label className="settings-span-two"><span className="field-label">Local data directory</span><input className="field-control" value={dataDir} onChange={event => setDataDir(event.target.value)} placeholder="Use the default Grader folder" /></label>
+        </div>
       </section>
-
-      <section>
-        <h2 className="text-lg font-semibold mb-3" role="heading" aria-level={2}>Triage Thresholds</h2>
-        <label className="block text-sm text-gray-400 mb-1" htmlFor="auto-thresh">Auto-approve threshold</label>
-        <input
-          id="auto-thresh"
-          type="number"
-          step="0.05"
-          min="0.5"
-          max="1.0"
-          defaultValue={String(settings.auto_approve_threshold ?? 0.95)}
-          className="w-32 px-3 py-2 bg-gray-800 rounded-lg text-sm border border-gray-700 focus:border-blue-500 focus:outline-none"
-        />
-        <p className="text-xs text-gray-500 mt-1">AI drafts above this confidence are marked high-confidence (still require your approval).</p>
-        <label className="block text-sm text-gray-400 mb-1 mt-3" htmlFor="review-thresh">Review-first threshold</label>
-        <input
-          id="review-thresh"
-          type="number"
-          step="0.05"
-          min="0.0"
-          max="1.0"
-          defaultValue={String(settings.review_first_threshold ?? 0.70)}
-          className="w-32 px-3 py-2 bg-gray-800 rounded-lg text-sm border border-gray-700 focus:border-blue-500 focus:outline-none"
-        />
-        <p className="text-xs text-gray-500 mt-1">AI drafts below this confidence are flagged for review first.</p>
+      <section className="settings-section" aria-labelledby="threshold-heading">
+        <h3 id="threshold-heading">Review-lane thresholds</h3>
+        <div className="settings-form-grid">
+          <label><span className="field-label">High-confidence threshold</span><input type="number" min="0.5" max="1" step="0.05" className="field-control" value={autoThreshold} onChange={event => setAutoThreshold(Number(event.target.value))} /><small>Still requires your approval.</small></label>
+          <label><span className="field-label">Needs-review threshold</span><input type="number" min="0" max="1" step="0.05" className="field-control" value={reviewThreshold} onChange={event => setReviewThreshold(Number(event.target.value))} /><small>Below this value, drafts move to review first.</small></label>
+        </div>
       </section>
-
-      <button
-        onClick={() => onSave({
-          canvas_url: canvasUrl,
-          canvas_token: canvasToken,
-          data_dir: dataDir,
-          auto_approve_threshold: Number((document.getElementById("auto-thresh") as HTMLInputElement).value),
-          review_first_threshold: Number((document.getElementById("review-thresh") as HTMLInputElement).value),
-        })}
-        className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-sm font-medium"
-      >
-        Save Settings
-      </button>
+      <div className="settings-actions"><span /><button className="button-primary" onClick={() => onSave({ canvas_url: canvasUrl, canvas_token: canvasToken, data_dir: dataDir, auto_approve_threshold: autoThreshold, review_first_threshold: reviewThreshold })}>Save general settings</button></div>
     </div>
   );
 }
 
-function ModelsPanel({ settings, onSave }: {
-  settings: Record<string, string | number>;
-  onSave: (s: Record<string, string | number>) => void;
-}) {
+function ModelsPanel({ settings, onSave }: { settings: Record<string, string | number>; onSave: (settings: Record<string, string | number>) => void }) {
   const [textModel, setTextModel] = useState("");
   const [visionModel, setVisionModel] = useState("");
   const [embedModel, setEmbedModel] = useState("");
-
-  useEffect(() => {
-    setTextModel(String(settings.model_text || "grader-text:8b"));
-    setVisionModel(String(settings.model_vision || "grader-vision:1.3b"));
-    setEmbedModel(String(settings.model_embed || "nomic-embed-text:latest"));
-  }, [settings]);
-
+  useEffect(() => { setTextModel(String(settings.model_text || "grader-text:8b")); setVisionModel(String(settings.model_vision || "grader-vision:1.3b")); setEmbedModel(String(settings.model_embed || "nomic-embed-text:latest")); }, [settings]);
   return (
-    <div className="space-y-6 max-w-2xl">
-      <section>
-        <h2 className="text-lg font-semibold mb-3" role="heading" aria-level={2}>Model Configuration</h2>
-        <label className="block text-sm text-gray-400 mb-1" htmlFor="text-model">Text grading model</label>
-        <input
-          id="text-model"
-          type="text"
-          value={textModel}
-          onChange={(e) => setTextModel(e.target.value)}
-          className="w-full px-3 py-2 bg-gray-800 rounded-lg text-sm border border-gray-700 focus:border-blue-500 focus:outline-none"
-        />
-        <p className="text-xs text-gray-500 mt-1">Used for grading text submissions. Recommended: grader-text:8b (capped Qwen3 8B).</p>
-
-        <label className="block text-sm text-gray-400 mb-1 mt-3" htmlFor="vision-model">Vision/handwriting model</label>
-        <input
-          id="vision-model"
-          type="text"
-          value={visionModel}
-          onChange={(e) => setVisionModel(e.target.value)}
-          className="w-full px-3 py-2 bg-gray-800 rounded-lg text-sm border border-gray-700 focus:border-blue-500 focus:outline-none"
-        />
-        <p className="text-xs text-gray-500 mt-1">Used for transcribing handwritten submissions. Recommended: grader-vision:1.3b (capped MiniCPM-V).</p>
-
-        <label className="block text-sm text-gray-400 mb-1 mt-3" htmlFor="embed-model">Embedding model</label>
-        <input
-          id="embed-model"
-          type="text"
-          value={embedModel}
-          onChange={(e) => setEmbedModel(e.target.value)}
-          className="w-full px-3 py-2 bg-gray-800 rounded-lg text-sm border border-gray-700 focus:border-blue-500 focus:outline-none"
-        />
-        <p className="text-xs text-gray-500 mt-1">Used for exemplar retrieval. Recommended: nomic-embed-text.</p>
+    <div>
+      <PanelHeader eyebrow="Local AI defaults" title="Model configuration" description="Use capped Grader tags so local memory use stays predictable." />
+      <section className="settings-section settings-form-stack">
+        <label><span className="field-label">Text grading model</span><input className="field-control" value={textModel} onChange={event => setTextModel(event.target.value)} /><small>Grades rubric criteria and writes feedback.</small></label>
+        <label><span className="field-label">Vision and handwriting model</span><input className="field-control" value={visionModel} onChange={event => setVisionModel(event.target.value)} /><small>Transcribes first; it never grades directly.</small></label>
+        <label><span className="field-label">Embedding model</span><input className="field-control" value={embedModel} onChange={event => setEmbedModel(event.target.value)} /><small>Finds relevant teacher-approved exemplars.</small></label>
       </section>
-
-      <button
-        onClick={() => onSave({ model_text: textModel, model_vision: visionModel, model_embed: embedModel })}
-        className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-sm font-medium"
-      >
-        Save Models
-      </button>
+      <div className="settings-actions"><span /><button className="button-primary" onClick={() => onSave({ model_text: textModel, model_vision: visionModel, model_embed: embedModel })}>Save model defaults</button></div>
     </div>
   );
 }
 
-function RubricsPanel({ rubrics, pasteText, setPasteText, pasteTitle, setPasteTitle, onSave, onLoad }: {
-  rubrics: { title: string; version: number }[];
-  pasteText: string;
-  setPasteText: (s: string) => void;
-  pasteTitle: string;
-  setPasteTitle: (s: string) => void;
-  onSave: () => void;
-  onLoad: (title: string) => void;
-}) {
+function RubricsPanel({ rubrics, pasteText, setPasteText, pasteTitle, setPasteTitle, onSave, onLoad }: { rubrics: { title: string; version: number }[]; pasteText: string; setPasteText: (value: string) => void; pasteTitle: string; setPasteTitle: (value: string) => void; onSave: () => void; onLoad: (title: string) => void }) {
   return (
-    <div className="space-y-6 max-w-3xl">
-      <section>
-        <h2 className="text-lg font-semibold mb-3" role="heading" aria-level={2}>Saved Rubrics</h2>
-        {rubrics.length === 0 ? (
-          <p className="text-sm text-gray-500">No saved rubrics yet. Paste one below.</p>
-        ) : (
-          <table className="w-full">
-            <thead>
-              <tr className="text-left text-sm text-gray-500 border-b border-gray-800">
-                <th className="py-2 px-2">Title</th>
-                <th className="py-2 px-2">Version</th>
-                <th className="py-2 px-2">Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rubrics.map((r) => (
-                <tr key={r.title} className="border-b border-gray-800">
-                  <td className="py-2 px-2 text-sm">{r.title}</td>
-                  <td className="py-2 px-2 text-sm text-gray-400">v{r.version}</td>
-                  <td className="py-2 px-2">
-                    <button
-                      onClick={() => onLoad(r.title)}
-                      className="text-sm text-blue-400 hover:underline"
-                    >
-                      Load
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+    <div>
+      <PanelHeader eyebrow="Assessment language" title="Rubric library" description="Keep versions visible and review imported criteria before using them for grading." />
+      <section className="settings-section">
+        <h3>Saved rubrics</h3>
+        {rubrics.length === 0 ? <div className="compact-empty">No saved rubrics yet. Import one below.</div> : <div className="rubric-list">{rubrics.map(rubric => <div key={rubric.title}><div><strong>{rubric.title}</strong><span>Version {rubric.version}</span></div><button className="button-secondary" onClick={() => onLoad(rubric.title)}>Load into editor</button></div>)}</div>}
       </section>
-
-      <section>
-        <h2 className="text-lg font-semibold mb-3" role="heading" aria-level={2}>Import Rubric</h2>
-        <label className="block text-sm text-gray-400 mb-1" htmlFor="rubric-title">Title</label>
-        <input
-          id="rubric-title"
-          type="text"
-          value={pasteTitle}
-          onChange={(e) => setPasteTitle(e.target.value)}
-          placeholder="e.g. Essay Rubric v1"
-          className="w-full px-3 py-2 bg-gray-800 rounded-lg text-sm border border-gray-700 focus:border-blue-500 focus:outline-none mb-3"
-        />
-        <label className="block text-sm text-gray-400 mb-1" htmlFor="rubric-text">Rubric text (paste from Canvas, a table, or JSON)</label>
-        <textarea
-          id="rubric-text"
-          value={pasteText}
-          onChange={(e) => setPasteText(e.target.value)}
-          placeholder="Paste rubric criteria here..."
-          rows={10}
-          className="w-full px-3 py-2 bg-gray-800 rounded-lg text-sm border border-gray-700 focus:border-blue-500 focus:outline-none font-mono"
-        />
-        <button
-          onClick={onSave}
-          className="mt-3 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-sm font-medium"
-        >
-          Save Rubric
-        </button>
+      <section className="settings-section settings-form-stack">
+        <h3>Import or update a rubric</h3>
+        <label><span className="field-label">Rubric title</span><input className="field-control" value={pasteTitle} onChange={event => setPasteTitle(event.target.value)} placeholder="Essay rubric" /></label>
+        <label><span className="field-label">Rubric text</span><textarea className="field-control rubric-editor" rows={10} value={pasteText} onChange={event => setPasteText(event.target.value)} placeholder="Paste criteria from Canvas, a table, or JSON" /></label>
       </section>
+      <div className="settings-actions"><span /><button className="button-primary" onClick={onSave}>Save rubric</button></div>
     </div>
   );
 }
