@@ -78,6 +78,8 @@ export function SplitView({ item, onBack }: Props) {
       setSavedFeedback(feedback);
       if (result.refinement_proposals?.length > 0) {
         setMessage(`Your changes are approved. ${result.refinement_proposals.length} rubric refinement proposal${result.refinement_proposals.length === 1 ? " is" : "s are"} ready to review.`);
+      } else if (result.ai_total === result.teacher_total) {
+        setMessage(`Your changes are approved. Feedback updated; score remains ${result.teacher_total}.`);
       } else {
         setMessage(`Your changes are approved. Score updated from ${result.ai_total} to ${result.teacher_total}.`);
       }

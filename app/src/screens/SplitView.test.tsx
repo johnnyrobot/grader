@@ -64,4 +64,29 @@ describe("SplitView", () => {
     expect(screen.queryByText("Teacher changes not saved yet.")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Approve AI draft" })).toHaveTextContent("Approved");
   });
+
+  it("saves feedback-only edits without leaving a stale unsaved warning", async () => {
+    vi.mocked(overrideGrade).mockResolvedValueOnce({
+      ai_total: 7,
+      teacher_total: 7,
+      refinement_proposals: [],
+    });
+    const user = userEvent.setup();
+    render(<SplitView item={item} onBack={vi.fn()} />);
+
+    const feedback = screen.getByRole("textbox", { name: "Feedback for Student 1042" });
+    await user.clear(feedback);
+    await user.type(feedback, "Keep the claim. Add one concrete citation connection.");
+    expect(screen.getByText("Teacher changes not saved yet.")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Save changes and approve" }));
+
+    await waitFor(() => expect(overrideGrade).toHaveBeenCalledWith(
+      "grade-1",
+      { Thesis: 4, Evidence: 3 },
+      "Keep the claim. Add one concrete citation connection.",
+    ));
+    expect(await screen.findByText("Your changes are approved. Feedback updated; score remains 7.")).toBeInTheDocument();
+    expect(screen.queryByText("Teacher changes not saved yet.")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Approve AI draft" })).toHaveTextContent("Approved");
+  });
 });

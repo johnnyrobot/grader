@@ -59,7 +59,7 @@ Nested guidance exists in `engine/AGENTS.md`, `engine/grader/AGENTS.md`,
 | Grading behavior | `engine/grader/agent.py`, `schema.py`, `triage.py` | `grade()` is the non-raising entry point |
 | Calibration/anchors | `engine/grader/exemplars.py`, `calibration.py`, `overrides.py` | P1 result artifacts live in `engine/results_pointer_*.json` |
 | Desktop UX | `app/src/App.tsx`, `app/src/screens/`, `app/src/index.css` | Light-first semantic theme; queue and split view are the central workflow |
-| Frontend verification | `app/src/**/*.test.tsx`, `app/e2e/neuroinclusive-ui.spec.ts` | 12 component tests plus four mocked Playwright E2E tests |
+| Frontend verification | `app/src/**/*.test.tsx`, `app/e2e/neuroinclusive-ui.spec.ts` | 13 component tests plus four mocked Playwright E2E tests |
 | Desktop ↔ engine boundary | `app/src/api.ts`, `engine/api.py` | Dynamic loopback HTTP port + per-launch bearer token; dev fallback remains `127.0.0.1:8756` |
 | Engine process lifecycle | `app/src-tauri/src/engine.rs`, `lib.rs`, `scripts/start_engine.sh` | Starts/stops uvicorn with the Tauri app |
 | Updater release evidence | `scripts/generate_appcast.py`, `scripts/updater_evidence.py`, `app/src-tauri/tauri.conf.json` | Requires signed `latest.json` and signed artifact |
@@ -238,7 +238,7 @@ uv run python scripts/release_readiness.py --profile public_beta --expected-vers
   commands. The release-readiness JSON/Markdown now includes an end-to-end public-beta matrix that
   maps requirements to evidence. Teacher-local validation still requires authorized instructor data,
   and clean-machine behavioral checks still need release validation.
-- **Coverage:** Python collects 133 cases (121 pass, 12 skip). Frontend has 12 passing component
+- **Coverage:** Python collects 133 cases (121 pass, 12 skip). Frontend has 13 passing component
   tests plus four passing Playwright E2E tests.
 - **Public beta verdict:** not ready for unattended public testing with real student work. Limit
   current use to a developer-assisted alpha with synthetic or institution-approved test data.
