@@ -100,15 +100,16 @@ work.
 - Canvas: guarded live app-level E2E passes on `canvas.johnnyrobot.ai` course `106`, assignment
   `2841`: import, targeted grade for Canvas user `9`, teacher override/approval, post, Progress
   completed, score `2`, and one teacher feedback comment read back.
-- Release readiness: local report currently returns `blocked` for signing credentials, stale release
-  artifacts, and clean-machine evidence. `scripts/updater_evidence.py` and
+- Release readiness: local report currently returns `blocked` for signing credentials, unsigned
+  updater/app artifacts, and clean-machine evidence. `scripts/updater_evidence.py` and
   `scripts/clean_machine_evidence.py` now fail closed when the supplied `latest.json`, DMG, or app
-  predate the current git commit. The latest local signed-app Computer Use sweep inspected 20 packaged
-  app states and found the existing DMG stale: after review approval it still displayed both the
-  approved message and "Teacher changes not saved yet." `scripts/computer_use_sweep_evidence.py` now
-  turns signed-app Computer Use captures into PASS/FAIL evidence and fails that stale capture set.
-  Fresh local signing/notarization is blocked because `codesign` returns `errSecInternalComponent`
-  and notarytool profile `grader` is unavailable; run
+  predate the current git commit. The current local app/DMG build is fresh but unsigned; updater
+  evidence blocks on missing manifest signatures plus app codesign/spctl failures. The last signed-app
+  Computer Use sweep inspected 20 packaged app states from an older signed DMG and failed because
+  review approval still displayed both the approved message and "Teacher changes not saved yet."
+  `scripts/computer_use_sweep_evidence.py` turns signed-app Computer Use captures into PASS/FAIL
+  evidence and fails that stale capture set. Fresh local signing/notarization is blocked because
+  `codesign` returns `errSecInternalComponent` and notarytool profile `grader` is unavailable; run
   `uv run python scripts/signing_doctor.py --print-repair-runbook` for local-only recovery steps.
   After credentials are restored, rebuild/re-sign/notarize from current source, then rerun
   clean-machine first-run models, crash recovery, keyboard-only review, Computer Use instructor

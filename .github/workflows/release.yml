@@ -25,24 +25,20 @@ jobs:
         working-directory: app
         run: npm install
 
-      - name: Build frontend
+      - name: Build unsigned Tauri app bundle
         working-directory: app
-        run: npm run build
-
-      - name: Build Rust app
-        working-directory: app/src-tauri
-        run: cargo build --release
+        run: npx tauri build --bundles app --no-sign --ci
 
       - name: Sign and notarize
         env:
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-          APPLE_KEYCHAIN_PROFILE: ${{ secrets.APPLE_KEYCHAIN_PROFILE }}
+          SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          KEYCHAIN_PROFILE: ${{ secrets.APPLE_KEYCHAIN_PROFILE }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           # Store notarytool credentials if not already stored
-          xcrun notarytool store-credentials "$APPLE_KEYCHAIN_PROFILE" \
+          xcrun notarytool store-credentials "$KEYCHAIN_PROFILE" \
             --apple-id "$APPLE_ID" \
             --password "$APPLE_APP_SPECIFIC_PASSWORD" \
             --team-id "$APPLE_TEAM_ID" || true
@@ -52,9 +48,10 @@ jobs:
 
       - name: Generate updater manifest
         run: |
+          VERSION="${GITHUB_REF_NAME#v}"
           uv run python scripts/generate_appcast.py \
             --dmg app/src-tauri/target/release/bundle/dmg/Grader.dmg \
-            --version ${{ github.ref_name }} \
+            --version "$VERSION" \
             --output latest.json \
             --signing-key ${{ secrets.TAURI_SIGNING_KEY }} \
             --release-url "https://github.com/laccd/grader/releases/download/${{ github.ref_name }}/Grader.dmg"

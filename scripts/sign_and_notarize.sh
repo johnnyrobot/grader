@@ -40,7 +40,7 @@ done
 
 if [[ ! -d "$APP_PATH" ]]; then
     echo "ERROR: App not found at $APP_PATH"
-    echo "Build it first: cd app/src-tauri && cargo build --release"
+    echo "Build it first: cd app && npx tauri build --bundles app --no-sign --ci"
     exit 1
 fi
 

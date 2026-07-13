@@ -231,16 +231,18 @@ uv run python scripts/release_readiness.py --profile public_beta --expected-vers
   performance gate passes at 38.3s per 1,500-word essay. Public-proxy quality/fairness release mode
   rejects the tiny committed mechanics fixtures. The local anchored 40-item Mohler ASAG public-proxy
   artifact passes quality at QWK 0.845 and passes fairness across all five perturbation families.
-  Updater/DMG/app evidence now fails closed when artifacts predate the current git commit; the latest
-  local signed-app Computer Use sweep found the existing DMG stale because review approval still showed
-  both an approved state and "Teacher changes not saved yet"; `scripts/computer_use_sweep_evidence.py`
-  now fails that capture set and clean-machine evidence requires a PASS sweep JSON. Fresh local
-  signing/notarization is currently blocked: `codesign` returns `errSecInternalComponent` and notarytool
-  profile `grader` is unavailable; run `scripts/signing_doctor.py` to refresh the fail-closed
-  credential diagnostic before release signing, or `scripts/signing_doctor.py --print-repair-runbook`
-  for local-only recovery commands. The release-readiness JSON/Markdown now includes an end-to-end
-  public-beta matrix that maps requirements to evidence. Teacher-local validation still requires
-  authorized instructor data, and clean-machine behavioral checks still need release validation.
+  Updater/DMG/app evidence now fails closed when artifacts predate the current git commit. The current
+  local app/DMG build is fresh but unsigned; updater evidence blocks on missing manifest signatures
+  plus app codesign/spctl failures. The last local signed-app Computer Use sweep used an older signed
+  DMG and failed because review approval still showed both an approved state and "Teacher changes not
+  saved yet"; `scripts/computer_use_sweep_evidence.py` now fails that capture set and clean-machine
+  evidence requires a PASS sweep JSON. Fresh local signing/notarization is currently blocked:
+  `codesign` returns `errSecInternalComponent` and notarytool profile `grader` is unavailable; run
+  `scripts/signing_doctor.py` to refresh the fail-closed credential diagnostic before release signing,
+  or `scripts/signing_doctor.py --print-repair-runbook` for local-only recovery commands. The
+  release-readiness JSON/Markdown now includes an end-to-end public-beta matrix that maps requirements
+  to evidence. Teacher-local validation still requires authorized instructor data, and clean-machine
+  behavioral checks still need release validation.
 - **Coverage:** Python collects 142 cases (130 pass, 12 skip). Frontend has 13 passing component
   tests plus four passing Playwright E2E tests.
 - **Public beta verdict:** not ready for unattended public testing with real student work. Limit

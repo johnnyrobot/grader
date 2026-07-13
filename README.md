@@ -48,7 +48,7 @@ clean-machine behavioral validation.
 | Document parsing + handwriting | 🟡 Built — Docling + Apple Vision + grader-vision |
 | Citation verification | 🟡 20/29 correct (69%); retraction check 3/3; accepted only as visibly experimental until accuracy reaches the enabled-mode gate |
 | CI gates | 🟢 Privacy PASS; perf PASS; public-proxy quality/fairness PASS; teacher-local still unvalidated |
-| Updater evidence | 🟢 Signed `latest.json` references the DMG artifact; evidence now validates the DMG plus bundled app signature checks |
+| Updater evidence | 🔴 Current-source local artifact exists, but updater evidence blocks because the manifest is unsigned and the app is not Developer ID signed |
 | Signing + notarization | 🔴 Fresh local signing/notarization is blocked: `codesign` returns `errSecInternalComponent` and notarytool profile `grader` is unavailable |
 | Updates | 🟡 Tauri updater integrated, manifest generator built |
 | Beta rollout | ⬜ Blocked until release-readiness report returns `supervised_public_beta` |
@@ -84,11 +84,11 @@ Confirmed in the current checkout:
   Progress completed → score `2` and one teacher feedback comment read back.
 - `scripts/release_readiness.py` writes a consolidated JSON/Markdown verdict with blocker
   summaries plus an end-to-end testing and evaluation matrix that maps public-beta requirements to
-  evidence. With current local artifacts, the report is `blocked`: the signed updater/DMG/app
-  evidence now fails closed because those artifacts predate the current source commit, local signing
-  credentials are still unavailable, and clean-machine behavior evidence is still missing for
-  first-run models, crash recovery, keyboard-only review, Computer Use instructor sweep, and updater
-  path.
+  evidence. With current local artifacts, the report is `blocked`: the current-source local app/DMG
+  build is fresh, but updater evidence blocks because the manifest is unsigned and the app is not
+  Developer ID signed; local signing credentials are still unavailable; and clean-machine behavior
+  evidence is still missing for first-run models, crash recovery, keyboard-only review, Computer Use
+  instructor sweep, and updater path.
 
 Public-beta blockers:
 
@@ -99,8 +99,8 @@ Public-beta blockers:
 3. Restore local release signing/notarization credentials, rebuild/re-sign/notarize from the current
    source commit, then validate the signed/notarized DMG on a clean supported Mac, including first-run
    model setup, crash recovery, keyboard-only review, Computer Use instructor sweep, and updater
-   behavior. The latest local signed-app Computer Use sweep found the existing DMG stale: after review
-   approval it still displayed both the approved message and "Teacher changes not saved yet"; the
+   behavior. The last signed-app Computer Use sweep was against an older signed DMG and fails: after
+   review approval it displayed both the approved message and "Teacher changes not saved yet"; the
    sweep verifier now fails that capture set.
 4. Keep teacher-local validation separate until an instructor supplies authorized historical grading.
 5. Complete a supervised private pilot before opening enrollment publicly.
