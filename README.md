@@ -77,8 +77,8 @@ Confirmed in the current checkout:
   artifact: 40/40 scored rows, QWK 0.845 against a 0.623 human-ceiling-adjusted floor, both source
   checks passing, all five perturbation families passing, and 0 grading errors.
 - Guarded live Canvas app E2E passes on `canvas.johnnyrobot.ai` course `106`, assignment `2841`:
-  import → targeted grade → teacher override/approval → Canvas post → Progress completed →
-  score/comment read-back.
+  import → targeted grade for Canvas user `9` → teacher override/approval → Canvas post →
+  Progress completed → score `2` and one teacher feedback comment read back.
 - `scripts/release_readiness.py` writes a consolidated JSON/Markdown verdict with blocker
   summaries plus an end-to-end testing and evaluation matrix that maps public-beta requirements to
   evidence. With current local artifacts, the report is `blocked` on updater evidence, signing

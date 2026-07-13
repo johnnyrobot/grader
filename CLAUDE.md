@@ -98,8 +98,8 @@ work.
 - Citations: PASS_EXPERIMENTAL for beta mode, 20/29 correct (69%), 0 false positives, and 3/3
   retractions caught; enabled mode still requires >=90% accuracy.
 - Canvas: guarded live app-level E2E passes on `canvas.johnnyrobot.ai` course `106`, assignment
-  `2841`: import, targeted grade, teacher override/approval, post, Progress completed, score/comment
-  read-back.
+  `2841`: import, targeted grade for Canvas user `9`, teacher override/approval, post, Progress
+  completed, score `2`, and one teacher feedback comment read back.
 - Release readiness: local report currently returns `blocked` for updater evidence, signing
   credentials, and clean-machine evidence. Updater evidence is blocked until signed `latest.json`
   references the signed release artifact. Fresh local signing/notarization is blocked because

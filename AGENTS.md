@@ -217,7 +217,8 @@ uv run python scripts/release_readiness.py --profile public_beta --expected-vers
   validate a clean-machine `.app`, crash recovery, real first-run model setup, and packaging.
 - **P3 in progress:** Canvas client/API/offline queue exist and the guarded live app-level path
   passed for score/comment: import → targeted grade → teacher override/approval → post → Progress
-  completed → read-back on `canvas.johnnyrobot.ai` course `106`, assignment `2841`, Canvas user `8`.
+  completed → read-back on `canvas.johnnyrobot.ai` course `106`, assignment `2841`, Canvas user `9`,
+  score `2`, and one teacher feedback comment.
   Canvas rubric-assessment posting remains disabled until local rubric criteria can be mapped to real
   Canvas criterion IDs; attachment write-back still needs separate evidence.
 - **P4 in progress:** parse/transcribe/write-back/citation modules exist. The 2026-07-12 citation
