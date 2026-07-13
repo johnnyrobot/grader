@@ -88,11 +88,12 @@ Confirmed in the current checkout:
 - `scripts/release_readiness.py` writes a consolidated JSON/Markdown verdict with blocker
   summaries plus an end-to-end testing and evaluation matrix that maps public-beta requirements to
   evidence. With current local artifacts, the report is `blocked`: the latest local app/DMG signs,
-  notarizes, staples, and passes macOS signature checks; signed updater manifest/release provenance
-  passes; and local signed-app evidence covers fresh-profile first-run model reconciliation, crash
-  recovery, keyboard-only review, and the Computer Use instructor sweep. The remaining release
-  blockers are the missing GitHub Actions release secrets, the missing live GitHub updater channel
-  (`latest.json` currently 404s), and the clean-machine in-app updater N→N+1 path.
+  notarizes, staples, and passes macOS signature checks, and local signed-app evidence covers
+  fresh-profile first-run model reconciliation, crash recovery, keyboard-only review, and the
+  Computer Use instructor sweep. The remaining release blockers are the missing GitHub Actions
+  release secrets, stale/missing signed updater evidence (`latest.json` is still 0.1.0), the missing
+  live GitHub updater channel (`latest.json` currently 404s), and the clean-machine in-app updater
+  N→N+1 path.
 
 Public-beta blockers:
 

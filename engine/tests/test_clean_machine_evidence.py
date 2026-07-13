@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -246,6 +247,69 @@ def test_validate_manual_evidence_accepts_passing_computer_use_sweep_json(tmp_pa
     assert "computer_use_instructor_sweep" in passed
     assert details["computer_use_instructor_sweep"]["ok"] is True
     assert details["computer_use_instructor_sweep"]["computer_use_sweep_status"] == "PASS"
+
+
+def test_validate_manual_evidence_requires_version_bound_computer_use_sweep_when_expected_version(tmp_path):
+    sweep = tmp_path / "computer_use_instructor_sweep.json"
+    sweep.write_text('{"status":"PASS"}')
+    screenshot = tmp_path / "computer_use_instructor_sweep.png"
+    screenshot.write_text("fake image bytes")
+    evidence = {
+        "computer_use_instructor_sweep": {
+            "passed": True,
+            "performed_at": "2026-07-13T12:00:00Z",
+            "tester": "QA",
+            "notes": "Computer Use sweep completed.",
+            "assertions": _passing_assertions("computer_use_instructor_sweep"),
+            "evidence_files": ["computer_use_instructor_sweep.json", "computer_use_instructor_sweep.png"],
+        }
+    }
+
+    passed, details = validate_manual_evidence(
+        evidence,
+        evidence_root=tmp_path,
+        expected_version="0.1.1",
+    )
+
+    assert "computer_use_instructor_sweep" not in passed
+    assert details["computer_use_instructor_sweep"]["ok"] is False
+    assert "missing details.app metadata" in details["computer_use_instructor_sweep"]["reason"]
+
+
+def test_validate_manual_evidence_accepts_version_bound_computer_use_sweep(tmp_path):
+    sweep = tmp_path / "computer_use_instructor_sweep.json"
+    sweep.write_text(json.dumps({
+        "status": "PASS",
+        "details": {
+            "app": {
+                "short_version": "0.1.1",
+                "bundle_version": "0.1.1",
+            },
+        },
+    }))
+    screenshot = tmp_path / "computer_use_instructor_sweep.png"
+    screenshot.write_text("fake image bytes")
+    evidence = {
+        "computer_use_instructor_sweep": {
+            "passed": True,
+            "performed_at": "2026-07-13T12:00:00Z",
+            "tester": "QA",
+            "notes": "Computer Use sweep completed.",
+            "assertions": _passing_assertions("computer_use_instructor_sweep"),
+            "evidence_files": ["computer_use_instructor_sweep.json", "computer_use_instructor_sweep.png"],
+        }
+    }
+
+    passed, details = validate_manual_evidence(
+        evidence,
+        evidence_root=tmp_path,
+        expected_version="0.1.1",
+    )
+
+    assert "computer_use_instructor_sweep" in passed
+    assert details["computer_use_instructor_sweep"]["ok"] is True
+    assert details["computer_use_instructor_sweep"]["computer_use_sweep_short_version"] == "0.1.1"
+    assert details["computer_use_instructor_sweep"]["computer_use_sweep_bundle_version"] == "0.1.1"
 
 
 def test_validate_manual_evidence_requires_check_specific_assertions(tmp_path):

@@ -122,7 +122,7 @@ CHECK_DEFINITIONS: dict[str, dict[str, object]] = {
             "Use Computer Use to capture the app accessibility tree and screenshot before each navigation decision.",
             "Inspect onboarding, queue, review, settings, model manager, recovery alert, and responsive/zoomed states.",
             "Exercise or inspect every visible option, button, field, tab, radio, checkbox, and keyboard shortcut path that is safe to use locally.",
-            "Run scripts/computer_use_sweep_evidence.py against the capture directory and include the PASS JSON output in this manual evidence.",
+            "Run scripts/computer_use_sweep_evidence.py against the capture directory with --app and --expected-version, then include the PASS JSON output in this manual evidence.",
             "Record any blocked action, visual ambiguity, inaccessible label, focus trap, stale state, or mismatch with the Playwright visual-sweep inventory.",
         ],
         "expected_result": "The signed app's visible controls match the release matrix, are understandable to an instructor, and no additional UI blocker is found by Computer Use inspection.",
@@ -445,6 +445,7 @@ def validate_manual_evidence(
     *,
     evidence_root: Path | None = None,
     require_files: bool = True,
+    expected_version: str | None = None,
 ) -> tuple[list[str], dict[str, object]]:
     """Return manual checks with auditable evidence.
 
@@ -506,6 +507,9 @@ def validate_manual_evidence(
 
         computer_use_status = ""
         computer_use_status_files: list[str] = []
+        computer_use_version = ""
+        computer_use_bundle_version = ""
+        computer_use_reason = ""
         computer_use_status_ok = True
         if name == "computer_use_instructor_sweep":
             computer_use_status_ok = False
@@ -521,6 +525,26 @@ def validate_manual_evidence(
                 computer_use_status_files.append(str(candidate))
                 if status == "PASS":
                     computer_use_status = status
+                    if expected_version:
+                        app_details = payload.get("details", {}).get("app", {})
+                        if not isinstance(app_details, Mapping) or not app_details:
+                            computer_use_reason = (
+                                "PASS Computer Use sweep JSON is missing details.app metadata"
+                            )
+                            continue
+                        computer_use_version = str(app_details.get("short_version") or "")
+                        computer_use_bundle_version = str(app_details.get("bundle_version") or "")
+                        if (
+                            computer_use_version == expected_version
+                            and computer_use_bundle_version == expected_version
+                        ):
+                            computer_use_status_ok = True
+                            break
+                        computer_use_reason = (
+                            "PASS Computer Use sweep JSON does not match expected version "
+                            f"{expected_version!r}"
+                        )
+                        continue
                     computer_use_status_ok = True
                     break
                 if status and not computer_use_status:
@@ -550,8 +574,14 @@ def validate_manual_evidence(
         if name == "computer_use_instructor_sweep":
             details[name]["computer_use_sweep_status"] = computer_use_status
             details[name]["computer_use_sweep_status_files"] = computer_use_status_files
+            if expected_version:
+                details[name]["expected_version"] = expected_version
+                details[name]["computer_use_sweep_short_version"] = computer_use_version
+                details[name]["computer_use_sweep_bundle_version"] = computer_use_bundle_version
             if not computer_use_status_ok:
-                details[name]["reason"] = "computer_use_instructor_sweep requires a PASS JSON artifact from scripts/computer_use_sweep_evidence.py"
+                details[name]["reason"] = computer_use_reason or (
+                    "computer_use_instructor_sweep requires a PASS JSON artifact from scripts/computer_use_sweep_evidence.py"
+                )
         if ok:
             passed.append(name)
 
@@ -775,6 +805,7 @@ def main() -> None:
     evidence_passes, evidence_details = validate_manual_evidence(
         manual_evidence,
         evidence_root=evidence_root,
+        expected_version=args.expected_version,
     )
     manual = [
         name
