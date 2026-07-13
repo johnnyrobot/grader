@@ -139,9 +139,9 @@ CHECK_DEFINITIONS: dict[str, dict[str, object]] = {
         ],
         "steps": [
             "Install the signed N release on the clean Mac.",
-            "Host or publish a signed N+1 release artifact plus latest.json.",
-            "Launch N and trigger the update check.",
-            "Download/install the update through the app.",
+            "Publish a signed N+1 release artifact plus latest.json to the configured updater endpoint, currently https://github.com/johnnyrobot/grader/releases/latest/download/latest.json.",
+            "Launch N and trigger the update check from the queue.",
+            "Use the in-app Install update and restart action; do not replace the app manually.",
             "Relaunch and confirm the app version is N+1.",
         ],
         "expected_result": "The app updates through the Tauri updater path without Gatekeeper warnings or manual file replacement.",

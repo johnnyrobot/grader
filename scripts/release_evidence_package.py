@@ -119,15 +119,19 @@ Current readiness verdict: `{summary.get('readiness_verdict', 'unknown')}`
 
 ## Tester workflow
 
-1. Install the signed/notarized DMG from `release-artifacts/` on a clean supported Mac.
-2. If this package contains an unsigned `latest.json`, regenerate it from the release DMG with
-   `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` set and rerun `scripts/updater_evidence.py`.
-3. Fill `clean-machine-manual-evidence.json` while following `clean-machine-runbook.md`.
-4. Run `scripts/computer_use_sweep_evidence.py` against the signed-app Computer Use capture folder and
+1. Install the signed/notarized N release DMG from `release-artifacts/` on a clean supported Mac.
+2. Publish a signed N+1 DMG and signed `latest.json` to the configured GitHub release channel:
+   `https://github.com/johnnyrobot/grader/releases/latest/download/latest.json`.
+   The private release operator should set `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` only in the release
+   shell or CI secret store when generating the signed N+1 manifest.
+3. Launch N, wait for the update banner, use the in-app `Install update and restart` action, and
+   confirm the relaunched app is N+1. Do not manually replace the app for this check.
+4. Fill `clean-machine-manual-evidence.json` while following `clean-machine-runbook.md`.
+5. Run `scripts/computer_use_sweep_evidence.py` against the signed-app Computer Use capture folder and
    place the PASS JSON in the evidence root as `computer_use_instructor_sweep.json`.
-5. Run `scripts/clean_machine_evidence.py` with the filled manual evidence, release DMG, signed
+6. Run `scripts/clean_machine_evidence.py` with the filled manual evidence, release DMG, signed
    updater manifest, and expected app version.
-6. Rerun `scripts/release_readiness.py` and require verdict `supervised_public_beta` before public
+7. Rerun `scripts/release_readiness.py` and require verdict `supervised_public_beta` before public
    beta claims.
 
 Do not add student work, Canvas tokens, Apple credentials, updater private keys, or private-key
@@ -202,7 +206,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Build a clean-machine release evidence handoff package")
     parser.add_argument("--out-dir", type=Path, default=DEFAULT_OUT)
     parser.add_argument("--dmg", type=Path, default=Path("app/src-tauri/target/release/bundle/dmg/Grader.dmg"))
-    parser.add_argument("--updater-manifest", type=Path, default=Path("artifacts/release-evidence/local-signed-updater/latest.json"))
+    parser.add_argument("--updater-manifest", type=Path, default=Path("latest.json"))
     parser.add_argument("--updater-evidence", type=Path, default=Path("artifacts/release-evidence/updater.json"))
     parser.add_argument("--clean-machine-evidence", type=Path, default=Path("artifacts/release-evidence/clean-machine-local-current.json"))
     parser.add_argument("--readiness-report", type=Path, default=Path("artifacts/release-readiness/release-readiness.json"))
