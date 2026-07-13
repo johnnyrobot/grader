@@ -49,7 +49,13 @@ def test_collect_checks_runs_app_and_dmg_commands(tmp_path):
         dmg_path=dmg,
         updater_manifest=manifest,
         expected_version="0.1.0",
-        manual_passes=["first_run_models", "crash_recovery", "keyboard_only_review", "updater_path"],
+        manual_passes=[
+            "first_run_models",
+            "crash_recovery",
+            "keyboard_only_review",
+            "computer_use_instructor_sweep",
+            "updater_path",
+        ],
         runner=_runner,
     )
 

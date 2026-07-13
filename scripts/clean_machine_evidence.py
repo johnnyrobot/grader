@@ -8,6 +8,7 @@ manual checks that must be performed on a clean supported Mac:
   - first-run model setup
   - engine crash recovery
   - keyboard-only review flow
+  - Computer Use instructor sweep
   - updater path from N to N+1
 
 The resulting JSON is accepted by ``scripts/release_readiness.py`` only when
@@ -34,6 +35,7 @@ REQUIRED_CHECKS = (
     "first_run_models",
     "crash_recovery",
     "keyboard_only_review",
+    "computer_use_instructor_sweep",
     "updater_path",
 )
 
@@ -41,6 +43,7 @@ MANUAL_CHECKS = (
     "first_run_models",
     "crash_recovery",
     "keyboard_only_review",
+    "computer_use_instructor_sweep",
     "updater_path",
 )
 
@@ -83,6 +86,19 @@ CHECK_DEFINITIONS: dict[str, dict[str, object]] = {
         ],
         "expected_result": "Focus indicators are visible, tab order is logical, no trap occurs, and approval/edit actions are reachable by keyboard.",
         "suggested_files": ["keyboard_only_review.png", "keyboard_only_review.log"],
+    },
+    "computer_use_instructor_sweep": {
+        "title": "Computer Use instructor sweep",
+        "objective": "Use Computer Use against the signed app to inspect the visible instructor UI as an actual teacher, not only through headless Playwright.",
+        "steps": [
+            "Launch the signed app from Finder or the installed Applications location.",
+            "Use Computer Use to capture the app accessibility tree and screenshot before each navigation decision.",
+            "Inspect onboarding, queue, review, settings, model manager, recovery alert, and responsive/zoomed states.",
+            "Exercise or inspect every visible option, button, field, tab, radio, checkbox, and keyboard shortcut path that is safe to use locally.",
+            "Record any blocked action, visual ambiguity, inaccessible label, focus trap, stale state, or mismatch with the Playwright visual-sweep inventory.",
+        ],
+        "expected_result": "The signed app's visible controls match the release matrix, are understandable to an instructor, and no additional UI blocker is found by Computer Use inspection.",
+        "suggested_files": ["computer_use_instructor_sweep.png", "computer_use_instructor_sweep.log"],
     },
     "updater_path": {
         "title": "Updater N-to-N+1 path",
@@ -469,6 +485,7 @@ def main() -> None:
     parser.add_argument("--first-run-models", action="store_true")
     parser.add_argument("--crash-recovery", action="store_true")
     parser.add_argument("--keyboard-only-review", action="store_true")
+    parser.add_argument("--computer-use-instructor-sweep", action="store_true")
     parser.add_argument("--updater-path", action="store_true")
     args = parser.parse_args()
 
@@ -493,6 +510,7 @@ def main() -> None:
             ("first_run_models", args.first_run_models),
             ("crash_recovery", args.crash_recovery),
             ("keyboard_only_review", args.keyboard_only_review),
+            ("computer_use_instructor_sweep", args.computer_use_instructor_sweep),
             ("updater_path", args.updater_path),
         )
         if enabled

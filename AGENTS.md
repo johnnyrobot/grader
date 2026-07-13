@@ -240,6 +240,7 @@ uv run python scripts/release_readiness.py --profile public_beta --expected-vers
   current use to a developer-assisted alpha with synthetic or institution-approved test data.
 - **Highest-value next action:** restore signing/notarization credentials, generate signed updater
   evidence, then collect clean-machine release provenance, first-run model setup, crash recovery,
-  keyboard-only review, and updater-path evidence before broadening beta claims.
+  keyboard-only review, Computer Use instructor sweep, and updater-path evidence before broadening
+  beta claims.
 - The existing modification under `.omo/run-continuation/` is unrelated operational state; do not
   overwrite or commit it unless explicitly requested.

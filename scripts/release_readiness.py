@@ -49,6 +49,7 @@ CLEAN_MACHINE_REQUIRED_CHECKS = (
     "first_run_models",
     "crash_recovery",
     "keyboard_only_review",
+    "computer_use_instructor_sweep",
     "updater_path",
 )
 
@@ -56,6 +57,7 @@ CLEAN_MACHINE_MANUAL_CHECKS = (
     "first_run_models",
     "crash_recovery",
     "keyboard_only_review",
+    "computer_use_instructor_sweep",
     "updater_path",
 )
 
@@ -329,6 +331,15 @@ def build_e2e_matrix(evidence: dict[str, Any]) -> list[dict[str, str | bool]]:
             summary=clean_summary,
         ),
         _matrix_row(
+            id="computer-use-instructor-sweep",
+            area="clean machine",
+            requirement="Computer Use inspection confirms the signed app's visible instructor controls/options match the release matrix.",
+            gate="clean_machine",
+            status=_clean_check_status(evidence, "computer_use_instructor_sweep"),
+            evidence="scripts/clean_machine_evidence.py manual evidence",
+            summary=clean_summary,
+        ),
+        _matrix_row(
             id="clean-machine-updater-path",
             area="clean machine",
             requirement="N to N+1 updater path completes without manual replacement.",
@@ -483,10 +494,12 @@ def _normalize_updater_artifact(path: Path | None, expected_version: str) -> dic
 
 def _normalize_clean_machine_artifact(path: Path | None, expected_version: str | None = None) -> dict[str, Any]:
     clean = _normalize_artifact(path, "BLOCKED_CLEAN_MACHINE_EVIDENCE")
-    if clean.get("status") != "PASS":
-        return clean
     checks = clean.get("checks", {})
     missing = [name for name in CLEAN_MACHINE_REQUIRED_CHECKS if checks.get(name) is not True]
+    if clean.get("status") != "PASS":
+        if isinstance(checks, dict) and missing:
+            clean["missing_checks"] = missing
+        return clean
     details = clean.get("details", {})
     manual_details = details.get("manual_evidence", {}) if isinstance(details, dict) else {}
     weak_manual = [

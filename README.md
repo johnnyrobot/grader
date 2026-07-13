@@ -83,7 +83,8 @@ Confirmed in the current checkout:
   summaries plus an end-to-end testing and evaluation matrix that maps public-beta requirements to
   evidence. With current local artifacts, the report is `blocked` on updater evidence, signing
   credentials, and clean-machine evidence: missing signed `latest.json`, codesign/spctl, release
-  provenance, first-run models, crash recovery, keyboard-only review, and updater path.
+  provenance, first-run models, crash recovery, keyboard-only review, Computer Use instructor
+  sweep, and updater path.
 
 Public-beta blockers:
 
@@ -94,7 +95,7 @@ Public-beta blockers:
 3. Generate and validate a signed updater manifest for the signed release artifact.
 4. Restore local release signing/notarization credentials, then validate the signed/notarized DMG
    on a clean supported Mac, including first-run model setup, crash recovery, keyboard-only review,
-   and updater behavior.
+   Computer Use instructor sweep, and updater behavior.
 5. Keep teacher-local validation separate until an instructor supplies authorized historical grading.
 6. Complete a supervised private pilot before opening enrollment publicly.
 

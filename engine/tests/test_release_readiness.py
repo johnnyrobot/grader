@@ -99,7 +99,7 @@ def test_build_e2e_matrix_maps_public_beta_requirements_to_evidence():
 
     assert summary["total"] == len(matrix)
     assert summary["blocking"] == 0
-    assert summary["PASS"] == 14
+    assert summary["PASS"] == 15
     assert summary["PASS_EXPERIMENTAL"] == 1
     by_id = {row["id"]: row for row in matrix}
     assert by_id["ui-onboarding-queue-review-settings-models"]["status"] == "PASS"
@@ -131,8 +131,13 @@ def test_build_e2e_matrix_exposes_clean_machine_subcheck_blockers():
                 "stapler_validate": True,
                 "first_run_models": False,
                 "keyboard_only_review": False,
+                "computer_use_instructor_sweep": False,
             },
-            "missing_checks": ["first_run_models", "keyboard_only_review"],
+            "missing_checks": [
+                "first_run_models",
+                "keyboard_only_review",
+                "computer_use_instructor_sweep",
+            ],
         },
     }
 
@@ -140,6 +145,7 @@ def test_build_e2e_matrix_exposes_clean_machine_subcheck_blockers():
 
     assert by_id["first-run-models"]["status"] == "BLOCKED_CLEAN_MACHINE_EVIDENCE"
     assert by_id["keyboard-only-review"]["status"] == "BLOCKED_CLEAN_MACHINE_EVIDENCE"
+    assert by_id["computer-use-instructor-sweep"]["status"] == "BLOCKED_CLEAN_MACHINE_EVIDENCE"
     assert by_id["signed-updater-manifest"]["blocking"] is True
     assert "missing checks" in by_id["clean-machine-install"]["summary"]
 
@@ -314,6 +320,7 @@ def test_normalize_clean_machine_artifact_accepts_complete_pass(tmp_path):
                 "first_run_models": {"ok": True},
                 "crash_recovery": {"ok": True},
                 "keyboard_only_review": {"ok": True},
+                "computer_use_instructor_sweep": {"ok": True},
                 "updater_path": {"ok": True},
             }
         },
@@ -339,6 +346,7 @@ def test_normalize_clean_machine_artifact_rejects_wrong_release_version(tmp_path
                 "first_run_models": {"ok": True},
                 "crash_recovery": {"ok": True},
                 "keyboard_only_review": {"ok": True},
+                "computer_use_instructor_sweep": {"ok": True},
                 "updater_path": {"ok": True},
             },
         },
