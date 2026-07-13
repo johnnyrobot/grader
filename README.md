@@ -64,7 +64,7 @@ beta with real student work.
 
 Confirmed in the current checkout:
 
-- Python tests: 90 passed, 12 intentionally skipped.
+- Python tests: 97 passed, 12 intentionally skipped.
 - Frontend tests: 12 passed; TypeScript/Vite production build and Rust `cargo check` pass.
 - The complete mocked desktop workflow passes in Playwright across onboarding, queue, review,
   settings, model management, and local-engine recovery. The visual sweep records 16 screens, 167
@@ -136,17 +136,17 @@ cd app/src-tauri && cargo check                      # desktop Rust boundary
 ## Public beta gate commands
 
 ```bash
-uv run python scripts/build_public_proxy.py mohler-asag --out artifacts/public_proxy/mohler_asag --grade --anchor-exemplars-per-source 40 --anchor-k 6
-uv run python scripts/build_public_proxy.py mohler-asag --out artifacts/public_proxy/mohler_asag --grade --grade-perturbations --anchor-exemplars-per-source 40 --anchor-k 6
-uv run python engine/gates/quality.py --profile public_proxy --public-proxy-dir artifacts/public_proxy/mohler_asag
-uv run python engine/gates/bias.py --profile public_proxy --public-proxy-dir artifacts/public_proxy/mohler_asag
+uv run python scripts/build_public_proxy.py mohler-asag --out artifacts/public_proxy/mohler_asag_diverse_anchored_pilot --grade --grade-perturbations --anchor-exemplars-per-source 40 --anchor-k 6
+uv run python engine/gates/quality.py --profile public_proxy --public-proxy-dir artifacts/public_proxy/mohler_asag_diverse_anchored_pilot
+uv run python engine/gates/bias.py --profile public_proxy --public-proxy-dir artifacts/public_proxy/mohler_asag_diverse_anchored_pilot
 uv run python engine/verify_citations.py --fixtures fixtures/citations/citation_fixtures.json --output artifacts/citation-results.json
 uv run python scripts/frontend_evidence.py --out artifacts/release-evidence/frontend.json
+uv run python scripts/signing_doctor.py --out artifacts/release-evidence/signing.json --no-fail
 uv run python scripts/updater_evidence.py --manifest latest.json --artifact /path/to/Grader.dmg --out artifacts/release-evidence/updater.json
 uv run python scripts/live_canvas_e2e.py --dry-run
 uv run python scripts/clean_machine_evidence.py --print-manual-template > clean-machine-manual-evidence.json
 uv run python scripts/clean_machine_evidence.py --app /Applications/Grader.app --dmg /path/to/Grader.dmg --manual-evidence clean-machine-manual-evidence.json --evidence-root /path/to/screenshots-and-logs
-uv run python scripts/release_readiness.py --profile public_beta --public-proxy-dir artifacts/public_proxy/mohler_asag --citation-artifact artifacts/citation-results.json --frontend-artifact artifacts/release-evidence/frontend.json --updater-artifact artifacts/release-evidence/updater.json --clean-machine-artifact artifacts/release-evidence/clean-machine-local-current.json --out artifacts/release-readiness
+uv run python scripts/release_readiness.py --profile public_beta --public-proxy-dir artifacts/public_proxy/mohler_asag_diverse_anchored_pilot --citation-artifact artifacts/citation-results.json --canvas-artifact artifacts/release-evidence/canvas-live.json --privacy-artifact artifacts/release-evidence/privacy.json --performance-artifact artifacts/release-evidence/performance.json --frontend-artifact artifacts/release-evidence/frontend.json --rust-artifact artifacts/release-evidence/rust.json --updater-artifact artifacts/release-evidence/updater.json --clean-machine-artifact artifacts/release-evidence/clean-machine-local-current.json --out artifacts/release-readiness
 ```
 
 The committed `fixtures/public_proxy/` set is a tiny mechanics fixture. Real public-proxy datasets
@@ -171,8 +171,10 @@ The calibration run uses [Mohler ASAG](https://huggingface.co/datasets/nkazi/Moh
 report agreement against the *human ceiling* rather than against an arbitrary target. The current
 anchored 40-item Mohler public-proxy scoring run produced 40 scored rows and passes the quality
 gate at QWK 0.845 against a 0.623 adjusted floor, and the matching fairness perturbation run
-passes. The app is still not public-beta ready until updater, signing/notarization credentials, and
-clean-machine release evidence pass.
+passes. Use `scripts/signing_doctor.py` before `scripts/sign_and_notarize.sh` to verify the
+Developer ID private key and notarytool profile before mutating a release bundle. The app is still
+not public-beta ready until updater, signing/notarization credentials, and clean-machine release
+evidence pass.
 
 ## Docs
 

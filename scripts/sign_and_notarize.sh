@@ -10,6 +10,7 @@
 #   ./scripts/sign_and_notarize.sh
 #   ./scripts/sign_and_notarize.sh --skip-notarize  # sign only (testing)
 #   ./scripts/sign_and_notarize.sh --dmg            # also create + notarize DMG
+#   ./scripts/sign_and_notarize.sh --skip-preflight # emergency only; bypass local credential probe
 #
 # Environment:
 #   KEYCHAIN_PROFILE  - notarytool keychain profile name (default: grader)
@@ -25,10 +26,12 @@ SIGNING_IDENTITY="${SIGNING_IDENTITY:-}"
 
 DO_NOTARIZE=true
 DO_DMG=false
+DO_PREFLIGHT=true
 
 while [[ $# -gt 0 ]]; do
     case $1 in
         --skip-notarize) DO_NOTARIZE=false; shift ;;
+        --skip-preflight) DO_PREFLIGHT=false; shift ;;
         --dmg) DO_DMG=true; shift ;;
         --app-path) APP_PATH="$2"; shift 2 ;;
         *) echo "Unknown option: $1"; exit 1 ;;
@@ -54,6 +57,20 @@ fi
 echo "=== Signing ==="
 echo "  App: $APP_PATH"
 echo "  Identity: $SIGNING_IDENTITY"
+
+if [[ "$DO_PREFLIGHT" == "true" ]]; then
+    echo "=== Signing preflight ==="
+    PREFLIGHT_ARGS=(
+        --config "$PROJECT_ROOT/app/src-tauri/tauri.conf.json"
+        --keychain-profile "$KEYCHAIN_PROFILE"
+        --signing-identity "$SIGNING_IDENTITY"
+        --out "$PROJECT_ROOT/artifacts/release-evidence/signing-preflight.json"
+    )
+    if [[ "$DO_NOTARIZE" != "true" ]]; then
+        PREFLIGHT_ARGS+=(--skip-notary)
+    fi
+    uv run python "$PROJECT_ROOT/scripts/signing_doctor.py" "${PREFLIGHT_ARGS[@]}"
+fi
 
 # Sign the Python sidecar first (innermost)
 SIDECAR="$APP_PATH/Contents/Resources/engine"

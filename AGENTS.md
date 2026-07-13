@@ -36,6 +36,7 @@ grader/
 │   ├── collect_golden.py        # Canvas/local golden-set collector and validator
 │   ├── start_engine.sh          # desktop engine launcher
 │   ├── sign_and_notarize.sh     # macOS release signing pipeline
+│   ├── signing_doctor.py        # signing/notary credential preflight + evidence
 │   ├── frontend_evidence.py     # frontend component/build/E2E/visual-sweep artifact
 │   ├── updater_evidence.py      # updater manifest/signature/artifact evidence
 │   └── generate_appcast.py      # Tauri updater manifest generator
@@ -184,15 +185,15 @@ python scripts/seed_canvas_sandbox.py --teardown --course-id 106 --apply
 python fixtures/citations/generate_fixtures.py
 
 # Public beta readiness gates
-uv run python scripts/build_public_proxy.py mohler-asag --out artifacts/public_proxy/mohler_asag --grade --anchor-exemplars-per-source 40 --anchor-k 6
-uv run python scripts/build_public_proxy.py mohler-asag --out artifacts/public_proxy/mohler_asag --grade --grade-perturbations --anchor-exemplars-per-source 40 --anchor-k 6
-uv run python engine/gates/quality.py --profile public_proxy --public-proxy-dir artifacts/public_proxy/mohler_asag
-uv run python engine/gates/bias.py --profile public_proxy --public-proxy-dir artifacts/public_proxy/mohler_asag
+uv run python scripts/build_public_proxy.py mohler-asag --out artifacts/public_proxy/mohler_asag_diverse_anchored_pilot --grade --grade-perturbations --anchor-exemplars-per-source 40 --anchor-k 6
+uv run python engine/gates/quality.py --profile public_proxy --public-proxy-dir artifacts/public_proxy/mohler_asag_diverse_anchored_pilot
+uv run python engine/gates/bias.py --profile public_proxy --public-proxy-dir artifacts/public_proxy/mohler_asag_diverse_anchored_pilot
 uv run python engine/gates/quality.py --profile public_proxy --public-proxy-dir fixtures/public_proxy --allow-mechanics-fixture  # smoke only
 uv run python engine/gates/bias.py --profile public_proxy --public-proxy-dir fixtures/public_proxy --allow-mechanics-fixture     # smoke only
 uv run python engine/verify_citations.py --fixtures fixtures/citations/citation_fixtures.json --output artifacts/citation-results.json
+uv run python scripts/signing_doctor.py --out artifacts/release-evidence/signing.json --no-fail
 uv run python scripts/live_canvas_e2e.py --dry-run
-uv run python scripts/release_readiness.py --profile public_beta --out artifacts/release-readiness
+uv run python scripts/release_readiness.py --profile public_beta --public-proxy-dir artifacts/public_proxy/mohler_asag_diverse_anchored_pilot --citation-artifact artifacts/citation-results.json --canvas-artifact artifacts/release-evidence/canvas-live.json --privacy-artifact artifacts/release-evidence/privacy.json --performance-artifact artifacts/release-evidence/performance.json --frontend-artifact artifacts/release-evidence/frontend.json --rust-artifact artifacts/release-evidence/rust.json --updater-artifact artifacts/release-evidence/updater.json --clean-machine-artifact artifacts/release-evidence/clean-machine-local-current.json --out artifacts/release-readiness
 ```
 
 ## CURRENT STATUS / NEXT WORK
@@ -221,10 +222,11 @@ uv run python scripts/release_readiness.py --profile public_beta --out artifacts
   artifact passes quality at QWK 0.845 and passes fairness across all five perturbation families.
   Updater evidence is currently blocked until signed `latest.json` references the signed release
   artifact. Fresh local signing/notarization is currently blocked: `codesign` returns
-  `errSecInternalComponent` and notarytool profile `grader` is unavailable. Teacher-local validation
-  still requires authorized instructor data, and clean-machine behavioral checks still need release
-  validation.
-- **Coverage:** Python collects 102 cases (90 pass, 12 skip). Frontend has 12 passing component
+  `errSecInternalComponent` and notarytool profile `grader` is unavailable; run
+  `scripts/signing_doctor.py` to refresh the fail-closed credential diagnostic before release
+  signing. Teacher-local validation still requires authorized instructor data, and clean-machine
+  behavioral checks still need release validation.
+- **Coverage:** Python collects 109 cases (97 pass, 12 skip). Frontend has 12 passing component
   tests plus four passing Playwright E2E tests.
 - **Public beta verdict:** not ready for unattended public testing with real student work. Limit
   current use to a developer-assisted alpha with synthetic or institution-approved test data.
