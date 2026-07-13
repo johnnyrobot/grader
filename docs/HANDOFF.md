@@ -39,7 +39,7 @@ three you gave 4s"), and it ships zero per-teacher model artifacts. LoRA fine-tu
 | **P0** Engine spike | 🟢 **Core risk retired, and it reversed a model choice.** `qwen3:8b` in Pydantic AI **Tool-Output mode: 100% schema success, 0 retries**, correct rank-ordering, 27–66s, **zero variance at temp 0**. **But Qwen3-VL is dead for vision** — see the ⚠️ below. |
 | **P1** Calibration core | 🟢 **Complete.** 5 experiments run. Anchors lift QWK +0.127/+0.135 at k=6 (the sweet spot). Context capping has zero quality impact. k≥8 HURTS (too many anchors from a small pool). Override loop, rubric ingestion, refinement, health panel, cold-start rule all built. P5 ship gate blocked on teacher's own graded work. |
 | **P2** App shell + UX | 🟢 **Implemented and evidence-backed.** Neuroinclusive light-first UI covers onboarding, queue, review, settings, and model manager. Frontend evidence passes with 15 component tests, 4 Playwright E2E tests, 16 visual-sweep screens, 47 required controls, and 167 visible controls. |
-| **P3** Canvas round-trip | 🟢 **Score/comment beta scope passes.** Guarded live app E2E on `canvas.johnnyrobot.ai` course `106`, assignment `2841`, Canvas user `9`: import → teacher override/approval → post → Progress completed → score/comment read-back. Rubric-assessment posting remains disabled until local criteria map to real Canvas criterion IDs; attachment write-back still needs separate release evidence. |
+| **P3** Canvas round-trip | 🟢 **Score/comment beta scope passes.** Guarded live app E2E on `canvas.johnnyrobot.ai` course `106`, assignment `2841`: import → teacher override/approval → post → Progress completed → score/comment read-back. Rubric-assessment posting remains disabled until local criteria map to real Canvas criterion IDs; attachment write-back still needs separate release evidence. |
 | **P4** Documents & citations | 🟡 **Built; citations are experimental.** parse.py, handwriting.py, writeback.py, citations.py built. Citation fixture rerun is 20/29 (69%), 0 false positives, 3/3 retractions caught; acceptable only when visibly labeled experimental until enabled-mode accuracy reaches >=90%. |
 | **P5** Hardening & release | 🟡 **Blocked by GitHub release preflight + updater evidence/channel + clean-machine updater path.** Public-proxy quality/fairness pass on the anchored Mohler ASAG artifact; privacy, performance, frontend, Rust, release-version, and signing/notarization pass locally. Current `scripts/release_readiness.py` verdict is `blocked` with four blockers: `github_release=BLOCKED_GITHUB_RELEASE_PREFLIGHT` because required GitHub Actions release secrets are missing, `updater=BLOCKED_UPDATER_EVIDENCE` because `latest.json` is still 0.1.0/stale and the encrypted updater key password is unavailable, `updater_channel=BLOCKED_UPDATER_CHANNEL` because GitHub `latest.json` returns HTTP 404, and `clean_machine=BLOCKED_CLEAN_MACHINE_EVIDENCE` because release provenance/updater N→N+1 evidence is missing. |
 
@@ -214,8 +214,8 @@ comment-file → read back → authenticated attachment download. Bulk-graded 6 
 spread 100/60/20/0/100/60.
 
 Current app-level public-beta Canvas evidence is narrower and cleaner: `scripts/live_canvas_e2e.py`
-passed on course `106`, assignment `2841`, Canvas user `9`, with teacher override/approval,
-post, Progress `completed`, score `2`, and one teacher feedback comment read back. Treat Canvas
+passed on course `106`, assignment `2841`, with teacher override/approval, post, Progress
+`completed`, exact score, and at least one teacher feedback comment read back. Treat Canvas
 rubric-assessment posting and attachment write-back as separate remaining evidence, not as covered
 by that score/comment beta scope.
 

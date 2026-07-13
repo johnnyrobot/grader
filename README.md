@@ -69,7 +69,7 @@ beta with real student work.
 
 Confirmed in the current checkout:
 
-- Python tests: 186 passed, 12 intentionally skipped.
+- Python tests: 188 passed, 12 intentionally skipped.
 - Frontend tests: 15 passed; TypeScript/Vite production build and Rust `cargo check` pass.
 - The complete mocked desktop workflow passes in Playwright across onboarding, queue, review,
   settings, model management, and local-engine recovery. The visual sweep now fail-closes unless it
@@ -85,8 +85,8 @@ Confirmed in the current checkout:
   artifact: 40/40 scored rows, QWK 0.845 against a 0.623 human-ceiling-adjusted floor, both source
   checks passing, all five perturbation families passing, and 0 grading errors.
 - Guarded live Canvas app E2E passes on `canvas.johnnyrobot.ai` course `106`, assignment `2841`:
-  import → targeted grade for Canvas user `9` → teacher override/approval → Canvas post →
-  Progress completed → score `2` and one teacher feedback comment read back.
+  import → teacher override/approval → Canvas post → Progress completed → exact score and at
+  least one teacher feedback comment read back.
 - `scripts/release_readiness.py` writes a consolidated JSON/Markdown verdict with blocker
   summaries plus an end-to-end testing and evaluation matrix that maps public-beta requirements to
   evidence. With current local artifacts, the report is `blocked`: the latest local app/DMG signs,
@@ -135,7 +135,9 @@ Public-beta blockers:
 
 Tauri + React shell · Python engine (FastAPI) · **Pydantic AI v2** · **Ollama** (→ MLX) ·
 **MiniCPM-V 4.6** (transcription) + **Qwen3 8B** (grading) · **Docling** (parsing) · SQLite + local embeddings ·
-Canvas via [canvas-pp-cli](https://github.com/mvanhorn/printing-press-library)
+Canvas via [canvas-pp-cli](https://github.com/mvanhorn/printing-press-library). Canvas credentials
+can come from `CANVAS_BASE_URL` + `CANVAS_API_TOKEN`/`CANVAS_TOKEN`, or from the already configured
+`canvas-pp-cli` `config.toml` + `credentials.toml` files.
 
 Every choice is justified with citations in [`RESEARCH.md`](RESEARCH.md).
 
@@ -179,13 +181,13 @@ uv run python scripts/updater_key_doctor.py --signing-key /path/to/tauri-updater
 uv run python scripts/generate_appcast.py --dmg /path/to/Grader.dmg --version 0.1.1 --signing-key /path/to/tauri-updater-key.pem --output latest.json
 uv run python scripts/updater_evidence.py --manifest latest.json --artifact /path/to/Grader.dmg --out artifacts/release-evidence/updater-current.json  # fails if local artifacts predate the current git commit
 uv run python scripts/updater_channel_preflight.py --current-version 0.1.0 --out artifacts/release-evidence/updater-channel-current.json  # run after publishing 0.1.1 to test installed 0.1.0 -> 0.1.1
-uv run python scripts/live_canvas_e2e.py --dry-run
+uv run python scripts/live_canvas_e2e.py --apply --course-id 106 --assignment-id 2841 --course-name "ZZ-GRADER-TEST-SANDBOX (safe to delete)" --output artifacts/release-evidence/canvas-live-current.json
 uv run python scripts/clean_machine_evidence.py --print-manual-runbook > clean-machine-runbook.md
 uv run python scripts/clean_machine_evidence.py --print-manual-template > clean-machine-manual-evidence.json
 uv run python scripts/computer_use_sweep_evidence.py --capture-dir /path/to/computer-use-captures --out /path/to/evidence-root/computer_use_instructor_sweep.json
 uv run python scripts/clean_machine_evidence.py --app /Applications/Grader.app --dmg /path/to/Grader.dmg --updater-manifest /path/to/latest.json --expected-version 0.1.1 --manual-evidence clean-machine-manual-evidence.json --evidence-root /path/to/screenshots-and-logs --out artifacts/release-evidence/clean-machine.json
 uv run python scripts/release_evidence_package.py --out-dir artifacts/release-evidence/clean-machine-handoff --github-release-evidence artifacts/release-evidence/github-release-preflight-current.json --updater-channel-evidence artifacts/release-evidence/updater-channel-current.json
-uv run python scripts/release_readiness.py --profile public_beta --expected-version 0.1.1 --public-proxy-dir artifacts/public_proxy/mohler_asag_diverse_anchored_pilot --citation-artifact artifacts/citation-results.json --canvas-artifact artifacts/release-evidence/canvas-live.json --privacy-artifact artifacts/release-evidence/privacy.json --performance-artifact artifacts/release-evidence/performance.json --frontend-artifact artifacts/release-evidence/frontend.json --rust-artifact artifacts/release-evidence/rust.json --release-version-artifact artifacts/release-evidence/release-version.json --github-release-artifact artifacts/release-evidence/github-release-preflight-current.json --updater-artifact artifacts/release-evidence/updater-current.json --updater-channel-artifact artifacts/release-evidence/updater-channel-current.json --updater-key-artifact artifacts/release-evidence/updater-key-current.json --clean-machine-artifact artifacts/release-evidence/clean-machine-local-current.json --out artifacts/release-readiness
+uv run python scripts/release_readiness.py --profile public_beta --expected-version 0.1.1 --public-proxy-dir artifacts/public_proxy/mohler_asag_diverse_anchored_pilot --citation-artifact artifacts/citation-results.json --canvas-artifact artifacts/release-evidence/canvas-live-current.json --privacy-artifact artifacts/release-evidence/privacy.json --performance-artifact artifacts/release-evidence/performance.json --frontend-artifact artifacts/release-evidence/frontend.json --rust-artifact artifacts/release-evidence/rust.json --release-version-artifact artifacts/release-evidence/release-version.json --github-release-artifact artifacts/release-evidence/github-release-preflight-current.json --updater-artifact artifacts/release-evidence/updater-current.json --updater-channel-artifact artifacts/release-evidence/updater-channel-current.json --updater-key-artifact artifacts/release-evidence/updater-key-current.json --clean-machine-artifact artifacts/release-evidence/clean-machine-local-current.json --out artifacts/release-readiness
 ```
 
 The clean-machine manual template is fail-closed: every manual row must include `passed: true`,

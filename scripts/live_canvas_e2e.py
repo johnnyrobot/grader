@@ -19,6 +19,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+ROOT = Path(__file__).resolve().parents[1]
+ENGINE_DIR = ROOT / "engine"
+if str(ENGINE_DIR) not in sys.path:
+    sys.path.insert(0, str(ENGINE_DIR))
+
 
 EMAIL_RE = re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b")
 SECRET_RE = re.compile(
@@ -189,17 +194,13 @@ def run(config: CanvasE2EConfig) -> dict[str, Any]:
         return _blocked("DRY_RUN", "pass --apply to perform guarded live Canvas writes", config)
 
     validate_course_name(config.course_name, config.course_prefix)
-    missing = ["CANVAS_BASE_URL"] if not os.environ.get("CANVAS_BASE_URL") else []
-    if not (
-        os.environ.get("CANVAS_TOKEN")
-        or os.environ.get("CANVAS_API_TOKEN")
-        or os.environ.get("CANVAS_ACCESS_TOKEN")
-    ):
-        missing.append("CANVAS_TOKEN or CANVAS_API_TOKEN")
+    from grader.canvas import missing_canvas_credentials
+
+    missing = missing_canvas_credentials()
     if missing:
         return _blocked(
             "BLOCKED_CANVAS_CREDENTIALS",
-            f"missing Canvas credential env vars: {', '.join(missing)}",
+            f"missing Canvas credentials: {', '.join(missing)}",
             config,
         )
     if config.course_id is None or config.assignment_id is None:

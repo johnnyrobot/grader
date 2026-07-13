@@ -153,3 +153,36 @@ def test_get_submission_requests_submission_comments_include(monkeypatch):
         "--include",
         "submission_comments",
     )
+
+
+def test_resolve_canvas_credentials_from_canvas_pp_cli_files(tmp_path, monkeypatch):
+    config_path = tmp_path / "config.toml"
+    creds_path = tmp_path / "credentials.toml"
+    config_path.write_text('base_url = "https://canvas.example.test"\n')
+    creds_path.write_text('access_token = "test-token"\n')
+
+    monkeypatch.delenv("CANVAS_BASE_URL", raising=False)
+    monkeypatch.delenv("CANVAS_TOKEN", raising=False)
+    monkeypatch.delenv("CANVAS_API_TOKEN", raising=False)
+    monkeypatch.delenv("CANVAS_ACCESS_TOKEN", raising=False)
+    monkeypatch.setattr(canvas, "CONFIG_PATHS", [config_path])
+    monkeypatch.setattr(canvas, "CREDS_PATHS", [creds_path])
+
+    assert canvas.resolve_canvas_base_url() == "https://canvas.example.test"
+    assert canvas.resolve_canvas_token() == "test-token"
+    assert canvas.missing_canvas_credentials() == []
+
+
+def test_env_canvas_credentials_override_canvas_pp_cli_files(tmp_path, monkeypatch):
+    config_path = tmp_path / "config.toml"
+    creds_path = tmp_path / "credentials.toml"
+    config_path.write_text('base_url = "https://canvas-file.example.test"\n')
+    creds_path.write_text('access_token = "file-token"\n')
+
+    monkeypatch.setenv("CANVAS_BASE_URL", "https://canvas-env.example.test")
+    monkeypatch.setenv("CANVAS_API_TOKEN", "env-token")
+    monkeypatch.setattr(canvas, "CONFIG_PATHS", [config_path])
+    monkeypatch.setattr(canvas, "CREDS_PATHS", [creds_path])
+
+    assert canvas.resolve_canvas_base_url() == "https://canvas-env.example.test"
+    assert canvas.resolve_canvas_token() == "env-token"

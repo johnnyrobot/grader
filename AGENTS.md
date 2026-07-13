@@ -160,7 +160,7 @@ ollama pull qwen3:8b && ollama pull minicpm-v4.6:latest
 
 # Tests and local engine
 uv run pytest engine/tests/ -v
-GRADER_ENGINE_TOKEN=dev uv run uvicorn engine.api:app --host 127.0.0.1 --port 8756 --reload
+PYTHONPATH=engine GRADER_ENGINE_TOKEN=dev uv run uvicorn engine.api:app --host 127.0.0.1 --port 8756 --reload
 
 # Desktop development/build checks
 cd app && npm install && npm run tauri dev
@@ -212,7 +212,7 @@ uv run python scripts/updater_key_doctor.py --signing-key /path/to/tauri-updater
 uv run python scripts/generate_appcast.py --dmg /path/to/Grader.dmg --version 0.1.1 --signing-key /path/to/tauri-updater-key.pem --output latest.json
 uv run python scripts/updater_evidence.py --manifest latest.json --artifact /path/to/Grader.dmg --out artifacts/release-evidence/updater-current.json  # fails if artifacts predate current git commit
 uv run python scripts/updater_channel_preflight.py --current-version 0.1.0 --out artifacts/release-evidence/updater-channel-current.json  # run after publishing 0.1.1 to test installed 0.1.0 -> 0.1.1
-uv run python scripts/live_canvas_e2e.py --dry-run
+uv run python scripts/live_canvas_e2e.py --apply --course-id 106 --assignment-id 2841 --course-name "ZZ-GRADER-TEST-SANDBOX (safe to delete)" --output artifacts/release-evidence/canvas-live-current.json
 uv run python scripts/clean_machine_evidence.py --print-manual-runbook > clean-machine-runbook.md
 uv run python scripts/clean_machine_evidence.py --print-manual-template > clean-machine-manual-evidence.json
 uv run python scripts/computer_use_sweep_evidence.py --capture-dir /path/to/computer-use-captures --out /path/to/evidence-root/computer_use_instructor_sweep.json
@@ -234,22 +234,23 @@ package is a clean-Mac handoff bundle only; do not treat it as passing clean-mac
   +0.127/+0.135. The local anchored Mohler ASAG public-proxy artifact now passes quality
   at QWK 0.845 against a 0.623 human-ceiling-adjusted floor.
 - **P2 in progress:** the complete light-first neuroinclusive UI is implemented across onboarding,
-  queue, review, settings, and model management. Fourteen component tests and four mocked Playwright
+  queue, review, settings, and model management. Fifteen component tests and four mocked Playwright
   E2E tests pass. `scripts/frontend_evidence.py` now fail-closes unless the visual sweep records
   all 16 required screens, screenshots, 47 required instructor controls, 167 visible controls,
   automated accessibility checks, local-engine recovery alert coverage, and 200% text scaling. Still
   validate a clean-machine `.app`, crash recovery, real first-run model setup, and packaging.
 - **P3 in progress:** Canvas client/API/offline queue exist and the guarded live app-level path
-  passed for score/comment: import → targeted grade → teacher override/approval → post → Progress
-  completed → read-back on `canvas.johnnyrobot.ai` course `106`, assignment `2841`, Canvas user `9`,
-  score `2`, and one teacher feedback comment.
+  passed for score/comment: import → teacher override/approval → post → Progress completed →
+  read-back on `canvas.johnnyrobot.ai` course `106`, assignment `2841`, exact score, and at least
+  one teacher feedback comment. Canvas credentials resolve from env vars or the authenticated
+  `canvas-pp-cli` config/credentials files.
   Canvas rubric-assessment posting remains disabled until local rubric criteria can be mapped to real
   Canvas criterion IDs; attachment write-back still needs separate evidence.
 - **P4 in progress:** parse/transcribe/write-back/citation modules exist. The 2026-07-12 citation
   rerun scored 20/29 (69%), with 0 false positives and 3/3 retractions caught; enabled mode still
   fails the >=90% phase goal, so beta readiness accepts it only as visibly experimental.
 - **P5 in progress:** privacy passes in isolation (3/3 captured connections allowlisted) and the
-  performance gate passes at 38.3s per 1,500-word essay. Public-proxy quality/fairness release mode
+  performance gate passes at 37.8s per 1,500-word essay. Public-proxy quality/fairness release mode
   rejects the tiny committed mechanics fixtures. The local anchored 40-item Mohler ASAG public-proxy
   artifact passes quality at QWK 0.845 and passes fairness across all five perturbation families.
   Updater/DMG/app evidence now fails closed when artifacts predate the current git commit. The latest
@@ -270,7 +271,7 @@ package is a clean-Mac handoff bundle only; do not treat it as passing clean-mac
   includes an end-to-end public-beta matrix that maps requirements to evidence. Teacher-local
   validation still requires authorized instructor data, the GitHub release preflight is blocked on
   missing Actions secrets, and the updater-path check still needs release validation.
-- **Coverage:** Python collects 191 cases (179 pass, 12 skip). Frontend has 15 passing component
+- **Coverage:** Python collects 200 cases (188 pass, 12 skip). Frontend has 15 passing component
   tests plus four passing Playwright E2E tests.
 - **Public beta verdict:** not ready for unattended public testing with real student work. Limit
   current use to a developer-assisted alpha with synthetic or institution-approved test data.

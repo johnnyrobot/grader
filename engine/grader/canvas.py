@@ -19,6 +19,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import tomllib
 import time
 from pathlib import Path
 from typing import Any
@@ -26,13 +27,62 @@ from typing import Any
 import httpx
 
 CLI_PATH = os.environ.get("CANVAS_PP_CLI", "canvas-pp-cli")
-CANVAS_TOKEN = (
-    os.environ.get("CANVAS_TOKEN")
-    or os.environ.get("CANVAS_API_TOKEN")
-    or os.environ.get("CANVAS_ACCESS_TOKEN")
-    or ""
-)
-CANVAS_BASE = os.environ.get("CANVAS_BASE_URL", "")
+CREDS_PATHS = [
+    Path.home() / ".local/share/canvas-pp-cli/credentials.toml",
+    Path.home() / ".config/canvas-pp-cli/credentials.toml",
+]
+CONFIG_PATHS = [
+    Path.home() / ".config/canvas-pp-cli/config.toml",
+    Path.home() / ".local/share/canvas-pp-cli/config.toml",
+]
+
+
+def _scan_toml(paths: list[Path], keys: tuple[str, ...]) -> str | None:
+    """Return the first matching TOML value at top level or one nested table."""
+    for path in paths:
+        if not path.exists():
+            continue
+        try:
+            data = tomllib.loads(path.read_text())
+        except tomllib.TOMLDecodeError:
+            continue
+        scopes = [data, *(v for v in data.values() if isinstance(v, dict))]
+        for scope in scopes:
+            for key in keys:
+                value = scope.get(key)
+                if value:
+                    return str(value)
+    return None
+
+
+def resolve_canvas_token() -> str:
+    """Resolve a Canvas API token from env or canvas-pp-cli's credentials file."""
+    return (
+        os.environ.get("CANVAS_TOKEN")
+        or os.environ.get("CANVAS_API_TOKEN")
+        or os.environ.get("CANVAS_ACCESS_TOKEN")
+        or _scan_toml(CREDS_PATHS, ("access_token", "token", "api_token"))
+        or ""
+    )
+
+
+def resolve_canvas_base_url() -> str:
+    """Resolve the Canvas base URL from env or canvas-pp-cli's config files."""
+    return (
+        os.environ.get("CANVAS_BASE_URL")
+        or _scan_toml(CONFIG_PATHS + CREDS_PATHS, ("base_url", "url", "host"))
+        or ""
+    )
+
+
+def missing_canvas_credentials() -> list[str]:
+    """Secret-safe list of missing Canvas credential fields."""
+    missing: list[str] = []
+    if not resolve_canvas_base_url():
+        missing.append("CANVAS_BASE_URL or canvas-pp-cli base_url")
+    if not resolve_canvas_token():
+        missing.append("CANVAS_TOKEN/CANVAS_API_TOKEN or canvas-pp-cli access_token")
+    return missing
 
 
 def _run(*args: str, timeout: int = 30, stdin_json: dict[str, Any] | None = None) -> dict:
@@ -110,9 +160,11 @@ def download_attachment(url: str, dest: Path, *, token: str | None = None) -> Pa
 
     Canvas attachment URLs require authentication — the CLI returns URLs, not bytes.
     """
-    tok = token or CANVAS_TOKEN
+    tok = token or resolve_canvas_token()
     if not tok:
-        raise RuntimeError("no Canvas token set (CANVAS_TOKEN env or token= kwarg)")
+        raise RuntimeError(
+            "no Canvas token set (CANVAS_TOKEN env, token= kwarg, or canvas-pp-cli credentials)"
+        )
 
     dest.parent.mkdir(parents=True, exist_ok=True)
     with httpx.Client(timeout=60, follow_redirects=True) as client:
@@ -261,11 +313,12 @@ def upload_file(
     Step 2: PUT the file bytes to the returned URL.
     Step 3: confirm with Canvas, get the file ID.
     """
-    tok = CANVAS_TOKEN
+    tok = resolve_canvas_token()
     if not tok:
         raise RuntimeError("no Canvas token set")
 
-    base = CANVAS_BASE.rstrip("/") if CANVAS_BASE else "https://canvas.instructure.com"
+    canvas_base = resolve_canvas_base_url()
+    base = canvas_base.rstrip("/") if canvas_base else "https://canvas.instructure.com"
     headers = {"Authorization": f"Bearer {tok}", "Accept": "application/json"}
     file_size = file_path.stat().st_size
     params: dict[str, Any] = {
