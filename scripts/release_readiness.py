@@ -33,6 +33,16 @@ REQUIRED_GATES = (
     "clean_machine",
 )
 
+CLEAN_MACHINE_REQUIRED_CHECKS = (
+    "codesign_verify",
+    "stapler_validate",
+    "spctl_assess",
+    "first_run_models",
+    "crash_recovery",
+    "keyboard_only_review",
+    "updater_path",
+)
+
 
 def _gate_summary(gate: dict[str, Any]) -> str:
     for key in ("summary", "reason"):
@@ -114,6 +124,19 @@ def _normalize_citation_artifact(path: Path | None) -> dict[str, Any]:
             )
 
     return citation
+
+
+def _normalize_clean_machine_artifact(path: Path | None) -> dict[str, Any]:
+    clean = _normalize_artifact(path, "BLOCKED_CLEAN_MACHINE_EVIDENCE")
+    if clean.get("status") != "PASS":
+        return clean
+    checks = clean.get("checks", {})
+    missing = [name for name in CLEAN_MACHINE_REQUIRED_CHECKS if checks.get(name) is not True]
+    if missing:
+        clean["status"] = "FAIL"
+        clean["reason"] = "clean-machine PASS artifact is missing required passing checks"
+        clean["missing_checks"] = missing
+    return clean
 
 
 def _signing_preflight() -> dict[str, Any]:
@@ -201,10 +224,7 @@ def collect_evidence(args: argparse.Namespace) -> dict[str, Any]:
     evidence["frontend"] = _normalize_artifact(args.frontend_artifact, "SKIP")
     evidence["rust"] = _normalize_artifact(args.rust_artifact, "SKIP")
     evidence["signing"] = _signing_preflight()
-    evidence["clean_machine"] = _normalize_artifact(
-        args.clean_machine_artifact,
-        "BLOCKED_CLEAN_MACHINE_EVIDENCE",
-    )
+    evidence["clean_machine"] = _normalize_clean_machine_artifact(args.clean_machine_artifact)
     evidence["verdict"] = decide_verdict(evidence)
     evidence["blockers"] = summarize_blockers(evidence)
     return evidence

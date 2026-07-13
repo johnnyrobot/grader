@@ -5,7 +5,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parents[2]))
 
 from scripts.release_readiness import (
+    CLEAN_MACHINE_REQUIRED_CHECKS,
     _normalize_citation_artifact,
+    _normalize_clean_machine_artifact,
     decide_verdict,
     redact_secrets,
     summarize_blockers,
@@ -87,6 +89,33 @@ def test_normalize_citation_artifact_rejects_experimental_false_positives(tmp_pa
     citation = _normalize_citation_artifact(artifact)
 
     assert citation["status"] == "FAIL"
+
+
+def test_normalize_clean_machine_artifact_requires_all_checks(tmp_path):
+    artifact = tmp_path / "clean-machine.json"
+    artifact.write_text(json.dumps({
+        "status": "PASS",
+        "checks": {
+            "codesign_verify": True,
+        },
+    }))
+
+    clean = _normalize_clean_machine_artifact(artifact)
+
+    assert clean["status"] == "FAIL"
+    assert "first_run_models" in clean["missing_checks"]
+
+
+def test_normalize_clean_machine_artifact_accepts_complete_pass(tmp_path):
+    artifact = tmp_path / "clean-machine.json"
+    artifact.write_text(json.dumps({
+        "status": "PASS",
+        "checks": {name: True for name in CLEAN_MACHINE_REQUIRED_CHECKS},
+    }))
+
+    clean = _normalize_clean_machine_artifact(artifact)
+
+    assert clean["status"] == "PASS"
 
 
 def test_redact_secrets_masks_tokens():
