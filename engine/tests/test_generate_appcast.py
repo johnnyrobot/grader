@@ -61,6 +61,20 @@ def test_sign_file_uses_tauri_v2_private_key_path_command(tmp_path, monkeypatch)
     ]]
 
 
+def test_sign_file_accepts_tauri_public_signature_output(tmp_path, monkeypatch):
+    artifact = tmp_path / "Grader.dmg"
+    key = tmp_path / "tauri-key.pem"
+    artifact.write_bytes(b"signed dmg")
+    key.write_text("fake key")
+
+    def fake_run(command, **_kwargs):
+        return Proc("Your file was signed successfully\n\nPublic signature:\nabc123\n")
+
+    monkeypatch.setattr(generate_appcast.subprocess, "run", fake_run)
+
+    assert generate_appcast._sign_file(artifact, key) == "abc123"
+
+
 def test_sign_file_hints_when_private_key_password_missing(tmp_path, monkeypatch, capsys):
     artifact = tmp_path / "Grader.dmg"
     key = tmp_path / "tauri-key.pem"

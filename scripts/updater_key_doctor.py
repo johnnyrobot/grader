@@ -26,6 +26,7 @@ from typing import Any, Callable, Protocol
 SECRET_RE = re.compile(
     r"(?i)\b([A-Z0-9_]*(TOKEN|PASSWORD|SECRET|PRIVATE_KEY|API_KEY)[A-Z0-9_]*)=([^\s]+)"
 )
+SIGNATURE_RE = re.compile(r"(?im)^\s*(?:Public\s+)?Signature:\s*\S+")
 
 
 class CompletedProcessLike(Protocol):
@@ -71,7 +72,7 @@ def _run_signer(
             env=env,
         )
         output = redact_secrets(((proc.stdout or "") + (proc.stderr or "")).strip())
-        return proc.returncode == 0 and "Signature:" in (proc.stdout or ""), output, command
+        return proc.returncode == 0 and bool(SIGNATURE_RE.search(proc.stdout or "")), output, command
     except (OSError, subprocess.TimeoutExpired) as exc:
         return False, redact_secrets(str(exc)), command
     finally:

@@ -47,11 +47,15 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import subprocess
 import sys
 import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
+
+
+SIGNATURE_RE = re.compile(r"(?im)^\s*(?:Public\s+)?Signature:\s*(\S+)")
 
 
 def _file_size(path: Path) -> int:
@@ -86,9 +90,9 @@ def _sign_file(path: Path, key_path: Path) -> str | None:
             ["cargo", "tauri", "signer", "sign", "--private-key-path", str(key_path), str(path)],
             capture_output=True, text=True, check=True,
         )
-        for line in result.stdout.splitlines():
-            if line.strip().startswith("Signature:"):
-                return line.split(":", 1)[1].strip()
+        match = SIGNATURE_RE.search(result.stdout)
+        if match:
+            return match.group(1).strip()
         # If no explicit "Signature:" line, return the whole stdout
         return result.stdout.strip()
     except FileNotFoundError:

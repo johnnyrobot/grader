@@ -60,6 +60,23 @@ def test_collect_updater_key_diagnostics_passes_successful_probe(tmp_path):
     assert seen[0][:5] == ["cargo", "tauri", "signer", "sign", "--private-key-path"]
 
 
+def test_collect_updater_key_diagnostics_accepts_public_signature_output(tmp_path):
+    key = tmp_path / "tauri-key.pem"
+    key.write_text("fake encrypted key")
+
+    def fake_run(command, **_kwargs):
+        return Proc(0, stdout="Your file was signed successfully\n\nPublic signature:\nabc123\n")
+
+    result = collect_updater_key_diagnostics(
+        signing_key=key,
+        runner=fake_run,
+        env={"TAURI_SIGNING_PRIVATE_KEY_PASSWORD": "secret"},
+    )
+
+    assert result["status"] == "PASS"
+    assert result["checks"]["signing_probe"] is True
+
+
 def test_redact_secrets_masks_password_values():
     assert "secret" not in redact_secrets("TAURI_SIGNING_PRIVATE_KEY_PASSWORD=secret")
 
