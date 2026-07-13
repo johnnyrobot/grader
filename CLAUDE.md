@@ -77,12 +77,12 @@ uv run python engine/gates/egress.py --capture-duration 15
 uv run python engine/gates/perf.py --memory-floor 16
 uv run python engine/verify_citations.py --fixtures fixtures/citations/citation_fixtures.json --output artifacts/citation-results.json
 uv run python scripts/live_canvas_e2e.py --dry-run
-uv run python scripts/release_version_guard.py --tag v0.1.0 --out artifacts/release-evidence/release-version.json
+uv run python scripts/release_version_guard.py --tag v0.1.1 --out artifacts/release-evidence/release-version.json
 uv run python scripts/github_release_secrets.py --print-runbook > github-release-secrets-runbook.md
-uv run python scripts/bump_release_version.py --target-version 0.1.1 --out artifacts/release-evidence/version-bump-plan.json  # dry-run; use --apply only in the N+1 release-prep commit
+uv run python scripts/bump_release_version.py --target-version 0.1.1 --allow-same --out artifacts/release-evidence/version-bump-plan.json  # dry-run/idempotency check; use --apply only in future release-prep commits
 uv run python scripts/github_release_preflight.py --candidate-tag v0.1.1 --out artifacts/release-evidence/github-release-preflight-current.json --no-fail
 uv run python scripts/updater_channel_preflight.py --current-version 0.1.0 --out artifacts/release-evidence/updater-channel-current.json
-uv run python scripts/release_readiness.py --profile public_beta --expected-version 0.1.0 --release-version-artifact artifacts/release-evidence/release-version.json --github-release-artifact artifacts/release-evidence/github-release-preflight-current.json --updater-channel-artifact artifacts/release-evidence/updater-channel-current.json --out artifacts/release-readiness
+uv run python scripts/release_readiness.py --profile public_beta --expected-version 0.1.1 --release-version-artifact artifacts/release-evidence/release-version.json --github-release-artifact artifacts/release-evidence/github-release-preflight-current.json --updater-channel-artifact artifacts/release-evidence/updater-channel-current.json --out artifacts/release-readiness
 ```
 
 ## Current Evidence
@@ -91,7 +91,7 @@ As of 2026-07-13, Grader is suitable only for a developer-assisted alpha using s
 institution-approved test data. It is not ready for an unattended public beta with real student
 work.
 
-- Python: 173 passed, 12 skipped.
+- Python: 175 passed, 12 skipped.
 - Frontend: 15 component tests and four Playwright E2E tests pass, including a 16-screen visual
   sweep with 167 visible controls recorded.
 - Privacy: PASS in isolation, 3/3 captured connections allowlisted.
@@ -107,15 +107,14 @@ work.
   completed, score `2`, and one teacher feedback comment read back.
 - Release readiness: local report currently returns `blocked` for three release/update blockers:
   `github_release=BLOCKED_GITHUB_RELEASE_PREFLIGHT` because required GitHub Actions release secrets
-  are missing, including the Developer ID certificate `.p12` export needed by `macos-latest`, and
-  the N+1 candidate version metadata has not been applied yet,
+  are missing, including the Developer ID certificate `.p12` export needed by `macos-latest`,
   `updater_channel=BLOCKED_UPDATER_CHANNEL` because the configured GitHub `latest.json`
   returns HTTP 404, and `clean_machine=BLOCKED_CLEAN_MACHINE_EVIDENCE` because `updater_path` is
   still missing. `scripts/bump_release_version.py`, `scripts/release_version_guard.py`,
   `scripts/github_release_preflight.py`,
   `scripts/updater_evidence.py`,
   `scripts/updater_channel_preflight.py`, and `scripts/clean_machine_evidence.py` now fail closed on
-  six-surface version drift, missing publication prerequisites, stale artifacts, missing updater manifests,
+  eight-surface version drift, missing publication prerequisites, stale artifacts, missing updater manifests,
   unreachable release assets, and missing structured manual evidence. The latest local app/DMG build signs, notarizes, staples, and passes
   macOS signature checks; signed updater manifest/release provenance passes; and the latest local
   signed-app Computer Use sweep targets `/Applications/Grader.app` as `com.grader.app` and passes

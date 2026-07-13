@@ -22,7 +22,9 @@ from typing import Any
 DEFAULT_VERSION_FILES = {
     "tauri_config": Path("app/src-tauri/tauri.conf.json"),
     "tauri_cargo": Path("app/src-tauri/Cargo.toml"),
+    "tauri_cargo_lock": Path("app/src-tauri/Cargo.lock"),
     "frontend_package": Path("app/package.json"),
+    "frontend_package_lock": Path("app/package-lock.json"),
     "python_project": Path("pyproject.toml"),
     "engine_launcher": Path("scripts/start_engine.sh"),
     "dev_mock_update_fixture": Path("scripts/dev_mock_engine.py"),
@@ -44,6 +46,17 @@ def _read_json_version(path: Path) -> str | None:
     return str(version) if version else None
 
 
+def _read_package_lock_version(path: Path) -> str | None:
+    payload = json.loads(path.read_text())
+    root_version = payload.get("version")
+    package_version = payload.get("packages", {}).get("", {}).get("version")
+    if root_version != package_version:
+        raise ValueError(
+            f"package-lock root version {root_version!r} differs from packages[''] version {package_version!r}"
+        )
+    return str(root_version) if root_version else None
+
+
 def _read_toml_version(path: Path) -> str | None:
     payload = tomllib.loads(path.read_text())
     version = payload.get("package", {}).get("version") or payload.get("project", {}).get("version")
@@ -60,6 +73,8 @@ def _read_regex_version(path: Path, pattern: str) -> str | None:
 def _read_version(label: str, path: Path) -> str | None:
     if not path.exists():
         return None
+    if label == "frontend_package_lock":
+        return _read_package_lock_version(path)
     if path.suffix == ".json":
         return _read_json_version(path)
     if path.suffix == ".toml":
@@ -68,6 +83,11 @@ def _read_version(label: str, path: Path) -> str | None:
         return _read_regex_version(path, r'^export GRADER_APP_VERSION="(?P<version>[^"]+)"')
     if label == "dev_mock_update_fixture":
         return _read_regex_version(path, r'"current_version":\s*"(?P<version>[^"]+)"')
+    if label == "tauri_cargo_lock":
+        return _read_regex_version(
+            path,
+            r'(?ms)\[\[package\]\]\s*name\s*=\s*"grader-app"\s*version\s*=\s*"(?P<version>[^"]+)"',
+        )
     raise ValueError(f"unsupported version file for {label}: {path}")
 
 

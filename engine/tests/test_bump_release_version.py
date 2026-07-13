@@ -17,8 +17,23 @@ def _write_release_surfaces(root: Path, version: str = "0.1.0") -> None:
     (root / "app/package.json").write_text(
         json.dumps({"name": "grader-app", "version": version}, indent=2) + "\n"
     )
+    (root / "app/package-lock.json").write_text(
+        json.dumps(
+            {
+                "name": "grader-app",
+                "version": version,
+                "lockfileVersion": 3,
+                "packages": {"": {"name": "grader-app", "version": version}},
+            },
+            indent=2,
+        )
+        + "\n"
+    )
     (root / "app/src-tauri/Cargo.toml").write_text(
         f'[package]\nname = "grader"\nversion = "{version}"\n\n[dependencies]\nserde = "1"\n'
+    )
+    (root / "app/src-tauri/Cargo.lock").write_text(
+        f'[[package]]\nname = "grader-app"\nversion = "{version}"\ndependencies = []\n'
     )
     (root / "pyproject.toml").write_text(
         f'[project]\nname = "grader"\nversion = "{version}"\n'
@@ -42,7 +57,9 @@ def test_collect_plan_reports_all_release_surfaces_without_writing(tmp_path):
     assert set(result["surfaces"]) == {
         "tauri_config",
         "frontend_package",
+        "frontend_package_lock",
         "tauri_cargo",
+        "tauri_cargo_lock",
         "python_project",
         "engine_launcher",
         "dev_mock_update_fixture",
@@ -60,7 +77,13 @@ def test_apply_plan_updates_all_release_surfaces(tmp_path):
     assert result["applied"] is True
     assert json.loads((tmp_path / "app/src-tauri/tauri.conf.json").read_text())["version"] == "0.1.1"
     assert json.loads((tmp_path / "app/package.json").read_text())["version"] == "0.1.1"
+    package_lock = json.loads((tmp_path / "app/package-lock.json").read_text())
+    assert package_lock["version"] == "0.1.1"
+    assert package_lock["packages"][""]["version"] == "0.1.1"
     assert 'version = "0.1.1"' in (tmp_path / "app/src-tauri/Cargo.toml").read_text()
+    assert 'name = "grader-app"\nversion = "0.1.1"' in (
+        tmp_path / "app/src-tauri/Cargo.lock"
+    ).read_text()
     assert 'version = "0.1.1"' in (tmp_path / "pyproject.toml").read_text()
     assert 'GRADER_APP_VERSION="0.1.1"' in (tmp_path / "scripts/start_engine.sh").read_text()
     assert '"current_version": "0.1.1"' in (tmp_path / "scripts/dev_mock_engine.py").read_text()
@@ -106,3 +129,16 @@ def test_collect_plan_rejects_non_semver_targets(tmp_path):
         assert "semantic version" in str(exc)
     else:
         raise AssertionError("expected non-semver target to be rejected")
+
+
+def test_collect_plan_blocks_inconsistent_package_lock(tmp_path):
+    _write_release_surfaces(tmp_path, "0.1.0")
+    package_lock = tmp_path / "app/package-lock.json"
+    payload = json.loads(package_lock.read_text())
+    payload["packages"][""]["version"] = "0.1.9"
+    package_lock.write_text(json.dumps(payload) + "\n")
+
+    result = collect_plan(target_version="0.1.1", root=tmp_path)
+
+    assert result["status"] == "BLOCKED_VERSION_BUMP"
+    assert "frontend_package_lock version could not be read" in result["failures"][0]

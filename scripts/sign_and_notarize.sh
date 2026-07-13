@@ -21,6 +21,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 APP_PATH="$PROJECT_ROOT/app/src-tauri/target/release/bundle/macos/Grader.app"
+APP_VERSION="$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["version"])' "$PROJECT_ROOT/app/src-tauri/tauri.conf.json")"
 KEYCHAIN_PROFILE="${KEYCHAIN_PROFILE:-grader}"
 SIGNING_IDENTITY="${SIGNING_IDENTITY:-}"
 
@@ -155,4 +156,4 @@ echo ""
 echo "To distribute:"
 echo "  1. Upload the DMG to GitHub Releases"
 echo "  2. Generate signed Tauri latest.json (scripts/generate_appcast.py --signing-key ...)"
-echo "  3. Tag the release: git tag v0.1.0"
+echo "  3. Tag the release: git tag v$APP_VERSION"

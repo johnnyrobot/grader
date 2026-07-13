@@ -34,10 +34,18 @@ class VersionSurface:
 DEFAULT_SURFACES = (
     VersionSurface("tauri_config", Path("app/src-tauri/tauri.conf.json"), json_key="version"),
     VersionSurface("frontend_package", Path("app/package.json"), json_key="version"),
+    VersionSurface("frontend_package_lock", Path("app/package-lock.json")),
     VersionSurface(
         "tauri_cargo",
         Path("app/src-tauri/Cargo.toml"),
         re.compile(r'(?m)^version\s*=\s*"(?P<version>[^"]+)"'),
+    ),
+    VersionSurface(
+        "tauri_cargo_lock",
+        Path("app/src-tauri/Cargo.lock"),
+        re.compile(
+            r'(?ms)(\[\[package\]\]\s*name\s*=\s*"grader-app"\s*version\s*=\s*")(?P<version>[^"]+)(")'
+        ),
     ),
     VersionSurface(
         "python_project",
@@ -90,6 +98,25 @@ def _write_json_surface(path: Path, key: str, target_version: str) -> None:
     path.write_text(json.dumps(payload, indent=2) + "\n")
 
 
+def _read_package_lock_surface(path: Path) -> tuple[str | None, str]:
+    text = path.read_text()
+    payload = json.loads(text)
+    root_version = payload.get("version")
+    package_version = payload.get("packages", {}).get("", {}).get("version")
+    if root_version != package_version:
+        raise ValueError(
+            f"package-lock root version {root_version!r} differs from packages[''] version {package_version!r}"
+        )
+    return (str(root_version) if root_version is not None else None), text
+
+
+def _write_package_lock_surface(path: Path, target_version: str) -> None:
+    payload = json.loads(path.read_text())
+    payload["version"] = target_version
+    payload.setdefault("packages", {}).setdefault("", {})["version"] = target_version
+    path.write_text(json.dumps(payload, indent=2) + "\n")
+
+
 def _read_regex_surface(path: Path, pattern: re.Pattern[str]) -> tuple[str | None, str]:
     text = path.read_text()
     match = pattern.search(text)
@@ -111,6 +138,8 @@ def _write_regex_surface(path: Path, pattern: re.Pattern[str], target_version: s
 
 def _read_surface(surface: VersionSurface, *, root: Path) -> tuple[str | None, str]:
     path = _repo_path(surface.path, root=root)
+    if surface.label == "frontend_package_lock":
+        return _read_package_lock_surface(path)
     if surface.json_key:
         return _read_json_surface(path, surface.json_key)
     if surface.pattern:
@@ -120,6 +149,9 @@ def _read_surface(surface: VersionSurface, *, root: Path) -> tuple[str | None, s
 
 def _write_surface(surface: VersionSurface, *, root: Path, target_version: str) -> None:
     path = _repo_path(surface.path, root=root)
+    if surface.label == "frontend_package_lock":
+        _write_package_lock_surface(path, target_version)
+        return
     if surface.json_key:
         _write_json_surface(path, surface.json_key, target_version)
         return

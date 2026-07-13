@@ -122,8 +122,8 @@ Current readiness verdict: `{summary.get('readiness_verdict', 'unknown')}`
 1. Install the signed/notarized N release DMG from `release-artifacts/` on a clean supported Mac.
 2. Before publishing N+1, dry-run `scripts/bump_release_version.py --target-version <N+1>`, apply
    it only in the release-prep commit, then require `scripts/release_version_guard.py --tag v<N+1>`
-   to pass so the tag, app bundle, Rust crate, frontend package, Python project, engine launcher,
-   and dev mock update fixture agree on the release version.
+   to pass so the tag, app bundle, Rust crate/lockfile, frontend package/lockfile, Python project,
+   engine launcher, and dev mock update fixture agree on the release version.
 3. Configure GitHub Actions release secrets in a private shell with
    `scripts/github_release_secrets.py`. The workflow imports the Developer ID `.p12` into a
    temporary runner keychain before signing.

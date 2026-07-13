@@ -35,8 +35,8 @@ scripts/
 | Build public-proxy evidence | `build_public_proxy.py` | Writes Mohler ASAG artifacts under `artifacts/public_proxy/`; optional local grading |
 | Inspect UI safely | `dev_mock_engine.py` | Serves synthetic queue/settings/models/rubric responses on loopback for local browser/Computer Use inspection only |
 | Collect frontend release evidence | `frontend_evidence.py` | Runs component tests, production build, managed Playwright E2E, and validates visual-sweep screenshots/control coverage |
-| Prepare N+1 version | `bump_release_version.py` | Dry-run-first helper that moves Tauri config, Rust crate, frontend package, Python project, engine launcher, and dev mock update fixture together |
-| Guard release version | `release_version_guard.py` | Requires the release tag/version to match Tauri config, Rust crate, frontend package, Python project, engine launcher, and dev mock update fixture before publishing assets |
+| Prepare N+1 version | `bump_release_version.py` | Dry-run-first helper that moves Tauri config, Rust crate/lockfile, frontend package/lockfile, Python project, engine launcher, and dev mock update fixture together |
+| Guard release version | `release_version_guard.py` | Requires the release tag/version to match Tauri config, Rust crate/lockfile, frontend package/lockfile, Python project, engine launcher, and dev mock update fixture before publishing assets |
 | Set GitHub release secrets | `github_release_secrets.py` | Dry-run inventory and explicit `--apply` path for Developer ID certificate, Apple notarization, and Tauri updater secrets; never prints secret values |
 | Preflight GitHub release publication | `github_release_preflight.py` | Read-only check for GitHub repo access, updater endpoint, release workflow, required Actions secrets, and optional N+1 tag/release availability |
 | Diagnose signing credentials | `signing_doctor.py` | Writes `artifacts/release-evidence/signing.json`; probes Developer ID private-key access and notarytool profile before signing; `--print-repair-runbook` emits secret-free local recovery steps |
@@ -66,11 +66,12 @@ scripts/
   fixture data only and is not release evidence by itself; signed clean-machine claims still require
   `clean_machine_evidence.py`.
 - **`release_version_guard.py`**: run before signing/publishing release assets:
-  `uv run python scripts/release_version_guard.py --tag v0.1.0 --out artifacts/release-evidence/release-version.json`.
+  `uv run python scripts/release_version_guard.py --tag v0.1.1 --out artifacts/release-evidence/release-version.json`.
   It prevents tag/app/runtime metadata drift across `tauri.conf.json`, `Cargo.toml`,
-  `package.json`, `pyproject.toml`, `scripts/start_engine.sh`, and
-  `scripts/dev_mock_engine.py`. The GitHub release workflow runs it before building so a tag such
-  as `v0.1.1` cannot publish an app bundle or update-check path still reporting `0.1.0`.
+  `Cargo.lock`, `package.json`, `package-lock.json`, `pyproject.toml`, `scripts/start_engine.sh`,
+  and `scripts/dev_mock_engine.py`. The GitHub release workflow runs it before building so a tag
+  such as `v0.1.1` cannot publish an app bundle or update-check path still reporting an older
+  version.
 - **`bump_release_version.py`**: run before the N+1 release-prep commit:
   `uv run python scripts/bump_release_version.py --target-version <N+1>` for a dry run, then add
   `--apply` only when deliberately preparing the release commit. It performs no git, tag, GitHub,

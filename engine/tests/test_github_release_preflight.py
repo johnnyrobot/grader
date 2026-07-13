@@ -51,7 +51,13 @@ def _write_versions(root: Path, version: str) -> None:
     (root / "app" / "src-tauri" / "Cargo.toml").write_text(
         f'[package]\nname = "grader-app"\nversion = "{version}"\n'
     )
+    (root / "app" / "src-tauri" / "Cargo.lock").write_text(
+        f'[[package]]\nname = "grader-app"\nversion = "{version}"\n'
+    )
     (root / "app" / "package.json").write_text(json.dumps({"version": version}))
+    (root / "app" / "package-lock.json").write_text(
+        json.dumps({"version": version, "packages": {"": {"version": version}}})
+    )
     (root / "pyproject.toml").write_text(f'[project]\nname = "grader"\nversion = "{version}"\n')
     (root / "scripts" / "start_engine.sh").write_text(f'export GRADER_APP_VERSION="{version}"\n')
     (root / "scripts" / "dev_mock_engine.py").write_text(

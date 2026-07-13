@@ -13,26 +13,26 @@ Usage:
   # Generate from a signed DMG
   uv run python scripts/generate_appcast.py \
     --dmg app/src-tauri/target/release/bundle/dmg/Grader.dmg \
-    --version 0.1.0 \
+    --version 0.1.1 \
     --signing-key /path/to/key.pem \
     --output latest.json
 
   # Generate from a signed .app (creates a zip)
   uv run python scripts/generate_appcast.py \
     --app app/src-tauri/target/release/bundle/macos/Grader.app \
-    --version 0.1.0 \
+    --version 0.1.1 \
     --signing-key /path/to/key.pem \
     --output latest.json
 
   # With a signing key (generates signature)
   uv run python scripts/generate_appcast.py \
-    --dmg Grader.dmg --version 0.1.0 \
+    --dmg Grader.dmg --version 0.1.1 \
     --signing-key /path/to/key.pem \
     --output latest.json
 
   # Unsigned local smoke fixture only; never use for release evidence
   uv run python scripts/generate_appcast.py \
-    --dmg Grader.dmg --version 0.1.0 \
+    --dmg Grader.dmg --version 0.1.1 \
     --allow-unsigned \
     --output latest.json
 
@@ -180,7 +180,7 @@ def main() -> None:
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--dmg", type=Path, help="Path to signed DMG")
     group.add_argument("--app", type=Path, help="Path to signed .app (will be zipped)")
-    parser.add_argument("--version", required=True, help="Version string (e.g. 0.1.0)")
+    parser.add_argument("--version", required=True, help="Version string (e.g. 0.1.1)")
     parser.add_argument("--output", type=Path, default=Path("latest.json"),
                         help="Output manifest path (default: latest.json)")
     parser.add_argument("--signing-key", type=Path, default=None,

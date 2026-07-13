@@ -81,3 +81,30 @@ def test_release_version_guard_checks_runtime_version_surfaces(tmp_path):
         "dev_mock_update_fixture version '0.1.0' does not match expected '0.1.1'"
         in result["failures"]
     )
+
+
+def test_release_version_guard_checks_lockfile_version_surfaces(tmp_path):
+    package_lock = tmp_path / "package-lock.json"
+    cargo_lock = tmp_path / "Cargo.lock"
+    package_lock.write_text(
+        json.dumps(
+            {
+                "name": "grader-app",
+                "version": "0.1.0",
+                "packages": {"": {"name": "grader-app", "version": "0.1.0"}},
+            }
+        )
+    )
+    cargo_lock.write_text('[[package]]\nname = "grader-app"\nversion = "0.1.0"\n')
+
+    result = collect(
+        tag="v0.1.1",
+        version_files={
+            "frontend_package_lock": package_lock,
+            "tauri_cargo_lock": cargo_lock,
+        },
+    )
+
+    assert result["status"] == "BLOCKED_RELEASE_VERSION"
+    assert "frontend_package_lock version '0.1.0' does not match expected '0.1.1'" in result["failures"]
+    assert "tauri_cargo_lock version '0.1.0' does not match expected '0.1.1'" in result["failures"]
