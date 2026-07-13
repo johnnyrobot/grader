@@ -214,6 +214,11 @@ def main() -> None:
     parser.add_argument("--golden-dir", type=Path, default=GOLDEN_DIR)
     parser.add_argument("--public-proxy-dir", type=Path, default=Path("fixtures/public_proxy"))
     parser.add_argument("--model", default="grader-text:8b")
+    parser.add_argument(
+        "--allow-mechanics-fixture",
+        action="store_true",
+        help="Allow tiny/synthetic public-proxy fixtures for smoke tests only; never use for release readiness.",
+    )
     parser.add_argument("--save-baseline", action="store_true",
                         help="Save current QWK as the regression baseline")
     args = parser.parse_args()
@@ -221,7 +226,11 @@ def main() -> None:
     if args.profile == "public_proxy":
         from gates.public_proxy import evaluate_public_proxy_quality
 
-        result = evaluate_public_proxy_quality(args.public_proxy_dir, BASELINE_FILE)
+        result = evaluate_public_proxy_quality(
+            args.public_proxy_dir,
+            BASELINE_FILE,
+            allow_mechanics_fixture=args.allow_mechanics_fixture,
+        )
     else:
         result = run_quality_gate(golden_dir=args.golden_dir, model=args.model,
                                   save_baseline=args.save_baseline)

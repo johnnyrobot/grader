@@ -286,12 +286,21 @@ def main() -> None:
     parser.add_argument("--public-proxy-dir", type=Path, default=Path("fixtures/public_proxy"))
     parser.add_argument("--threshold", type=float, default=MAX_DELTA,
                         help="Max acceptable mean score delta (default: 1.0)")
+    parser.add_argument(
+        "--allow-mechanics-fixture",
+        action="store_true",
+        help="Allow tiny/synthetic public-proxy fixtures for smoke tests only; never use for release readiness.",
+    )
     args = parser.parse_args()
 
     if args.profile == "public_proxy":
         from gates.public_proxy import evaluate_public_proxy_fairness
 
-        result = evaluate_public_proxy_fairness(args.public_proxy_dir, threshold=args.threshold)
+        result = evaluate_public_proxy_fairness(
+            args.public_proxy_dir,
+            threshold=args.threshold,
+            allow_mechanics_fixture=args.allow_mechanics_fixture,
+        )
     else:
         result = run_bias_gate(golden_dir=args.golden_dir, threshold=args.threshold)
     result.print()

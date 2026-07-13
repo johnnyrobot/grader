@@ -70,13 +70,14 @@ Confirmed in the current checkout:
 - The privacy gate passes in isolation: 3/3 captured connections were allowlisted.
 - The performance gate passes: 37.8 seconds for a 1,500-word essay, with a projected 30-item
   batch of 1,134 seconds against a 2,700-second budget.
-- Public-proxy quality/fairness gate profiles now run against tiny committed mechanics fixtures.
-  These fixtures prove gate wiring only; they are not accuracy evidence.
+- Public-proxy quality/fairness gate profiles now reject tiny committed mechanics fixtures in
+  release mode. Those fixtures prove gate wiring only; they are not accuracy evidence.
 - Guarded live Canvas app E2E passes on `canvas.johnnyrobot.ai` course `106`, assignment `2841`:
   import → targeted grade → teacher override/approval → Canvas post → Progress completed →
   score/comment read-back.
 - `scripts/release_readiness.py` now writes a consolidated JSON/Markdown verdict. The current local
-  verdict is `blocked` because clean-machine signed/notarized evidence is missing.
+  verdict is `blocked` because public-proxy quality/fairness need real open data and clean-machine
+  signed/notarized evidence is missing.
 
 Public-beta blockers:
 
@@ -139,6 +140,13 @@ uv run python scripts/release_readiness.py --profile public_beta --out artifacts
 
 The committed `fixtures/public_proxy/` set is a tiny mechanics fixture. Real public-proxy datasets
 must be downloaded into gitignored local storage and reported separately from teacher-local data.
+The release commands above intentionally fail on the tiny fixture; use
+`--allow-mechanics-fixture` only for local smoke tests of the gate math.
+
+```bash
+uv run python engine/gates/quality.py --profile public_proxy --public-proxy-dir fixtures/public_proxy --allow-mechanics-fixture
+uv run python engine/gates/bias.py --profile public_proxy --public-proxy-dir fixtures/public_proxy --allow-mechanics-fixture
+```
 
 The calibration run uses [Mohler ASAG](https://huggingface.co/datasets/nkazi/MohlerASAG)
 (CC BY 4.0) — 2,273 short answers, each scored by **two independent human graders**, so we can

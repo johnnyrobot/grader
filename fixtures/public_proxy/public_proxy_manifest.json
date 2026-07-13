@@ -1,6 +1,8 @@
 {
   "tier": "public_proxy",
   "name": "tiny-public-proxy-fixture",
+  "evidence_scope": "mechanics_fixture",
+  "release_gate": false,
   "license": "CC BY 4.0",
   "retrieved_at": "2026-07-12",
   "adapter_version": "tiny-fixture-v1",

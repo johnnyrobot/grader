@@ -69,6 +69,8 @@ cd app && npm run test:e2e
 
 uv run python engine/gates/quality.py --profile public_proxy --public-proxy-dir fixtures/public_proxy
 uv run python engine/gates/bias.py --profile public_proxy --public-proxy-dir fixtures/public_proxy
+uv run python engine/gates/quality.py --profile public_proxy --public-proxy-dir fixtures/public_proxy --allow-mechanics-fixture  # smoke only
+uv run python engine/gates/bias.py --profile public_proxy --public-proxy-dir fixtures/public_proxy --allow-mechanics-fixture     # smoke only
 uv run python engine/gates/egress.py --capture-duration 15
 uv run python engine/gates/perf.py --memory-floor 16
 uv run python engine/verify_citations.py --fixtures fixtures/citations/citation_fixtures.json --output artifacts/citation-results.json
@@ -87,15 +89,16 @@ work.
   sweep with 153 visible controls recorded.
 - Privacy: PASS in isolation, 3/3 captured connections allowlisted.
 - Performance: PASS, 38.3 seconds for a 1,500-word essay.
-- Public-proxy quality/fairness: command profiles exist and pass on tiny mechanics fixtures only.
+- Public-proxy quality/fairness: command profiles exist; release mode rejects tiny mechanics
+  fixtures, while `--allow-mechanics-fixture` is available for smoke tests only.
 - Teacher-local quality/fairness: unvalidated until authorized instructor data exists.
 - Citations: PASS_EXPERIMENTAL for beta mode, 20/29 correct (69%), 0 false positives, and 3/3
   retractions caught; enabled mode still requires >=90% accuracy.
 - Canvas: guarded live app-level E2E passes on `canvas.johnnyrobot.ai` course `106`, assignment
   `2841`: import, targeted grade, teacher override/approval, post, Progress completed, score/comment
   read-back.
-- Release readiness: local report currently returns `blocked` because clean-machine signed/notarized
-  evidence is missing.
+- Release readiness: local report currently returns `blocked` because public-proxy quality/fairness
+  need real open data and clean-machine signed/notarized evidence is missing.
 
 Before public beta: run real public-proxy quality/fairness evidence, keep citation checks visibly
 experimental unless accuracy improves, and complete a signed/notarized clean-machine install plus

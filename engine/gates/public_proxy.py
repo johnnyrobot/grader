@@ -17,8 +17,11 @@ from grader.metrics import agreement, human_ceiling, quadratic_weighted_kappa
 QWK_FLOOR = 0.70
 SOURCE_QWK_FLOOR = 0.60
 SOURCE_FLOOR_MIN_ITEMS = 20
+RELEASE_MIN_TEST_ITEMS = 30
+RELEASE_MIN_SOURCES = 2
 NORMALIZED_MEAN_ERROR_MAX = 0.50
 REGRESSION_MAX = 0.03
+NON_RELEASE_SCOPES = {"mechanics_fixture", "synthetic_fixture", "tiny_fixture"}
 
 
 @dataclass
@@ -146,6 +149,39 @@ def load_public_proxy_examples(path: Path) -> list[PublicProxyExample]:
     return examples
 
 
+def _release_evidence_failures(
+    manifest: dict[str, Any],
+    examples: list[PublicProxyExample],
+) -> list[str]:
+    """Return reasons this dataset cannot substantiate public-beta quality/fairness claims."""
+    scored = [example for example in examples if example.split == "test" and example.ai_total is not None]
+    failures: list[str] = []
+    evidence_scope = str(manifest.get("evidence_scope", "")).strip()
+    if manifest.get("release_gate") is False:
+        failures.append("manifest marks this dataset release_gate=false")
+    if evidence_scope in NON_RELEASE_SCOPES:
+        failures.append(f"manifest evidence_scope={evidence_scope!r} is mechanics-only")
+    if len(scored) < RELEASE_MIN_TEST_ITEMS:
+        failures.append(
+            f"only {len(scored)} scored test items; need >= {RELEASE_MIN_TEST_ITEMS} "
+            "for public-beta evidence"
+        )
+    sources = {example.source for example in scored}
+    if len(sources) < RELEASE_MIN_SOURCES:
+        failures.append(
+            f"only {len(sources)} scored source(s); need >= {RELEASE_MIN_SOURCES} open sources"
+        )
+    for source in manifest.get("sources", []):
+        url = str(source.get("url", ""))
+        license_name = str(source.get("license", manifest.get("license", "")))
+        sha256 = str(source.get("sha256", ""))
+        if "example.invalid" in url or sha256 == "synthetic-fixture":
+            failures.append(f"source {source.get('id', '<unknown>')} is synthetic, not open evidence")
+        if "NC" in license_name.upper().replace("-", " "):
+            failures.append(f"source {source.get('id', '<unknown>')} uses non-commercial licensing")
+    return failures
+
+
 def _source_breakdown(examples: list[PublicProxyExample]) -> dict[str, dict[str, Any]]:
     sources: dict[str, list[PublicProxyExample]] = {}
     for example in examples:
@@ -204,9 +240,28 @@ def _load_baseline_qwk(baseline_path: Path | None) -> float | None:
 def evaluate_public_proxy_quality(
     path: Path,
     baseline_path: Path | None = None,
+    *,
+    allow_mechanics_fixture: bool = False,
 ) -> GateResult:
+    manifest = load_public_proxy_manifest(path)
     examples = [example for example in load_public_proxy_examples(path) if example.split == "test"]
     scored = [example for example in examples if example.ai_total is not None]
+    evidence_failures = _release_evidence_failures(manifest, examples)
+    if evidence_failures and not allow_mechanics_fixture:
+        return GateResult(
+            "FAIL",
+            "public proxy evidence is mechanics-only or too small for release: "
+            + "; ".join(evidence_failures),
+            {
+                "tier": "public_proxy",
+                "evidence_scope": manifest.get("evidence_scope", "unspecified"),
+                "release_gate": manifest.get("release_gate"),
+                "items": len(scored),
+                "sources": sorted({example.source for example in scored}),
+                "required_items": RELEASE_MIN_TEST_ITEMS,
+                "required_sources": RELEASE_MIN_SOURCES,
+            },
+        )
     if len(scored) < 5:
         return GateResult(
             "SKIP",
@@ -266,9 +321,28 @@ def evaluate_public_proxy_quality(
 def evaluate_public_proxy_fairness(
     path: Path,
     threshold: float = 1.0,
+    *,
+    allow_mechanics_fixture: bool = False,
 ) -> FairnessResult:
+    manifest = load_public_proxy_manifest(path)
     examples = [example for example in load_public_proxy_examples(path) if example.split == "test"]
     scored = [example for example in examples if example.ai_total is not None]
+    evidence_failures = _release_evidence_failures(manifest, examples)
+    if evidence_failures and not allow_mechanics_fixture:
+        return FairnessResult(
+            "FAIL",
+            "public proxy evidence is mechanics-only or too small for release: "
+            + "; ".join(evidence_failures),
+            {
+                "tier": "public_proxy",
+                "evidence_scope": manifest.get("evidence_scope", "unspecified"),
+                "release_gate": manifest.get("release_gate"),
+                "items": len(scored),
+                "sources": sorted({example.source for example in scored}),
+                "required_items": RELEASE_MIN_TEST_ITEMS,
+                "required_sources": RELEASE_MIN_SOURCES,
+            },
+        )
     if not scored:
         return FairnessResult(
             "SKIP",

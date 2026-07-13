@@ -5,6 +5,7 @@ from gates.public_proxy import (
     evaluate_public_proxy_fairness,
     evaluate_public_proxy_quality,
     load_public_proxy_examples,
+    load_public_proxy_manifest,
 )
 
 
@@ -12,14 +13,24 @@ FIXTURE_DIR = Path("fixtures/public_proxy")
 
 
 def test_public_proxy_examples_load_with_tier_and_manifest():
+    manifest = load_public_proxy_manifest(FIXTURE_DIR)
+    assert manifest["evidence_scope"] == "mechanics_fixture"
+    assert manifest["release_gate"] is False
     examples = load_public_proxy_examples(FIXTURE_DIR)
     assert {example.tier for example in examples} == {"public_proxy"}
     assert {example.source for example in examples} == {"tiny_source_a", "tiny_source_b"}
     assert all(example.split == "test" for example in examples)
 
 
-def test_public_proxy_quality_passes_on_tiny_fixture():
+def test_public_proxy_quality_blocks_tiny_fixture_by_default():
     result = evaluate_public_proxy_quality(FIXTURE_DIR)
+    assert result.status == "FAIL"
+    assert "mechanics-only" in result.summary
+    assert result.details["release_gate"] is False
+
+
+def test_public_proxy_quality_passes_on_tiny_fixture_when_allowed_for_smoke():
+    result = evaluate_public_proxy_quality(FIXTURE_DIR, allow_mechanics_fixture=True)
     assert result.status == "PASS"
     assert result.details["tier"] == "public_proxy"
     assert float(result.details["qwk"]) >= 0.70
@@ -37,13 +48,20 @@ def test_public_proxy_quality_fails_source_floor(tmp_path):
             row["ai_scores"]["content"] = 0
         rows.append(json.dumps(row))
     (source / "examples.jsonl").write_text("\n".join(rows) + "\n")
-    result = evaluate_public_proxy_quality(source)
+    result = evaluate_public_proxy_quality(source, allow_mechanics_fixture=True)
     assert result.status == "FAIL"
     assert "QWK" in result.summary
 
 
-def test_public_proxy_fairness_passes_on_controlled_fixture():
+def test_public_proxy_fairness_blocks_tiny_fixture_by_default():
     result = evaluate_public_proxy_fairness(FIXTURE_DIR)
+    assert result.status == "FAIL"
+    assert "mechanics-only" in result.summary
+    assert result.details["release_gate"] is False
+
+
+def test_public_proxy_fairness_passes_on_controlled_fixture_when_allowed_for_smoke():
+    result = evaluate_public_proxy_fairness(FIXTURE_DIR, allow_mechanics_fixture=True)
     assert result.status == "PASS"
     assert result.details["tier"] == "public_proxy"
     assert result.details["perturbations"]["informal"]["status"] == "PASS"
@@ -59,6 +77,6 @@ def test_public_proxy_fairness_fails_large_delta(tmp_path):
         row["perturbed_scores"]["informal"]["content"] = 0
         bad_rows.append(json.dumps(row))
     (source / "examples.jsonl").write_text("\n".join(bad_rows) + "\n")
-    result = evaluate_public_proxy_fairness(source)
+    result = evaluate_public_proxy_fairness(source, allow_mechanics_fixture=True)
     assert result.status == "FAIL"
     assert "informal" in result.summary

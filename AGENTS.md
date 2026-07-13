@@ -183,6 +183,8 @@ python fixtures/citations/generate_fixtures.py
 # Public beta readiness gates
 uv run python engine/gates/quality.py --profile public_proxy --public-proxy-dir fixtures/public_proxy
 uv run python engine/gates/bias.py --profile public_proxy --public-proxy-dir fixtures/public_proxy
+uv run python engine/gates/quality.py --profile public_proxy --public-proxy-dir fixtures/public_proxy --allow-mechanics-fixture  # smoke only
+uv run python engine/gates/bias.py --profile public_proxy --public-proxy-dir fixtures/public_proxy --allow-mechanics-fixture     # smoke only
 uv run python engine/verify_citations.py --fixtures fixtures/citations/citation_fixtures.json --output artifacts/citation-results.json
 uv run python scripts/live_canvas_e2e.py --dry-run
 uv run python scripts/release_readiness.py --profile public_beta --out artifacts/release-readiness
@@ -208,15 +210,16 @@ uv run python scripts/release_readiness.py --profile public_beta --out artifacts
   rerun scored 20/29 (69%), with 0 false positives and 3/3 retractions caught; enabled mode still
   fails the >=90% phase goal, so beta readiness accepts it only as visibly experimental.
 - **P5 in progress:** privacy passes in isolation (3/3 captured connections allowlisted) and the
-  performance gate passes at 38.3s per 1,500-word essay. Public-proxy quality/fairness profiles
-  pass on tiny committed mechanics fixtures only; teacher-local validation still requires
+  performance gate passes at 38.3s per 1,500-word essay. Public-proxy quality/fairness release mode
+  now rejects the tiny committed mechanics fixtures; use `--allow-mechanics-fixture` only for smoke
+  tests until real open human-scored data is available. Teacher-local validation still requires
   authorized instructor data. Signing/notarization still needs clean-machine release validation.
 - **Coverage:** Python collects 71 cases (59 pass, 12 skip). Frontend has 11 passing component
   tests plus three passing Playwright E2E tests.
 - **Public beta verdict:** not ready for unattended public testing with real student work. Limit
   current use to a developer-assisted alpha with synthetic or institution-approved test data.
-- **Highest-value next action:** collect clean-machine signed/notarized evidence, then replace the
-  tiny public-proxy mechanics fixtures with real open human-scored datasets before broadening beta
+- **Highest-value next action:** replace the tiny public-proxy mechanics fixtures with real open
+  human-scored datasets and collect clean-machine signed/notarized evidence before broadening beta
   claims.
 - The existing modification under `.omo/run-continuation/` is unrelated operational state; do not
   overwrite or commit it unless explicitly requested.
