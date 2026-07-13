@@ -71,8 +71,9 @@ scripts/
 - **`github_release_preflight.py`**: run before creating or pushing the N+1 release tag:
   `uv run python scripts/github_release_preflight.py --candidate-tag v<N+1>`.
   It is read-only: it checks `gh` access, the configured updater endpoint, release workflow
-  presence, required Actions secrets, recent releases, and optional candidate tag/release
-  availability without creating tags, releases, assets, or secrets. A stale inactive GitHub account
+  presence, release upload permission (`contents: write`), required Actions secrets, recent
+  releases, and optional candidate tag/release availability without creating tags, releases,
+  assets, or secrets. A stale inactive GitHub account
   can be a warning if the active account can read the target repo, but missing release secrets block
   public beta.
 - **`github_release_secrets.py`**: use this before the preflight when GitHub Actions secrets are

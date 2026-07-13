@@ -8,6 +8,7 @@ WORKFLOW = ROOT / ".github" / "workflows" / "release.yml"
 def test_release_workflow_builds_tauri_bundle_before_signing():
     text = WORKFLOW.read_text()
 
+    assert "permissions:\n  contents: write" in text
     assert "npx tauri build --bundles app --no-sign --ci" in text
     assert "working-directory: app/src-tauri\n        run: cargo build --release" not in text
 

@@ -26,6 +26,18 @@ def _write_config(path: Path, repo: str = "johnnyrobot/grader") -> None:
     }))
 
 
+def _write_workflow(path: Path, *, contents_write: bool = True) -> None:
+    permissions = "permissions:\n  contents: write\n\n" if contents_write else ""
+    path.write_text(
+        "name: Release\n\n"
+        f"{permissions}"
+        "jobs:\n"
+        "  build:\n"
+        "    steps:\n"
+        "      - uses: softprops/action-gh-release@v2\n"
+    )
+
+
 def _write_versions(root: Path, version: str) -> None:
     (root / "app" / "src-tauri").mkdir(parents=True)
     (root / "app").mkdir(exist_ok=True)
@@ -41,7 +53,7 @@ def test_github_release_preflight_passes_with_repo_secrets_and_candidate(tmp_pat
     config = tmp_path / "tauri.conf.json"
     workflow = tmp_path / "release.yml"
     _write_config(config)
-    workflow.write_text("name: Release\n")
+    _write_workflow(workflow)
     _write_versions(tmp_path, "0.1.1")
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(preflight.shutil, "which", lambda name: "/usr/bin/gh" if name == "gh" else None)
@@ -80,7 +92,7 @@ def test_github_release_preflight_blocks_missing_actions_secrets(tmp_path, monke
     config = tmp_path / "tauri.conf.json"
     workflow = tmp_path / "release.yml"
     _write_config(config)
-    workflow.write_text("name: Release\n")
+    _write_workflow(workflow)
     monkeypatch.setattr(preflight.shutil, "which", lambda name: "/usr/bin/gh" if name == "gh" else None)
 
     def fake_run(command, **_kwargs):
@@ -106,7 +118,7 @@ def test_github_release_preflight_blocks_wrong_updater_repo(tmp_path, monkeypatc
     config = tmp_path / "tauri.conf.json"
     workflow = tmp_path / "release.yml"
     _write_config(config, repo="someone/else")
-    workflow.write_text("name: Release\n")
+    _write_workflow(workflow)
     monkeypatch.setattr(preflight.shutil, "which", lambda name: "/usr/bin/gh" if name == "gh" else None)
 
     def fake_run(command, **_kwargs):
@@ -131,7 +143,7 @@ def test_github_release_preflight_blocks_existing_candidate_tag(tmp_path, monkey
     config = tmp_path / "tauri.conf.json"
     workflow = tmp_path / "release.yml"
     _write_config(config)
-    workflow.write_text("name: Release\n")
+    _write_workflow(workflow)
     _write_versions(tmp_path, "0.1.1")
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(preflight.shutil, "which", lambda name: "/usr/bin/gh" if name == "gh" else None)
@@ -162,3 +174,28 @@ def test_github_release_preflight_blocks_existing_candidate_tag(tmp_path, monkey
     assert result["checks"]["candidate_release_absent"] is False
     assert result["checks"]["candidate_git_tag_absent"] is False
     assert any("already exists" in failure for failure in result["failures"])
+
+
+def test_github_release_preflight_blocks_workflow_without_publish_permission(tmp_path, monkeypatch):
+    config = tmp_path / "tauri.conf.json"
+    workflow = tmp_path / "release.yml"
+    _write_config(config)
+    _write_workflow(workflow, contents_write=False)
+    monkeypatch.setattr(preflight.shutil, "which", lambda name: "/usr/bin/gh" if name == "gh" else None)
+
+    def fake_run(command, **_kwargs):
+        if command[:3] == ["gh", "auth", "status"]:
+            return _proc(command, 0)
+        if command[:3] == ["gh", "repo", "view"]:
+            return _proc(command, 0, json.dumps({"nameWithOwner": "johnnyrobot/grader"}))
+        if command[:3] == ["gh", "secret", "list"]:
+            return _proc(command, 0, json.dumps([{"name": name} for name in preflight.REQUIRED_ACTIONS_SECRETS]))
+        if command[:3] == ["gh", "release", "list"]:
+            return _proc(command, 0, json.dumps([]))
+        raise AssertionError(f"unexpected command: {command}")
+
+    result = preflight.collect(config_path=config, workflow_path=workflow, runner=fake_run)
+
+    assert result["status"] == "BLOCKED_GITHUB_RELEASE_PREFLIGHT"
+    assert result["checks"]["release_workflow_publish_permission"] is False
+    assert any("contents=write" in failure for failure in result["failures"])

@@ -79,6 +79,17 @@ def _configured_updater_repos(config: dict[str, Any]) -> list[str]:
     return repos
 
 
+def _workflow_has_publish_permission(path: Path) -> bool:
+    if not path.exists():
+        return False
+    text = path.read_text()
+    return (
+        "softprops/action-gh-release" in text
+        and "permissions:" in text
+        and "contents: write" in text
+    )
+
+
 def _gh_available() -> bool:
     return shutil.which("gh") is not None
 
@@ -149,6 +160,7 @@ def collect(
         "gh_authenticated": None,
         "repo_access": None,
         "release_workflow_present": None,
+        "release_workflow_publish_permission": None,
         "updater_endpoint_matches_repo": None,
         "required_actions_secrets_present": None,
         "candidate_release_absent": None,
@@ -164,6 +176,11 @@ def collect(
     checks["release_workflow_present"] = workflow_path.exists()
     if not workflow_path.exists():
         failures.append(f"release workflow is missing at {workflow_path}")
+    checks["release_workflow_publish_permission"] = _workflow_has_publish_permission(workflow_path)
+    if workflow_path.exists() and checks["release_workflow_publish_permission"] is not True:
+        failures.append(
+            "release workflow must include permissions.contents=write and GitHub Release publishing"
+        )
 
     try:
         config = _load_config(config_path)
