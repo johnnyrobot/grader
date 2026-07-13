@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { QueueScreen } from "./Queue";
 import type { QueueData } from "../api";
+import { checkDesktopUpdate, installPendingUpdate } from "../updater";
 
 vi.mock("../api", async () => {
   const actual = await vi.importActual<typeof import("../api")>("../api");
@@ -12,6 +13,11 @@ vi.mock("../api", async () => {
     gradeBatch: vi.fn().mockResolvedValue({ job_id: "job-1", total: 3 }),
   };
 });
+
+vi.mock("../updater", () => ({
+  checkDesktopUpdate: vi.fn().mockResolvedValue(null),
+  installPendingUpdate: vi.fn().mockResolvedValue(undefined),
+}));
 
 const queue: QueueData = {
   stats: {
@@ -113,5 +119,21 @@ describe("QueueScreen", () => {
     expect(screen.getByRole("alert")).toHaveTextContent("Local engine needs attention");
     await user.click(screen.getByRole("button", { name: "Restart local engine" }));
     expect(props.onRecoverEngine).toHaveBeenCalled();
+  });
+
+  it("offers a keyboard reachable install action when the signed updater finds a new version", async () => {
+    vi.mocked(checkDesktopUpdate).mockResolvedValueOnce({
+      version: "0.1.1",
+      currentVersion: "0.1.0",
+      notes: "Patch",
+    });
+    const user = userEvent.setup();
+    renderQueue();
+
+    const install = await screen.findByRole("button", { name: "Install update and restart" });
+    await user.click(install);
+
+    expect(installPendingUpdate).toHaveBeenCalled();
+    expect(screen.getByText(/Preparing the signed update/i)).toBeInTheDocument();
   });
 });

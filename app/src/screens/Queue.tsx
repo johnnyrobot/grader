@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { QueueData, GradeItem, gradeBatch, checkUpdates } from "../api";
 import { AppShell } from "../components/AppShell";
+import { checkDesktopUpdate, installPendingUpdate } from "../updater";
 
 interface Props {
   data: QueueData | null;
@@ -51,14 +52,43 @@ export function QueueScreen({ data, onSelectItem, assignmentId, setAssignmentId,
   const [grading, setGrading] = useState(false);
   const [gradeMsg, setGradeMsg] = useState("");
   const [updateVersion, setUpdateVersion] = useState("");
+  const [updateStatus, setUpdateStatus] = useState("");
+  const [installingUpdate, setInstallingUpdate] = useState(false);
   const stats = data?.stats;
   const items = data?.items || [];
 
   useEffect(() => {
-    checkUpdates().then(update => {
-      if (update.update_available) setUpdateVersion(update.latest_version || "new version");
+    checkDesktopUpdate().then(update => {
+      if (update) {
+        setUpdateVersion(update.version);
+        return undefined;
+      }
+      return checkUpdates().then(update => {
+        if (update.update_available) setUpdateVersion(update.latest_version || "new version");
+      });
     }).catch(() => {});
   }, []);
+
+  const handleInstallUpdate = async () => {
+    setInstallingUpdate(true);
+    setUpdateStatus("Preparing the signed update…");
+    try {
+      await installPendingUpdate(progress => {
+        if (progress.phase === "started") {
+          setUpdateStatus("Downloading the signed update…");
+        } else if (progress.phase === "progress") {
+          const mb = progress.downloaded / 1024 / 1024;
+          const total = progress.contentLength ? ` of ${(progress.contentLength / 1024 / 1024).toFixed(1)} MB` : "";
+          setUpdateStatus(`Downloaded ${mb.toFixed(1)} MB${total}.`);
+        } else {
+          setUpdateStatus("Installing update and restarting Grader…");
+        }
+      });
+    } catch (error) {
+      setUpdateStatus(`Update could not be installed. ${(error as Error).message}`);
+      setInstallingUpdate(false);
+    }
+  };
 
   const handleGrade = async () => {
     setGrading(true);
@@ -134,7 +164,14 @@ export function QueueScreen({ data, onSelectItem, assignmentId, setAssignmentId,
       {(gradeMsg || updateVersion) && (
         <div className="notice-row" role="status" aria-live="polite">
           {gradeMsg && <p>{gradeMsg}</p>}
-          {updateVersion && <p>Grader {updateVersion} is available when you are ready to update.</p>}
+          {updateVersion && (
+            <>
+              <p>Grader {updateVersion} is available when you are ready to update. {updateStatus}</p>
+              <button className="button-secondary" type="button" onClick={handleInstallUpdate} disabled={installingUpdate}>
+                {installingUpdate ? "Installing update…" : "Install update and restart"}
+              </button>
+            </>
+          )}
         </div>
       )}
 
