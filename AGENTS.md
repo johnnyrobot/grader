@@ -211,9 +211,10 @@ uv run python scripts/release_readiness.py --profile public_beta --expected-vers
   at QWK 0.845 against a 0.623 human-ceiling-adjusted floor.
 - **P2 in progress:** the complete light-first neuroinclusive UI is implemented across onboarding,
   queue, review, settings, and model management. Twelve component tests and four mocked Playwright
-  E2E tests pass, including a 16-screen visual sweep with 167 visible controls, automated
-  accessibility checks, local-engine recovery alert coverage, and 200% text scaling. Still validate
-  a clean-machine `.app`, crash recovery, real first-run model setup, and packaging.
+  E2E tests pass. `scripts/frontend_evidence.py` now fail-closes unless the visual sweep records
+  all 16 required screens, screenshots, 47 required instructor controls, 167 visible controls,
+  automated accessibility checks, local-engine recovery alert coverage, and 200% text scaling. Still
+  validate a clean-machine `.app`, crash recovery, real first-run model setup, and packaging.
 - **P3 in progress:** Canvas client/API/offline queue exist and the guarded live app-level path
   passed for score/comment: import → targeted grade → teacher override/approval → post → Progress
   completed → read-back on `canvas.johnnyrobot.ai` course `106`, assignment `2841`, Canvas user `8`.
@@ -232,7 +233,7 @@ uv run python scripts/release_readiness.py --profile public_beta --expected-vers
   `scripts/signing_doctor.py` to refresh the fail-closed credential diagnostic before release
   signing. Teacher-local validation still requires authorized instructor data, and clean-machine
   behavioral checks still need release validation.
-- **Coverage:** Python collects 118 cases (106 pass, 12 skip). Frontend has 12 passing component
+- **Coverage:** Python collects 128 cases (116 pass, 12 skip). Frontend has 12 passing component
   tests plus four passing Playwright E2E tests.
 - **Public beta verdict:** not ready for unattended public testing with real student work. Limit
   current use to a developer-assisted alpha with synthetic or institution-approved test data.

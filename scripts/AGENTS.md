@@ -24,7 +24,7 @@ scripts/
 |------|----------|-------|
 | Fix OOM on 16 GB machines | `make_models.sh` | Caps `num_ctx=16384`, sets `temperature=0` |
 | Build public-proxy evidence | `build_public_proxy.py` | Writes Mohler ASAG artifacts under `artifacts/public_proxy/`; optional local grading |
-| Collect frontend release evidence | `frontend_evidence.py` | Runs component tests, production build, managed Playwright E2E, and reads visual-sweep metadata |
+| Collect frontend release evidence | `frontend_evidence.py` | Runs component tests, production build, managed Playwright E2E, and validates visual-sweep screenshots/control coverage |
 | Diagnose signing credentials | `signing_doctor.py` | Writes `artifacts/release-evidence/signing.json`; probes Developer ID private-key access and notarytool profile before signing |
 | Generate updater manifest | `generate_appcast.py` | Requires `--signing-key` for release manifests; use `--allow-unsigned` only for local smoke fixtures |
 | Validate updater evidence | `updater_evidence.py` | Requires updater config, signed latest.json, and optional artifact filename/hash checks |
@@ -40,8 +40,10 @@ scripts/
   `--grade-perturbations` is required before fairness can pass. Use `--limit` for short pilot
   scoring runs and `--anchor-exemplars-per-source ... --anchor-k ...` only for diagnostic anchored
   comparisons.
-- **`frontend_evidence.py`**: starts and stops its own Vite dev server for Playwright. If it fails
-  on port 5173, check for a stale dev server before rerunning.
+- **`frontend_evidence.py`**: starts and stops its own Vite dev server for Playwright. It removes
+  stale visual-sweep JSON before E2E and fail-closes unless the new sweep has every required
+  instructor screen, screenshot, and core control label. If it fails on port 5173, check for a stale
+  dev server before rerunning.
 - **`updater_evidence.py`**: blocks public beta when `latest.json` is missing or any platform
   signature is empty. It does not replace the clean-machine N→N+1 update test.
 - **`generate_appcast.py`**: despite the historical name, this creates Tauri `latest.json`

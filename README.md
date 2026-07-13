@@ -64,11 +64,12 @@ beta with real student work.
 
 Confirmed in the current checkout:
 
-- Python tests: 106 passed, 12 intentionally skipped.
+- Python tests: 116 passed, 12 intentionally skipped.
 - Frontend tests: 12 passed; TypeScript/Vite production build and Rust `cargo check` pass.
 - The complete mocked desktop workflow passes in Playwright across onboarding, queue, review,
-  settings, model management, and local-engine recovery. The visual sweep records 16 screens, 167
-  visible controls, screenshot evidence, 200% text scaling, and automated accessibility scans.
+  settings, model management, and local-engine recovery. The visual sweep now fail-closes unless it
+  records all 16 required screens, screenshots, 47 required instructor controls, 167 visible
+  controls, 200% text scaling, and automated accessibility scans.
 - The privacy gate passes in isolation: 3/3 captured connections were allowlisted.
 - The performance gate passes: 37.8 seconds for a 1,500-word essay, with a projected 30-item
   batch of 1,134 seconds against a 2,700-second budget.
