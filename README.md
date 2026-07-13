@@ -64,12 +64,15 @@ beta with real student work.
 
 Confirmed in the current checkout:
 
-- Python tests: 121 passed, 12 intentionally skipped.
+- Python tests: 130 passed, 12 intentionally skipped.
 - Frontend tests: 13 passed; TypeScript/Vite production build and Rust `cargo check` pass.
 - The complete mocked desktop workflow passes in Playwright across onboarding, queue, review,
   settings, model management, and local-engine recovery. The visual sweep now fail-closes unless it
   records all 16 required screens, screenshots, 47 required instructor controls, 167 visible
   controls, 200% text scaling, and automated accessibility scans.
+- Signed-app Computer Use sweeps now have their own verifier:
+  `scripts/computer_use_sweep_evidence.py` validates `.ax.txt`/screenshot capture pairs and
+  fail-closes on stale review states such as approved + “Teacher changes not saved yet.”
 - The privacy gate passes in isolation: 3/3 captured connections were allowlisted.
 - The performance gate passes: 37.8 seconds for a 1,500-word essay, with a projected 30-item
   batch of 1,134 seconds against a 2,700-second budget.
@@ -97,7 +100,8 @@ Public-beta blockers:
    source commit, then validate the signed/notarized DMG on a clean supported Mac, including first-run
    model setup, crash recovery, keyboard-only review, Computer Use instructor sweep, and updater
    behavior. The latest local signed-app Computer Use sweep found the existing DMG stale: after review
-   approval it still displayed both the approved message and "Teacher changes not saved yet."
+   approval it still displayed both the approved message and "Teacher changes not saved yet"; the
+   sweep verifier now fails that capture set.
 4. Keep teacher-local validation separate until an instructor supplies authorized historical grading.
 5. Complete a supervised private pilot before opening enrollment publicly.
 
@@ -154,6 +158,7 @@ uv run python scripts/updater_evidence.py --manifest latest.json --artifact /pat
 uv run python scripts/live_canvas_e2e.py --dry-run
 uv run python scripts/clean_machine_evidence.py --print-manual-runbook > clean-machine-runbook.md
 uv run python scripts/clean_machine_evidence.py --print-manual-template > clean-machine-manual-evidence.json
+uv run python scripts/computer_use_sweep_evidence.py --capture-dir /path/to/computer-use-captures --out /path/to/evidence-root/computer_use_instructor_sweep.json
 uv run python scripts/clean_machine_evidence.py --app /Applications/Grader.app --dmg /path/to/Grader.dmg --updater-manifest /path/to/latest.json --expected-version 0.1.0 --manual-evidence clean-machine-manual-evidence.json --evidence-root /path/to/screenshots-and-logs --out artifacts/release-evidence/clean-machine.json
 uv run python scripts/release_readiness.py --profile public_beta --expected-version 0.1.0 --public-proxy-dir artifacts/public_proxy/mohler_asag_diverse_anchored_pilot --citation-artifact artifacts/citation-results.json --canvas-artifact artifacts/release-evidence/canvas-live.json --privacy-artifact artifacts/release-evidence/privacy.json --performance-artifact artifacts/release-evidence/performance.json --frontend-artifact artifacts/release-evidence/frontend.json --rust-artifact artifacts/release-evidence/rust.json --updater-artifact artifacts/release-evidence/updater.json --clean-machine-artifact artifacts/release-evidence/clean-machine-local-current.json --out artifacts/release-readiness
 ```

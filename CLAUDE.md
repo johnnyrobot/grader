@@ -86,7 +86,7 @@ As of 2026-07-13, Grader is suitable only for a developer-assisted alpha using s
 institution-approved test data. It is not ready for an unattended public beta with real student
 work.
 
-- Python: 90 passed, 12 skipped.
+- Python: 130 passed, 12 skipped.
 - Frontend: 13 component tests and four Playwright E2E tests pass, including a 16-screen visual
   sweep with 167 visible controls recorded.
 - Privacy: PASS in isolation, 3/3 captured connections allowlisted.
@@ -105,9 +105,11 @@ work.
   `scripts/clean_machine_evidence.py` now fail closed when the supplied `latest.json`, DMG, or app
   predate the current git commit. The latest local signed-app Computer Use sweep inspected 20 packaged
   app states and found the existing DMG stale: after review approval it still displayed both the
-  approved message and "Teacher changes not saved yet." Fresh local signing/notarization is blocked
-  because `codesign` returns `errSecInternalComponent` and notarytool profile `grader` is unavailable;
-  run `uv run python scripts/signing_doctor.py --print-repair-runbook` for local-only recovery steps.
+  approved message and "Teacher changes not saved yet." `scripts/computer_use_sweep_evidence.py` now
+  turns signed-app Computer Use captures into PASS/FAIL evidence and fails that stale capture set.
+  Fresh local signing/notarization is blocked because `codesign` returns `errSecInternalComponent`
+  and notarytool profile `grader` is unavailable; run
+  `uv run python scripts/signing_doctor.py --print-repair-runbook` for local-only recovery steps.
   After credentials are restored, rebuild/re-sign/notarize from current source, then rerun
   clean-machine first-run models, crash recovery, keyboard-only review, Computer Use instructor
   sweep, and updater path with structured manual evidence notes plus screenshot/log paths.

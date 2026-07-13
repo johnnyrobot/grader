@@ -188,6 +188,50 @@ def test_validate_manual_evidence_rejects_missing_tester_and_timestamp(tmp_path)
     assert details["first_run_models"]["performed_at"] == ""
 
 
+def test_validate_manual_evidence_requires_passing_computer_use_sweep_json(tmp_path):
+    sweep = tmp_path / "computer_use_instructor_sweep.json"
+    sweep.write_text('{"status":"FAIL_COMPUTER_USE_SWEEP"}')
+    screenshot = tmp_path / "computer_use_instructor_sweep.png"
+    screenshot.write_text("fake image bytes")
+    evidence = {
+        "computer_use_instructor_sweep": {
+            "passed": True,
+            "performed_at": "2026-07-13T12:00:00Z",
+            "tester": "QA",
+            "notes": "Computer Use sweep completed.",
+            "evidence_files": ["computer_use_instructor_sweep.json", "computer_use_instructor_sweep.png"],
+        }
+    }
+
+    passed, details = validate_manual_evidence(evidence, evidence_root=tmp_path)
+
+    assert "computer_use_instructor_sweep" not in passed
+    assert details["computer_use_instructor_sweep"]["ok"] is False
+    assert details["computer_use_instructor_sweep"]["computer_use_sweep_status"] == "FAIL_COMPUTER_USE_SWEEP"
+
+
+def test_validate_manual_evidence_accepts_passing_computer_use_sweep_json(tmp_path):
+    sweep = tmp_path / "computer_use_instructor_sweep.json"
+    sweep.write_text('{"status":"PASS"}')
+    screenshot = tmp_path / "computer_use_instructor_sweep.png"
+    screenshot.write_text("fake image bytes")
+    evidence = {
+        "computer_use_instructor_sweep": {
+            "passed": True,
+            "performed_at": "2026-07-13T12:00:00Z",
+            "tester": "QA",
+            "notes": "Computer Use sweep completed.",
+            "evidence_files": ["computer_use_instructor_sweep.json", "computer_use_instructor_sweep.png"],
+        }
+    }
+
+    passed, details = validate_manual_evidence(evidence, evidence_root=tmp_path)
+
+    assert "computer_use_instructor_sweep" in passed
+    assert details["computer_use_instructor_sweep"]["ok"] is True
+    assert details["computer_use_instructor_sweep"]["computer_use_sweep_status"] == "PASS"
+
+
 def test_manual_evidence_runbook_includes_every_manual_check():
     runbook = manual_evidence_runbook()
 

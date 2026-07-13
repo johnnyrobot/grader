@@ -15,6 +15,7 @@ scripts/
 ├── signing_doctor.py           # diagnose Developer ID private-key and notarytool readiness
 ├── generate_appcast.py         # generate signed Tauri updater latest.json manifests
 ├── updater_evidence.py         # validate updater config/latest.json/signature/artifact
+├── computer_use_sweep_evidence.py # validate signed-app Computer Use AX/screenshot captures
 ├── clean_machine_evidence.py   # collect signed/notarized clean-machine release evidence
 └── seed_canvas_sandbox.py      # Canvas round-trip seeder/verifier (dry-run by default)
 ```
@@ -30,6 +31,7 @@ scripts/
 | Diagnose signing credentials | `signing_doctor.py` | Writes `artifacts/release-evidence/signing.json`; probes Developer ID private-key access and notarytool profile before signing; `--print-repair-runbook` emits secret-free local recovery steps |
 | Generate updater manifest | `generate_appcast.py` | Requires `--signing-key` for release manifests; use `--allow-unsigned` only for local smoke fixtures |
 | Validate updater evidence | `updater_evidence.py` | Requires updater config, signed latest.json, artifact filename/hash/source-freshness checks, and local artifact signature/notarization checks |
+| Validate signed-app Computer Use sweep | `computer_use_sweep_evidence.py` | Produces PASS/FAIL JSON from `.ax.txt` + `.png` captures and fails stale approved/unsaved review states |
 | Clean-machine release evidence | `clean_machine_evidence.py` | Writes `artifacts/release-evidence/clean-machine.json`; PASS requires signing, app/DMG/latest.json provenance, current-source freshness, plus structured manual evidence for first-run/crash/keyboard/Computer Use/updater checks |
 | Seed Canvas sandbox | `seed_canvas_sandbox.py` | `--apply --students 6` to create + exercise |
 | Tear down sandbox | `seed_canvas_sandbox.py` | `--teardown --course-id 106 --apply` |
@@ -63,6 +65,11 @@ scripts/
   runtime/updater config. Use `--print-repair-runbook` to generate local-only recovery commands for
   keychain private-key ACLs and notarytool profile setup; do not commit filled credentials or paste
   secrets into chat. Use `--skip-notary` only for explicit sign-only testing.
+- **`computer_use_sweep_evidence.py`**: run after a Computer Use sweep of the signed app:
+  `uv run python scripts/computer_use_sweep_evidence.py --capture-dir <captures> --out <evidence-root>/computer_use_instructor_sweep.json`.
+  It requires accessibility-tree/screenshot pairs, checks core instructor screens, and fail-closes
+  on stale review states such as approved + "Teacher changes not saved yet" or "Score updated from N
+  to N". Include the PASS JSON in clean-machine manual evidence for `computer_use_instructor_sweep`.
 - **`seed_canvas_sandbox.py`**: dry-run by default. `--apply` to write. Refuses courses without `ZZ-GRADER-TEST` marker.
 - **`clean_machine_evidence.py`**: cannot prove a clean-machine pass by itself. Generate the
   tester runbook with `--print-manual-runbook` and the evidence template with
@@ -73,8 +80,9 @@ scripts/
   git commit. If the loose build `.app` signature is stale, the script mounts the supplied DMG and
   verifies the bundled `.app` for the app codesign/spctl checks. The template includes
   `computer_use_instructor_sweep`; this is the required signed-app Computer Use inspection and
-  complements the automated Playwright visual sweep. Manual flags without evidence are legacy-only
-  and should not be used for release claims.
+  complements the automated Playwright visual sweep. That manual check requires a PASS JSON artifact
+  from `computer_use_sweep_evidence.py`. Manual flags without evidence are legacy-only and should not
+  be used for release claims.
 - **`release_readiness.py`**: pass `--expected-version ...` for release runs. The script defaults
   to `app/src-tauri/tauri.conf.json`, records artifact path/mtime/SHA-256 metadata, and rejects PASS
   updater or clean-machine artifacts whose recorded version does not match the evaluated app. Its

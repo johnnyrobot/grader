@@ -39,6 +39,7 @@ grader/
 │   ├── signing_doctor.py        # signing/notary credential preflight + evidence
 │   ├── frontend_evidence.py     # frontend component/build/E2E/visual-sweep artifact
 │   ├── updater_evidence.py      # updater manifest/signature/artifact evidence
+│   ├── computer_use_sweep_evidence.py # validates signed-app Computer Use captures
 │   └── generate_appcast.py      # Tauri updater manifest generator
 ├── docs/                        # handoff, product/spec, FERPA, rollout, phases P0-P5, research
 ├── .github/workflows/           # ship gates and tag-triggered release workflow
@@ -199,6 +200,7 @@ uv run python scripts/updater_evidence.py --manifest latest.json --artifact /pat
 uv run python scripts/live_canvas_e2e.py --dry-run
 uv run python scripts/clean_machine_evidence.py --print-manual-runbook > clean-machine-runbook.md
 uv run python scripts/clean_machine_evidence.py --print-manual-template > clean-machine-manual-evidence.json
+uv run python scripts/computer_use_sweep_evidence.py --capture-dir /path/to/computer-use-captures --out /path/to/evidence-root/computer_use_instructor_sweep.json
 uv run python scripts/clean_machine_evidence.py --app /Applications/Grader.app --dmg /path/to/Grader.dmg --updater-manifest /path/to/latest.json --expected-version 0.1.0 --manual-evidence clean-machine-manual-evidence.json --evidence-root /path/to/screenshots-and-logs --out artifacts/release-evidence/clean-machine.json
 uv run python scripts/release_readiness.py --profile public_beta --expected-version 0.1.0 --public-proxy-dir artifacts/public_proxy/mohler_asag_diverse_anchored_pilot --citation-artifact artifacts/citation-results.json --canvas-artifact artifacts/release-evidence/canvas-live.json --privacy-artifact artifacts/release-evidence/privacy.json --performance-artifact artifacts/release-evidence/performance.json --frontend-artifact artifacts/release-evidence/frontend.json --rust-artifact artifacts/release-evidence/rust.json --updater-artifact artifacts/release-evidence/updater.json --clean-machine-artifact artifacts/release-evidence/clean-machine-local-current.json --out artifacts/release-readiness
 ```
@@ -231,14 +233,15 @@ uv run python scripts/release_readiness.py --profile public_beta --expected-vers
   artifact passes quality at QWK 0.845 and passes fairness across all five perturbation families.
   Updater/DMG/app evidence now fails closed when artifacts predate the current git commit; the latest
   local signed-app Computer Use sweep found the existing DMG stale because review approval still showed
-  both an approved state and "Teacher changes not saved yet." Fresh local signing/notarization is
-  currently blocked: `codesign` returns `errSecInternalComponent` and notarytool profile `grader` is
-  unavailable; run `scripts/signing_doctor.py` to refresh the fail-closed credential diagnostic before
-  release signing, or `scripts/signing_doctor.py --print-repair-runbook` for local-only recovery
-  commands. The release-readiness JSON/Markdown now includes an end-to-end public-beta matrix that
-  maps requirements to evidence. Teacher-local validation still requires authorized instructor data,
-  and clean-machine behavioral checks still need release validation.
-- **Coverage:** Python collects 133 cases (121 pass, 12 skip). Frontend has 13 passing component
+  both an approved state and "Teacher changes not saved yet"; `scripts/computer_use_sweep_evidence.py`
+  now fails that capture set and clean-machine evidence requires a PASS sweep JSON. Fresh local
+  signing/notarization is currently blocked: `codesign` returns `errSecInternalComponent` and notarytool
+  profile `grader` is unavailable; run `scripts/signing_doctor.py` to refresh the fail-closed
+  credential diagnostic before release signing, or `scripts/signing_doctor.py --print-repair-runbook`
+  for local-only recovery commands. The release-readiness JSON/Markdown now includes an end-to-end
+  public-beta matrix that maps requirements to evidence. Teacher-local validation still requires
+  authorized instructor data, and clean-machine behavioral checks still need release validation.
+- **Coverage:** Python collects 142 cases (130 pass, 12 skip). Frontend has 13 passing component
   tests plus four passing Playwright E2E tests.
 - **Public beta verdict:** not ready for unattended public testing with real student work. Limit
   current use to a developer-assisted alpha with synthetic or institution-approved test data.
