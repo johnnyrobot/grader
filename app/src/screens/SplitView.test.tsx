@@ -89,4 +89,23 @@ describe("SplitView", () => {
     expect(screen.queryByText("Teacher changes not saved yet.")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Approve AI draft" })).toHaveTextContent("Approved");
   });
+
+  it("treats numeric string totals as unchanged after a feedback-only approval", async () => {
+    vi.mocked(overrideGrade).mockResolvedValueOnce({
+      ai_total: "7",
+      teacher_total: "7",
+      refinement_proposals: [],
+    });
+    const user = userEvent.setup();
+    render(<SplitView item={item} onBack={vi.fn()} />);
+
+    const feedback = screen.getByRole("textbox", { name: "Feedback for Student 1042" });
+    await user.clear(feedback);
+    await user.type(feedback, "Feedback-only edit that should not report a score change.");
+    await user.click(screen.getByRole("button", { name: "Save changes and approve" }));
+
+    expect(await screen.findByText("Your changes are approved. Feedback updated; score remains 7.")).toBeInTheDocument();
+    expect(screen.queryByText("Score updated from 7 to 7")).not.toBeInTheDocument();
+    expect(screen.queryByText("Teacher changes not saved yet.")).not.toBeInTheDocument();
+  });
 });

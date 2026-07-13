@@ -26,6 +26,11 @@ function total(scores: Record<string, number>) {
   return Object.values(scores).reduce((sum, score) => sum + score, 0);
 }
 
+function comparableTotal(value: unknown) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : value;
+}
+
 export function SplitView({ item, onBack }: Props) {
   const initialScores = item.teacher_scores || item.ai_scores || {};
   const initialFeedback = item.teacher_feedback || item.ai_feedback || "";
@@ -73,12 +78,14 @@ export function SplitView({ item, onBack }: Props) {
     setMessage("");
     try {
       const result = await overrideGrade(item.id, scores, feedback);
+      const aiTotal = comparableTotal(result.ai_total);
+      const teacherTotal = comparableTotal(result.teacher_total);
       setApproved(true);
-      setSavedScores(scores);
+      setSavedScores({ ...scores });
       setSavedFeedback(feedback);
       if (result.refinement_proposals?.length > 0) {
         setMessage(`Your changes are approved. ${result.refinement_proposals.length} rubric refinement proposal${result.refinement_proposals.length === 1 ? " is" : "s are"} ready to review.`);
-      } else if (result.ai_total === result.teacher_total) {
+      } else if (aiTotal === teacherTotal) {
         setMessage(`Your changes are approved. Feedback updated; score remains ${result.teacher_total}.`);
       } else {
         setMessage(`Your changes are approved. Score updated from ${result.ai_total} to ${result.teacher_total}.`);
