@@ -15,8 +15,12 @@ def test_release_workflow_builds_tauri_bundle_before_signing():
 def test_release_workflow_passes_signing_script_env_names():
     text = WORKFLOW.read_text()
 
+    assert "APPLE_CERTIFICATE_P12_BASE64: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}" in text
+    assert "APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}" in text
+    assert "security import \"$CERT_PATH\"" in text
+    assert "security set-key-partition-list" in text
     assert "SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}" in text
-    assert "KEYCHAIN_PROFILE: ${{ secrets.APPLE_KEYCHAIN_PROFILE }}" in text
+    assert "KEYCHAIN_PROFILE: grader" in text
     assert "APPLE_SIGNING_IDENTITY:" not in text
     assert "APPLE_KEYCHAIN_PROFILE:" not in text
     assert 'store-credentials "$KEYCHAIN_PROFILE"' in text

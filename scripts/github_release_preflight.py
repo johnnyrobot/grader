@@ -31,8 +31,9 @@ DEFAULT_CONFIG = Path("app/src-tauri/tauri.conf.json")
 DEFAULT_WORKFLOW = Path(".github/workflows/release.yml")
 DEFAULT_OUT = Path("artifacts/release-evidence/github-release-preflight-current.json")
 REQUIRED_ACTIONS_SECRETS = (
+    "APPLE_CERTIFICATE_P12_BASE64",
+    "APPLE_CERTIFICATE_PASSWORD",
     "APPLE_SIGNING_IDENTITY",
-    "APPLE_KEYCHAIN_PROFILE",
     "APPLE_ID",
     "APPLE_APP_SPECIFIC_PASSWORD",
     "APPLE_TEAM_ID",

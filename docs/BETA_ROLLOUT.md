@@ -28,6 +28,8 @@
 - [ ] Models pulled: `grader-text:8b`, `nomic-embed-text`
 - [ ] `./scripts/make_models.sh` run (context-capped variants)
 - [ ] Grader.app launches without Gatekeeper warning
+- [ ] GitHub Actions release secrets are configured from a private shell:
+      `uv run python scripts/github_release_secrets.py --print-runbook`
 - [ ] GitHub release publication preflight passes before tagging/publishing N+1:
       `uv run python scripts/github_release_preflight.py --candidate-tag v<N+1>`
 - [ ] Release channel preflight passes:

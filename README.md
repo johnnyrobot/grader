@@ -67,7 +67,7 @@ beta with real student work.
 
 Confirmed in the current checkout:
 
-- Python tests: 161 passed, 12 intentionally skipped.
+- Python tests: 164 passed, 12 intentionally skipped.
 - Frontend tests: 14 passed; TypeScript/Vite production build and Rust `cargo check` pass.
 - The complete mocked desktop workflow passes in Playwright across onboarding, queue, review,
   settings, model management, and local-engine recovery. The visual sweep now fail-closes unless it
@@ -100,7 +100,9 @@ Public-beta blockers:
 2. Keep Canvas rubric-assessment posting disabled until local rubric criteria can be mapped to real
    Canvas criterion IDs; score/comment round-trip is validated, attachment write-back still needs
    separate evidence.
-3. Add the required GitHub Actions release secrets and require
+3. Add the required GitHub Actions release secrets with
+   `scripts/github_release_secrets.py` in a private shell, including the Developer ID certificate
+   `.p12` export and Tauri updater key, then require
    `scripts/github_release_preflight.py --candidate-tag v<N+1>` to pass before tagging/publishing.
 4. Publish a signed N+1 GitHub updater channel whose `latest.json` advertises reachable signed
    `Grader.dmg` release assets, then validate the updater N→N+1 path on a clean supported Mac
@@ -161,6 +163,8 @@ uv run python scripts/dev_mock_engine.py  # optional: safe synthetic backend for
 uv run python scripts/signing_doctor.py --out artifacts/release-evidence/signing.json --no-fail
 uv run python scripts/signing_doctor.py --print-repair-runbook > signing-repair-runbook.md  # local-only recovery steps if the doctor blocks
 uv run python scripts/release_version_guard.py --tag v0.1.0 --out artifacts/release-evidence/release-version.json
+uv run python scripts/github_release_secrets.py --print-runbook > github-release-secrets-runbook.md
+uv run python scripts/github_release_secrets.py --out artifacts/release-evidence/github-release-secrets-current.json  # dry-run inventory; use --apply only in a private release shell
 uv run python scripts/github_release_preflight.py --candidate-tag v0.1.1 --out artifacts/release-evidence/github-release-preflight-current.json --no-fail
 export TAURI_SIGNING_PRIVATE_KEY_PASSWORD='<updater-key-password>'  # required for encrypted updater keys
 uv run python scripts/updater_key_doctor.py --signing-key /path/to/tauri-updater-key.pem --out artifacts/release-evidence/updater-key-current.json
@@ -217,8 +221,12 @@ and fails PASS updater or clean-machine artifacts that do not match the evaluate
 `scripts/release_version_guard.py` fails release tags whose app/package metadata still reports a
 different version. The app is still not public-beta ready until GitHub release publication,
 signed-updater-channel, and clean-machine release behavior evidence pass. Use
+`scripts/github_release_secrets.py --print-runbook` to prepare the Developer ID certificate and
+release secrets without exposing values, then use
 `scripts/github_release_preflight.py --candidate-tag v<N+1>` before creating the release tag so
-missing Actions secrets or stale tag/release state are caught without writing to GitHub. Use
+missing Actions secrets or stale tag/release state are caught without writing to GitHub. The GitHub
+release workflow imports the Developer ID `.p12` into a temporary runner keychain before signing; a
+local signing identity name alone is not enough on `macos-latest`. Use
 `scripts/updater_key_doctor.py` to verify the updater key/password before regenerating
 `latest.json`, and use `scripts/updater_channel_preflight.py` after publishing N+1 to confirm the
 live release channel advertises a signed newer, reachable `Grader.dmg` before clean-machine updater

@@ -13,6 +13,7 @@ scripts/
 ├── dev_mock_engine.py          # synthetic loopback engine for safe local UI/Computer Use inspection
 ├── frontend_evidence.py        # collect component/build/E2E/visual-sweep release artifact
 ├── release_version_guard.py    # fail closed when tag/app/package versions drift
+├── github_release_secrets.py   # guarded GitHub Actions release-secret setup
 ├── github_release_preflight.py # read-only GitHub release publication readiness
 ├── signing_doctor.py           # diagnose Developer ID private-key and notarytool readiness
 ├── updater_key_doctor.py       # diagnose Tauri updater private-key/password readiness
@@ -34,6 +35,7 @@ scripts/
 | Inspect UI safely | `dev_mock_engine.py` | Serves synthetic queue/settings/models/rubric responses on loopback for local browser/Computer Use inspection only |
 | Collect frontend release evidence | `frontend_evidence.py` | Runs component tests, production build, managed Playwright E2E, and validates visual-sweep screenshots/control coverage |
 | Guard release version | `release_version_guard.py` | Requires the release tag/version to match Tauri config, Rust crate, frontend package, and Python project before publishing assets |
+| Set GitHub release secrets | `github_release_secrets.py` | Dry-run inventory and explicit `--apply` path for Developer ID certificate, Apple notarization, and Tauri updater secrets; never prints secret values |
 | Preflight GitHub release publication | `github_release_preflight.py` | Read-only check for GitHub repo access, updater endpoint, release workflow, required Actions secrets, and optional N+1 tag/release availability |
 | Diagnose signing credentials | `signing_doctor.py` | Writes `artifacts/release-evidence/signing.json`; probes Developer ID private-key access and notarytool profile before signing; `--print-repair-runbook` emits secret-free local recovery steps |
 | Diagnose updater key | `updater_key_doctor.py` | Writes `artifacts/release-evidence/updater-key-current.json`; signs a tiny temp file to verify the Tauri updater key and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` |
@@ -73,6 +75,12 @@ scripts/
   availability without creating tags, releases, assets, or secrets. A stale inactive GitHub account
   can be a warning if the active account can read the target repo, but missing release secrets block
   public beta.
+- **`github_release_secrets.py`**: use this before the preflight when GitHub Actions secrets are
+  missing. `--print-runbook` emits private-shell setup steps. Dry-run mode writes a secret-free JSON
+  inventory. `--apply` writes available values with `gh secret set` via stdin so values do not appear
+  in command arguments. Required secrets include the Developer ID `.p12` as base64, its password,
+  Apple notarization credentials, signing identity, and the encrypted Tauri updater key/password.
+  Never paste those values into chat or commit generated runbooks containing filled values.
 - **`updater_evidence.py`**: blocks public beta when `latest.json` is missing, any platform
   signature is empty, the manifest does not reference the supplied artifact, the supplied
   manifest/artifact predates the current git commit, or the local artifact fails

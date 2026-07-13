@@ -48,11 +48,14 @@ three you gave 4s"), and it ships zero per-teacher model artifacts. LoRA fine-tu
 ```bash
 cd /Users/laccd/code/grader
 uv run python scripts/updater_channel_preflight.py --current-version 0.1.0 --out artifacts/release-evidence/updater-channel-current.json
+uv run python scripts/github_release_secrets.py --print-runbook > github-release-secrets-runbook.md
 uv run python scripts/github_release_preflight.py --candidate-tag v0.1.1 --out artifacts/release-evidence/github-release-preflight-current.json --no-fail
 ```
 
-Today the GitHub release preflight should return `BLOCKED_GITHUB_RELEASE_PREFLIGHT` until the
-required Actions secrets are configured, and the updater-channel preflight should return
+Today `scripts/github_release_secrets.py` should print a private-shell runbook for configuring the
+Developer ID `.p12`, Apple notarization credentials, and Tauri updater key. The GitHub release
+preflight should return `BLOCKED_GITHUB_RELEASE_PREFLIGHT` until those required Actions secrets are
+configured, and the updater-channel preflight should return
 `BLOCKED_UPDATER_CHANNEL` until a signed N+1 GitHub release publishes `latest.json` and the
 reachable signed `Grader.dmg` asset. After both pass, run the clean-machine in-app `Install update
 and restart` path and record `updater_path` evidence. Do **not** claim public beta readiness until

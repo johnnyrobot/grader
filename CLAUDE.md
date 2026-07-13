@@ -78,6 +78,7 @@ uv run python engine/gates/perf.py --memory-floor 16
 uv run python engine/verify_citations.py --fixtures fixtures/citations/citation_fixtures.json --output artifacts/citation-results.json
 uv run python scripts/live_canvas_e2e.py --dry-run
 uv run python scripts/release_version_guard.py --tag v0.1.0 --out artifacts/release-evidence/release-version.json
+uv run python scripts/github_release_secrets.py --print-runbook > github-release-secrets-runbook.md
 uv run python scripts/github_release_preflight.py --candidate-tag v0.1.1 --out artifacts/release-evidence/github-release-preflight-current.json --no-fail
 uv run python scripts/updater_channel_preflight.py --current-version 0.1.0 --out artifacts/release-evidence/updater-channel-current.json
 uv run python scripts/release_readiness.py --profile public_beta --expected-version 0.1.0 --release-version-artifact artifacts/release-evidence/release-version.json --github-release-artifact artifacts/release-evidence/github-release-preflight-current.json --updater-channel-artifact artifacts/release-evidence/updater-channel-current.json --out artifacts/release-readiness
@@ -89,7 +90,7 @@ As of 2026-07-13, Grader is suitable only for a developer-assisted alpha using s
 institution-approved test data. It is not ready for an unattended public beta with real student
 work.
 
-- Python: 161 passed, 12 skipped.
+- Python: 164 passed, 12 skipped.
 - Frontend: 14 component tests and four Playwright E2E tests pass, including a 16-screen visual
   sweep with 167 visible controls recorded.
 - Privacy: PASS in isolation, 3/3 captured connections allowlisted.
@@ -105,7 +106,8 @@ work.
   completed, score `2`, and one teacher feedback comment read back.
 - Release readiness: local report currently returns `blocked` for three release/update blockers:
   `github_release=BLOCKED_GITHUB_RELEASE_PREFLIGHT` because required GitHub Actions release secrets
-  are missing, `updater_channel=BLOCKED_UPDATER_CHANNEL` because the configured GitHub `latest.json`
+  are missing, including the Developer ID certificate `.p12` export needed by `macos-latest`,
+  `updater_channel=BLOCKED_UPDATER_CHANNEL` because the configured GitHub `latest.json`
   returns HTTP 404, and `clean_machine=BLOCKED_CLEAN_MACHINE_EVIDENCE` because `updater_path` is
   still missing. `scripts/release_version_guard.py`, `scripts/github_release_preflight.py`,
   `scripts/updater_evidence.py`,
@@ -116,8 +118,9 @@ work.
   signed-app Computer Use sweep targets `/Applications/Grader.app` as `com.grader.app` and passes
   with 73 accessibility/screenshot capture pairs. Local keyboard-only review, crash recovery,
   fresh-profile first-run model reconciliation, and the native updater install/restart UI also pass
-  static/build checks. Next add required GitHub Actions release secrets, require GitHub release
-  preflight PASS for the N+1 candidate, publish a signed N+1 release channel, require
+  static/build checks. Next add required GitHub Actions release secrets with
+  `scripts/github_release_secrets.py` in a private shell, require GitHub release preflight PASS for
+  the N+1 candidate, publish a signed N+1 release channel, require
   updater-channel preflight PASS, then collect clean-machine in-app updater-path evidence with
   structured manual evidence notes, screenshot/log paths, and all check-specific assertions set
   true.
