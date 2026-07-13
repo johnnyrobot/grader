@@ -10,6 +10,8 @@ sys.path.insert(0, str(Path(__file__).parents[2]))
 
 import scripts.build_public_proxy as builder
 from scripts.build_public_proxy import (
+    GradeTimeoutError,
+    _call_with_timeout,
     populate_model_scores,
     row_to_example,
     select_mohler_anchor_rows,
@@ -141,6 +143,38 @@ def test_write_public_proxy_records_anchor_settings(tmp_path):
     assert manifest["anchor_exemplars_per_source"] == {"mohler_q01": 4, "mohler_q02": 4}
 
 
+def test_write_public_proxy_force_perturbations_preserves_ai_scores(tmp_path):
+    selected = select_mohler_rows(_fake_mohler(), sources=1, items_per_source=1, seed=7)
+    _, examples_path = write_public_proxy(
+        selected,
+        tmp_path,
+        grade=False,
+        grade_perturbations=False,
+        model="grader-text:8b",
+        seed=7,
+    )
+    example = json.loads(examples_path.read_text().splitlines()[0])
+    example["ai_scores"] = {"correctness": 2.0}
+    example["perturbed_scores"] = {"verbose": {"correctness": 1.0}}
+    example["grade_error"] = "old timeout"
+    examples_path.write_text(json.dumps(example) + "\n")
+
+    _, examples_path = write_public_proxy(
+        selected,
+        tmp_path,
+        grade=True,
+        grade_perturbations=False,
+        model="grader-text:8b",
+        seed=7,
+        force_perturbations=True,
+    )
+
+    refreshed = json.loads(examples_path.read_text().splitlines()[0])
+    assert refreshed["ai_scores"] == {"correctness": 2.0}
+    assert "perturbed_scores" not in refreshed
+    assert "grade_error" not in refreshed
+
+
 def test_populate_model_scores_resumes_partial_perturbations(monkeypatch):
     from gates.bias import PERTURBATIONS
 
@@ -164,3 +198,18 @@ def test_populate_model_scores_resumes_partial_perturbations(monkeypatch):
 
     assert set(example["perturbed_scores"]) == set(PERTURBATIONS)
     assert len(calls) == len(PERTURBATIONS) - 1
+
+
+def test_call_with_timeout_can_be_disabled():
+    assert _call_with_timeout(lambda: "ok", seconds=0, label="unit") == "ok"
+
+
+def test_call_with_timeout_raises_for_slow_call():
+    import time
+
+    try:
+        _call_with_timeout(lambda: time.sleep(2), seconds=1, label="slow unit")
+    except GradeTimeoutError as error:
+        assert "slow unit exceeded 1s" in str(error)
+    else:  # pragma: no cover
+        raise AssertionError("expected timeout")

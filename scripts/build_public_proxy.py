@@ -27,11 +27,12 @@ import argparse
 import hashlib
 import json
 import re
+import signal
 import sys
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable, TypeVar
 
 import pandas as pd
 
@@ -43,6 +44,8 @@ MOHLER_URL = "https://huggingface.co/datasets/nkazi/MohlerASAG/resolve/main/data
 MOHLER_DATASET_URL = "https://huggingface.co/datasets/nkazi/MohlerASAG"
 MOHLER_LOCAL = ROOT / "fixtures" / "corpora" / "mohler_asag.parquet"
 DEFAULT_OUT = ROOT / "artifacts" / "public_proxy" / "mohler_asag"
+DEFAULT_GRADE_TIMEOUT_SECONDS = 120
+T = TypeVar("T")
 
 
 @dataclass(frozen=True)
@@ -278,6 +281,7 @@ def populate_model_scores(
     checkpoint_path: Path | None = None,
     continue_on_error: bool = True,
     limit: int | None = None,
+    grade_timeout_seconds: int = DEFAULT_GRADE_TIMEOUT_SECONDS,
 ) -> None:
     from gates.bias import PERTURBATIONS, perturb
 
@@ -299,14 +303,22 @@ def populate_model_scores(
             example["anchor_ids"] = anchor_ids
         try:
             if not example.get("ai_scores"):
-                example["ai_scores"] = _grade_text(example, example["student_text"], model, anchors=anchors)
+                example["ai_scores"] = _call_with_timeout(
+                    lambda: _grade_text(example, example["student_text"], model, anchors=anchors),
+                    seconds=grade_timeout_seconds,
+                    label=f"{example['id']} original",
+                )
             if grade_perturbations:
                 perturbed_scores = example.setdefault("perturbed_scores", {})
                 for name in PERTURBATIONS:
                     if name in perturbed_scores:
                         continue
                     text = perturb(example["student_text"], name)
-                    perturbed_scores[name] = _grade_text(example, text, model, anchors=anchors)
+                    perturbed_scores[name] = _call_with_timeout(
+                        lambda: _grade_text(example, text, model, anchors=anchors),
+                        seconds=grade_timeout_seconds,
+                        label=f"{example['id']} perturbation={name}",
+                    )
                     if checkpoint_path is not None:
                         _write_examples(checkpoint_path, examples)
             example.pop("grade_error", None)
@@ -325,6 +337,27 @@ def _has_complete_perturbations(example: dict[str, Any], expected_perturbations:
     return isinstance(perturbed_scores, dict) and set(perturbed_scores) == expected_perturbations
 
 
+class GradeTimeoutError(TimeoutError):
+    pass
+
+
+def _call_with_timeout(func: Callable[[], T], *, seconds: int, label: str) -> T:
+    if seconds <= 0:
+        return func()
+
+    def _handle_timeout(_signum: int, _frame: Any) -> None:
+        raise GradeTimeoutError(f"{label} exceeded {seconds}s")
+
+    previous_handler = signal.getsignal(signal.SIGALRM)
+    signal.signal(signal.SIGALRM, _handle_timeout)
+    signal.alarm(seconds)
+    try:
+        return func()
+    finally:
+        signal.alarm(0)
+        signal.signal(signal.SIGALRM, previous_handler)
+
+
 def write_public_proxy(
     selected: list[SelectedMohlerRow],
     out_dir: Path,
@@ -336,7 +369,9 @@ def write_public_proxy(
     anchor_rows_by_source: dict[str, list[SelectedMohlerRow]] | None = None,
     anchor_k: int = 0,
     force_regrade: bool = False,
+    force_perturbations: bool = False,
     limit: int | None = None,
+    grade_timeout_seconds: int = DEFAULT_GRADE_TIMEOUT_SECONDS,
 ) -> tuple[Path, Path]:
     out_dir.mkdir(parents=True, exist_ok=True)
     examples = [row_to_example(row) for row in selected]
@@ -351,6 +386,9 @@ def write_public_proxy(
                     for key in ("ai_scores", "perturbed_scores", "grade_error")
                     if key in existing
                 }}
+                if force_perturbations:
+                    examples[index].pop("perturbed_scores", None)
+                    examples[index].pop("grade_error", None)
 
     by_source: dict[str, list[SelectedMohlerRow]] = {}
     for row in selected:
@@ -386,6 +424,7 @@ def write_public_proxy(
         },
         "anchor_k": anchor_k,
         "force_regrade": force_regrade,
+        "force_perturbations": force_perturbations,
         "sources": [
             {
                 "id": source_id,
@@ -411,6 +450,7 @@ def write_public_proxy(
             anchor_ids_by_source=anchor_ids_by_source,
             checkpoint_path=examples_path,
             limit=limit,
+            grade_timeout_seconds=grade_timeout_seconds,
         )
         manifest["scored_items"] = sum(1 for example in examples if example.get("ai_scores"))
         manifest["grade_errors"] = sum(1 for example in examples if example.get("grade_error"))
@@ -451,7 +491,9 @@ def build_mohler_asag(args: argparse.Namespace) -> None:
         anchor_rows_by_source=anchors,
         anchor_k=args.anchor_k,
         force_regrade=args.force_regrade,
+        force_perturbations=args.force_perturbations,
         limit=args.limit,
+        grade_timeout_seconds=args.grade_timeout_seconds,
     )
     print(f"wrote {manifest_path}")
     print(f"wrote {examples_path}")
@@ -476,7 +518,14 @@ def main() -> None:
     mohler.add_argument("--anchor-exemplars-per-source", type=int, default=0)
     mohler.add_argument("--anchor-k", type=int, default=0)
     mohler.add_argument("--force-regrade", action="store_true", help="Ignore existing ai_scores/perturbed_scores in the output directory")
+    mohler.add_argument("--force-perturbations", action="store_true", help="Regenerate perturbed_scores while preserving existing ai_scores")
     mohler.add_argument("--limit", type=int, default=None, help="Grade at most this many pending examples in this run")
+    mohler.add_argument(
+        "--grade-timeout-seconds",
+        type=int,
+        default=DEFAULT_GRADE_TIMEOUT_SECONDS,
+        help="Per original/perturbation model-call timeout; <=0 disables.",
+    )
     mohler.set_defaults(func=build_mohler_asag)
     args = parser.parse_args()
     args.func(args)

@@ -86,7 +86,7 @@ As of 2026-07-13, Grader is suitable only for a developer-assisted alpha using s
 institution-approved test data. It is not ready for an unattended public beta with real student
 work.
 
-- Python: 76 passed, 12 skipped.
+- Python: 80 passed, 12 skipped.
 - Frontend: 11 component tests and three Playwright E2E tests pass, including a 15-screen visual
   sweep with 153 visible controls recorded.
 - Privacy: PASS in isolation, 3/3 captured connections allowlisted.

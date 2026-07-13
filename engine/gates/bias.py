@@ -103,15 +103,13 @@ PERTURBATIONS = {
     "verbose": {
         "description": "Pad with redundant phrasing",
         "instructions": [
-            ("is", "can be considered to be"),
-            ("are", "are understood to be"),
             ("shows", "serves to clearly demonstrate and show"),
             ("because", "for the reason that can be attributed to the fact that"),
-            ("this", "this particular"),
-            ("the", "the aforementioned"),
             ("important", "of significant importance and relevance"),
             ("however", "however, it must be noted that"),
             ("also", "in addition to this, it should also be noted that"),
+            ("can", "can, in many cases,"),
+            ("typically", "in a typical implementation"),
         ],
     },
     "concise": {
