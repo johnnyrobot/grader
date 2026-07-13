@@ -42,7 +42,7 @@ and signed/notarized clean-machine validation.
 | Engine (grading, calibration, triage) | 🟢 Working |
 | Calibration validation | 🟡 P1 built (anchors +0.135 QWK at k=6) |
 | Desktop app (Tauri + React) | 🟢 Built — light/dark preferences, onboarding, queue, review, settings, model manager |
-| UI verification | 🟢 11 component tests + full Playwright workflow; no serious/critical axe findings |
+| UI verification | 🟢 11 component tests + 3 Playwright E2E tests; no serious/critical axe findings |
 | Canvas integration | 🟢 Live app-level import → teacher override/approve → post → Progress complete → score/comment read-back passed in `ZZ-GRADER-TEST` |
 | Document parsing + handwriting | 🟡 Built — Docling + Apple Vision + grader-vision |
 | Citation verification | 🟡 20/29 correct (69%); retraction check 3/3; accepted only as visibly experimental until accuracy reaches the enabled-mode gate |
@@ -62,7 +62,7 @@ beta with real student work.
 
 Confirmed in the current checkout:
 
-- Python tests: 59 passed, 12 intentionally skipped.
+- Python tests: 65 passed, 12 intentionally skipped.
 - Frontend tests: 11 passed; TypeScript/Vite production build and Rust `cargo check` pass.
 - The complete mocked desktop workflow passes in Playwright across onboarding, queue, review,
   settings, and model management. The visual sweep records 15 screens, 153 visible controls,
@@ -131,11 +131,13 @@ cd app/src-tauri && cargo check                      # desktop Rust boundary
 ## Public beta gate commands
 
 ```bash
-uv run python engine/gates/quality.py --profile public_proxy --public-proxy-dir fixtures/public_proxy
-uv run python engine/gates/bias.py --profile public_proxy --public-proxy-dir fixtures/public_proxy
+uv run python scripts/build_public_proxy.py mohler-asag --out artifacts/public_proxy/mohler_asag --grade
+uv run python scripts/build_public_proxy.py mohler-asag --out artifacts/public_proxy/mohler_asag --grade --grade-perturbations
+uv run python engine/gates/quality.py --profile public_proxy --public-proxy-dir artifacts/public_proxy/mohler_asag
+uv run python engine/gates/bias.py --profile public_proxy --public-proxy-dir artifacts/public_proxy/mohler_asag
 uv run python engine/verify_citations.py --fixtures fixtures/citations/citation_fixtures.json --output artifacts/citation-results.json
 uv run python scripts/live_canvas_e2e.py --dry-run
-uv run python scripts/release_readiness.py --profile public_beta --out artifacts/release-readiness
+uv run python scripts/release_readiness.py --profile public_beta --public-proxy-dir artifacts/public_proxy/mohler_asag --out artifacts/release-readiness
 ```
 
 The committed `fixtures/public_proxy/` set is a tiny mechanics fixture. Real public-proxy datasets
@@ -151,6 +153,8 @@ uv run python engine/gates/bias.py --profile public_proxy --public-proxy-dir fix
 The calibration run uses [Mohler ASAG](https://huggingface.co/datasets/nkazi/MohlerASAG)
 (CC BY 4.0) — 2,273 short answers, each scored by **two independent human graders**, so we can
 report agreement against the *human ceiling* rather than against an arbitrary target.
+The current 40-item Mohler public-proxy scoring run produced 38 scored rows and failed the quality
+gate at QWK 0.272, so it is honest evidence that the app is not public-beta ready yet.
 
 ## Docs
 

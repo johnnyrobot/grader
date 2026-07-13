@@ -56,7 +56,7 @@ Nested guidance exists in `engine/AGENTS.md`, `engine/grader/AGENTS.md`,
 | Grading behavior | `engine/grader/agent.py`, `schema.py`, `triage.py` | `grade()` is the non-raising entry point |
 | Calibration/anchors | `engine/grader/exemplars.py`, `calibration.py`, `overrides.py` | P1 result artifacts live in `engine/results_pointer_*.json` |
 | Desktop UX | `app/src/App.tsx`, `app/src/screens/`, `app/src/index.css` | Light-first semantic theme; queue and split view are the central workflow |
-| Frontend verification | `app/src/**/*.test.tsx`, `app/e2e/neuroinclusive-ui.spec.ts` | 11 component tests plus the full mocked desktop workflow |
+| Frontend verification | `app/src/**/*.test.tsx`, `app/e2e/neuroinclusive-ui.spec.ts` | 11 component tests plus three mocked Playwright E2E tests |
 | Desktop ↔ engine boundary | `app/src/api.ts`, `engine/api.py` | Loopback HTTP on `127.0.0.1:8756` + per-launch bearer token |
 | Engine process lifecycle | `app/src-tauri/src/engine.rs`, `lib.rs`, `scripts/start_engine.sh` | Starts/stops uvicorn with the Tauri app |
 | Canvas round-trip | `engine/grader/canvas.py`, Canvas routes in `engine/api.py` | Live sandbox helper is `scripts/seed_canvas_sandbox.py` |
@@ -181,8 +181,10 @@ python scripts/seed_canvas_sandbox.py --teardown --course-id 106 --apply
 python fixtures/citations/generate_fixtures.py
 
 # Public beta readiness gates
-uv run python engine/gates/quality.py --profile public_proxy --public-proxy-dir fixtures/public_proxy
-uv run python engine/gates/bias.py --profile public_proxy --public-proxy-dir fixtures/public_proxy
+uv run python scripts/build_public_proxy.py mohler-asag --out artifacts/public_proxy/mohler_asag --grade
+uv run python scripts/build_public_proxy.py mohler-asag --out artifacts/public_proxy/mohler_asag --grade --grade-perturbations
+uv run python engine/gates/quality.py --profile public_proxy --public-proxy-dir artifacts/public_proxy/mohler_asag
+uv run python engine/gates/bias.py --profile public_proxy --public-proxy-dir artifacts/public_proxy/mohler_asag
 uv run python engine/gates/quality.py --profile public_proxy --public-proxy-dir fixtures/public_proxy --allow-mechanics-fixture  # smoke only
 uv run python engine/gates/bias.py --profile public_proxy --public-proxy-dir fixtures/public_proxy --allow-mechanics-fixture     # smoke only
 uv run python engine/verify_citations.py --fixtures fixtures/citations/citation_fixtures.json --output artifacts/citation-results.json
@@ -211,10 +213,11 @@ uv run python scripts/release_readiness.py --profile public_beta --out artifacts
   fails the >=90% phase goal, so beta readiness accepts it only as visibly experimental.
 - **P5 in progress:** privacy passes in isolation (3/3 captured connections allowlisted) and the
   performance gate passes at 38.3s per 1,500-word essay. Public-proxy quality/fairness release mode
-  now rejects the tiny committed mechanics fixtures; use `--allow-mechanics-fixture` only for smoke
-  tests until real open human-scored data is available. Teacher-local validation still requires
-  authorized instructor data. Signing/notarization still needs clean-machine release validation.
-- **Coverage:** Python collects 71 cases (59 pass, 12 skip). Frontend has 11 passing component
+  now rejects the tiny committed mechanics fixtures. A local 40-item Mohler ASAG public-proxy run
+  produced 38 scored rows and failed quality at QWK 0.272; fairness still requires perturbation
+  scoring. Teacher-local validation still requires authorized instructor data. Signing/notarization
+  still needs clean-machine release validation.
+- **Coverage:** Python collects 77 cases (65 pass, 12 skip). Frontend has 11 passing component
   tests plus three passing Playwright E2E tests.
 - **Public beta verdict:** not ready for unattended public testing with real student work. Limit
   current use to a developer-assisted alpha with synthetic or institution-approved test data.

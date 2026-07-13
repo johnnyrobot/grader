@@ -67,8 +67,10 @@ cd app/src-tauri && cargo check
 cd app && npm run dev -- --host 127.0.0.1
 cd app && npm run test:e2e
 
-uv run python engine/gates/quality.py --profile public_proxy --public-proxy-dir fixtures/public_proxy
-uv run python engine/gates/bias.py --profile public_proxy --public-proxy-dir fixtures/public_proxy
+uv run python scripts/build_public_proxy.py mohler-asag --out artifacts/public_proxy/mohler_asag --grade
+uv run python scripts/build_public_proxy.py mohler-asag --out artifacts/public_proxy/mohler_asag --grade --grade-perturbations
+uv run python engine/gates/quality.py --profile public_proxy --public-proxy-dir artifacts/public_proxy/mohler_asag
+uv run python engine/gates/bias.py --profile public_proxy --public-proxy-dir artifacts/public_proxy/mohler_asag
 uv run python engine/gates/quality.py --profile public_proxy --public-proxy-dir fixtures/public_proxy --allow-mechanics-fixture  # smoke only
 uv run python engine/gates/bias.py --profile public_proxy --public-proxy-dir fixtures/public_proxy --allow-mechanics-fixture     # smoke only
 uv run python engine/gates/egress.py --capture-duration 15
@@ -84,13 +86,14 @@ As of 2026-07-13, Grader is suitable only for a developer-assisted alpha using s
 institution-approved test data. It is not ready for an unattended public beta with real student
 work.
 
-- Python: 59 passed, 12 skipped.
+- Python: 65 passed, 12 skipped.
 - Frontend: 11 component tests and three Playwright E2E tests pass, including a 15-screen visual
   sweep with 153 visible controls recorded.
 - Privacy: PASS in isolation, 3/3 captured connections allowlisted.
 - Performance: PASS, 38.3 seconds for a 1,500-word essay.
 - Public-proxy quality/fairness: command profiles exist; release mode rejects tiny mechanics
-  fixtures, while `--allow-mechanics-fixture` is available for smoke tests only.
+  fixtures. A local 40-item Mohler run produced 38 scored rows and failed quality at QWK 0.272;
+  fairness still requires perturbation scoring.
 - Teacher-local quality/fairness: unvalidated until authorized instructor data exists.
 - Citations: PASS_EXPERIMENTAL for beta mode, 20/29 correct (69%), 0 false positives, and 3/3
   retractions caught; enabled mode still requires >=90% accuracy.

@@ -366,8 +366,8 @@ def evaluate_public_proxy_fairness(
 
     if not deltas:
         return FairnessResult(
-            "SKIP",
-            "public proxy examples have no perturbed_scores",
+            "FAIL",
+            "public proxy examples have no perturbed_scores; run the builder with --grade-perturbations",
             {"tier": "public_proxy", "items": len(scored)},
         )
 
