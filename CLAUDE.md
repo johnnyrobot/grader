@@ -86,8 +86,8 @@ As of 2026-07-13, Grader is suitable only for a developer-assisted alpha using s
 institution-approved test data. It is not ready for an unattended public beta with real student
 work.
 
-- Python: 81 passed, 12 skipped.
-- Frontend: 11 component tests and three Playwright E2E tests pass, including a 15-screen visual
+- Python: 82 passed, 12 skipped.
+- Frontend: 12 component tests and three Playwright E2E tests pass, including a 15-screen visual
   sweep with 153 visible controls recorded.
 - Privacy: PASS in isolation, 3/3 captured connections allowlisted.
 - Performance: PASS, 38.3 seconds for a 1,500-word essay.
@@ -100,14 +100,16 @@ work.
 - Canvas: guarded live app-level E2E passes on `canvas.johnnyrobot.ai` course `106`, assignment
   `2841`: import, targeted grade, teacher override/approval, post, Progress completed, score/comment
   read-back.
-- Release readiness: local report currently returns `blocked` only for clean-machine behavioral
-  evidence: first-run models, crash recovery, keyboard-only review, and updater path. Local
-  app/DMG signing, notarization, stapling, and Gatekeeper checks pass after the release-script fix.
+- Release readiness: local report currently returns `blocked` for signing credentials and
+  clean-machine evidence. Fresh local signing/notarization is blocked because `codesign` returns
+  `errSecInternalComponent` and notarytool profile `grader` is unavailable; clean-machine
+  first-run models, crash recovery, keyboard-only review, and updater path also remain unverified.
 
-Before public beta: keep citation checks visibly experimental unless accuracy improves, and complete
-a signed/notarized clean-machine install plus first-run, crash-recovery, keyboard-only, and updater
-tests. Canvas rubric-assessment posting remains disabled until local rubric criteria can be mapped
-to real Canvas criterion IDs; attachment write-back still needs separate evidence.
+Before public beta: keep citation checks visibly experimental unless accuracy improves, restore
+signing/notarization credentials, and complete a signed/notarized clean-machine install plus
+first-run, crash-recovery, keyboard-only, and updater tests. Canvas rubric-assessment posting
+remains disabled until local rubric criteria can be mapped to real Canvas criterion IDs; attachment
+write-back still needs separate evidence.
 
 ## Working-Tree Caution
 

@@ -21,6 +21,19 @@ impl EngineState {
 
 static ENGINE: Mutex<Option<EngineState>> = Mutex::new(None);
 
+fn reap_exited_child(state: &mut EngineState) {
+    let Some(child) = state.child.as_mut() else {
+        return;
+    };
+    match child.try_wait() {
+        Ok(Some(_)) | Err(_) => {
+            state.child = None;
+            state.token = None;
+        }
+        Ok(None) => {}
+    }
+}
+
 fn find_engine_dir() -> Option<PathBuf> {
     let home = std::env::var("HOME").ok()?;
     let candidates = [
@@ -62,6 +75,7 @@ pub fn start_engine() -> Result<(String, u16), String> {
         *state = Some(EngineState::new());
     }
     let s = state.as_mut().unwrap();
+    reap_exited_child(s);
 
     if s.child.is_some() {
         return Ok((s.token.clone().unwrap_or_default(), s.port));
@@ -103,8 +117,10 @@ pub fn stop_engine() -> Result<(), String> {
 }
 
 pub fn get_token() -> Option<String> {
-    let state = ENGINE.lock().ok()?;
-    state.as_ref().and_then(|s| s.token.clone())
+    let mut state = ENGINE.lock().ok()?;
+    let s = state.as_mut()?;
+    reap_exited_child(s);
+    s.token.clone()
 }
 
 pub fn get_port() -> u16 {
@@ -113,6 +129,13 @@ pub fn get_port() -> u16 {
 }
 
 pub fn is_running() -> bool {
-    let state = ENGINE.lock().ok();
-    state.as_ref().and_then(|s| s.as_ref()).map(|s| s.child.is_some()).unwrap_or(false)
+    let mut state = ENGINE.lock().ok();
+    state
+        .as_mut()
+        .and_then(|s| s.as_mut())
+        .map(|s| {
+            reap_exited_child(s);
+            s.child.is_some()
+        })
+        .unwrap_or(false)
 }

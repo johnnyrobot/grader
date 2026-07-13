@@ -10,6 +10,9 @@ interface Props {
   selectedLane: string | undefined;
   setSelectedLane: (lane: string | undefined) => void;
   onRefresh: () => void;
+  engineIssue?: string;
+  recoveringEngine?: boolean;
+  onRecoverEngine?: () => void;
   onOpenModels: () => void;
   onOpenSettings: () => void;
 }
@@ -44,7 +47,7 @@ function signalLabel(flag: string) {
   return titleCase(flag);
 }
 
-export function QueueScreen({ data, onSelectItem, assignmentId, setAssignmentId, selectedLane, setSelectedLane, onRefresh, onOpenModels, onOpenSettings }: Props) {
+export function QueueScreen({ data, onSelectItem, assignmentId, setAssignmentId, selectedLane, setSelectedLane, onRefresh, engineIssue = "", recoveringEngine = false, onRecoverEngine, onOpenModels, onOpenSettings }: Props) {
   const [grading, setGrading] = useState(false);
   const [gradeMsg, setGradeMsg] = useState("");
   const [updateVersion, setUpdateVersion] = useState("");
@@ -132,6 +135,20 @@ export function QueueScreen({ data, onSelectItem, assignmentId, setAssignmentId,
         <div className="notice-row" role="status" aria-live="polite">
           {gradeMsg && <p>{gradeMsg}</p>}
           {updateVersion && <p>Grader {updateVersion} is available when you are ready to update.</p>}
+        </div>
+      )}
+
+      {engineIssue && (
+        <div className="decision-notice decision-notice--error" role="alert">
+          <div>
+            <strong>Local engine needs attention</strong>
+            <p>{engineIssue}</p>
+          </div>
+          {onRecoverEngine && (
+            <button type="button" className="button-secondary" onClick={onRecoverEngine} disabled={recoveringEngine}>
+              {recoveringEngine ? "Restarting…" : "Restart local engine"}
+            </button>
+          )}
         </div>
       )}
 

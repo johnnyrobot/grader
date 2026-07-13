@@ -56,8 +56,8 @@ Nested guidance exists in `engine/AGENTS.md`, `engine/grader/AGENTS.md`,
 | Grading behavior | `engine/grader/agent.py`, `schema.py`, `triage.py` | `grade()` is the non-raising entry point |
 | Calibration/anchors | `engine/grader/exemplars.py`, `calibration.py`, `overrides.py` | P1 result artifacts live in `engine/results_pointer_*.json` |
 | Desktop UX | `app/src/App.tsx`, `app/src/screens/`, `app/src/index.css` | Light-first semantic theme; queue and split view are the central workflow |
-| Frontend verification | `app/src/**/*.test.tsx`, `app/e2e/neuroinclusive-ui.spec.ts` | 11 component tests plus three mocked Playwright E2E tests |
-| Desktop ↔ engine boundary | `app/src/api.ts`, `engine/api.py` | Loopback HTTP on `127.0.0.1:8756` + per-launch bearer token |
+| Frontend verification | `app/src/**/*.test.tsx`, `app/e2e/neuroinclusive-ui.spec.ts` | 12 component tests plus three mocked Playwright E2E tests |
+| Desktop ↔ engine boundary | `app/src/api.ts`, `engine/api.py` | Dynamic loopback HTTP port + per-launch bearer token; dev fallback remains `127.0.0.1:8756` |
 | Engine process lifecycle | `app/src-tauri/src/engine.rs`, `lib.rs`, `scripts/start_engine.sh` | Starts/stops uvicorn with the Tauri app |
 | Canvas round-trip | `engine/grader/canvas.py`, Canvas routes in `engine/api.py` | Live sandbox helper is `scripts/seed_canvas_sandbox.py` |
 | Document/handwriting | `engine/grader/parse.py`, `handwriting.py` | Vision transcribes; the text model grades |
@@ -200,7 +200,7 @@ uv run python scripts/release_readiness.py --profile public_beta --out artifacts
   +0.127/+0.135. The local anchored Mohler ASAG public-proxy artifact now passes quality
   at QWK 0.845 against a 0.623 human-ceiling-adjusted floor.
 - **P2 in progress:** the complete light-first neuroinclusive UI is implemented across onboarding,
-  queue, review, settings, and model management. Eleven component tests and three mocked Playwright
+  queue, review, settings, and model management. Twelve component tests and three mocked Playwright
   E2E tests pass, including a 15-screen visual sweep with 153 visible controls, automated
   accessibility checks, and 200% text scaling. Still validate a clean-machine `.app`, crash
   recovery, real first-run model setup, and packaging.
@@ -216,14 +216,16 @@ uv run python scripts/release_readiness.py --profile public_beta --out artifacts
   performance gate passes at 38.3s per 1,500-word essay. Public-proxy quality/fairness release mode
   rejects the tiny committed mechanics fixtures. The local anchored 40-item Mohler ASAG public-proxy
   artifact passes quality at QWK 0.845 and passes fairness across all five perturbation families.
-  Local app/DMG signing, notarization, stapling, and Gatekeeper checks pass after the release-script
-  fix. Teacher-local validation still requires authorized instructor data, and clean-machine
-  behavioral checks still need release validation.
-- **Coverage:** Python collects 93 cases (81 pass, 12 skip). Frontend has 11 passing component
+  Fresh local signing/notarization is currently blocked: `codesign` returns
+  `errSecInternalComponent` and notarytool profile `grader` is unavailable. Teacher-local
+  validation still requires authorized instructor data, and clean-machine behavioral checks still
+  need release validation.
+- **Coverage:** Python collects 94 cases (82 pass, 12 skip). Frontend has 12 passing component
   tests plus three passing Playwright E2E tests.
 - **Public beta verdict:** not ready for unattended public testing with real student work. Limit
   current use to a developer-assisted alpha with synthetic or institution-approved test data.
-- **Highest-value next action:** collect clean-machine first-run model setup, crash recovery,
-  keyboard-only review, and updater-path evidence before broadening beta claims.
+- **Highest-value next action:** restore signing/notarization credentials, then collect
+  clean-machine first-run model setup, crash recovery, keyboard-only review, and updater-path
+  evidence before broadening beta claims.
 - The existing modification under `.omo/run-continuation/` is unrelated operational state; do not
   overwrite or commit it unless explicitly requested.

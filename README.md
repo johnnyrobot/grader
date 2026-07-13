@@ -34,20 +34,21 @@ per-teacher model to train.
 
 🚧 **Developer-assisted alpha; not ready for an unattended public beta.** The engine and desktop
 review workflow work, including the neuroinclusive light-first interface and the tiered
-release-gate machinery. Public-proxy quality/fairness and local signed/notarized app/DMG checks now
-pass, but public beta still requires clean-machine behavioral validation.
+release-gate machinery. Public-proxy quality/fairness pass and Canvas score/comment round-trip is
+validated, but public beta is currently blocked by fresh signing/notarization credentials and
+clean-machine behavioral validation.
 
 | | |
 |---|---|
 | Engine (grading, calibration, triage) | 🟢 Working |
 | Calibration validation | 🟡 P1 built (anchors +0.135 QWK at k=6) |
 | Desktop app (Tauri + React) | 🟢 Built — light/dark preferences, onboarding, queue, review, settings, model manager |
-| UI verification | 🟢 11 component tests + 3 Playwright E2E tests; no serious/critical axe findings |
+| UI verification | 🟢 12 component tests + 3 Playwright E2E tests; no serious/critical axe findings |
 | Canvas integration | 🟢 Live app-level import → teacher override/approve → post → Progress complete → score/comment read-back passed in `ZZ-GRADER-TEST` |
 | Document parsing + handwriting | 🟡 Built — Docling + Apple Vision + grader-vision |
 | Citation verification | 🟡 20/29 correct (69%); retraction check 3/3; accepted only as visibly experimental until accuracy reaches the enabled-mode gate |
 | CI gates | 🟢 Privacy PASS; perf PASS; public-proxy quality/fairness PASS; teacher-local still unvalidated |
-| Signing + notarization | 🟡 App + DMG notarization checks PASS locally; clean-machine first-run/crash/keyboard/updater checks still unverified |
+| Signing + notarization | 🔴 Fresh local signing/notarization is blocked: `codesign` returns `errSecInternalComponent` and notarytool profile `grader` is unavailable |
 | Updates | 🟡 Tauri updater integrated, manifest generator built |
 | Beta rollout | ⬜ Blocked until release-readiness report returns `supervised_public_beta` |
 
@@ -62,8 +63,8 @@ beta with real student work.
 
 Confirmed in the current checkout:
 
-- Python tests: 81 passed, 12 intentionally skipped.
-- Frontend tests: 11 passed; TypeScript/Vite production build and Rust `cargo check` pass.
+- Python tests: 82 passed, 12 intentionally skipped.
+- Frontend tests: 12 passed; TypeScript/Vite production build and Rust `cargo check` pass.
 - The complete mocked desktop workflow passes in Playwright across onboarding, queue, review,
   settings, and model management. The visual sweep records 15 screens, 153 visible controls,
   screenshot evidence, 200% text scaling, and automated accessibility scans.
@@ -77,8 +78,9 @@ Confirmed in the current checkout:
   import → targeted grade → teacher override/approval → Canvas post → Progress completed →
   score/comment read-back.
 - `scripts/release_readiness.py` writes a consolidated JSON/Markdown verdict with blocker
-  summaries. With current local artifacts, the report is `blocked` only on clean-machine behavioral
-  evidence: first-run models, crash recovery, keyboard-only review, and updater path.
+  summaries. With current local artifacts, the report is `blocked` on signing credentials and
+  clean-machine evidence: codesign/spctl, first-run models, crash recovery, keyboard-only review,
+  and updater path.
 
 Public-beta blockers:
 
@@ -86,8 +88,9 @@ Public-beta blockers:
 2. Keep Canvas rubric-assessment posting disabled until local rubric criteria can be mapped to real
    Canvas criterion IDs; score/comment round-trip is validated, attachment write-back still needs
    separate evidence.
-3. Validate the signed/notarized DMG on a clean supported Mac, including first-run model setup,
-   crash recovery, keyboard-only review, and updater behavior.
+3. Restore local release signing/notarization credentials, then validate the signed/notarized DMG
+   on a clean supported Mac, including first-run model setup, crash recovery, keyboard-only review,
+   and updater behavior.
 4. Keep teacher-local validation separate until an instructor supplies authorized historical grading.
 5. Complete a supervised private pilot before opening enrollment publicly.
 
@@ -162,8 +165,9 @@ The calibration run uses [Mohler ASAG](https://huggingface.co/datasets/nkazi/Moh
 (CC BY 4.0) — 2,273 short answers, each scored by **two independent human graders**, so we can
 report agreement against the *human ceiling* rather than against an arbitrary target. The current
 anchored 40-item Mohler public-proxy scoring run produced 40 scored rows and passes the quality
-gate at QWK 0.845 against a 0.623 adjusted floor. The app is still not public-beta ready until
-fairness perturbation scoring and clean-machine release evidence also pass.
+gate at QWK 0.845 against a 0.623 adjusted floor, and the matching fairness perturbation run
+passes. The app is still not public-beta ready until signing/notarization credentials and
+clean-machine release evidence pass.
 
 ## Docs
 

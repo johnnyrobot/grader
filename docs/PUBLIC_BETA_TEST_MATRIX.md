@@ -28,11 +28,11 @@ misrepresented as grading accuracy.
 | Canvas app round trip | Import -> teacher override/approval -> post -> Progress completed -> read-back exact score and teacher feedback comment | `scripts/live_canvas_e2e.py --apply` against `ZZ-GRADER-TEST` | PASS: live guarded run on `canvas.johnnyrobot.ai`, course `106`, assignment `2841`, Canvas user `8`; score `4` and one teacher comment read back | PASS for score/comment beta scope; rubric assessment remains disabled until Canvas criterion-ID mapping exists, and attachment write-back still needs separate evidence |
 | Privacy | Captured outbound connections remain allowlisted | `engine/gates/egress.py` | PASS: 3/3 allowlisted in latest run | PASS artifact must be supplied to readiness report |
 | Performance | 1,500-word essay under 90 seconds on target memory floor | `engine/gates/perf.py --memory-floor 16` | PASS: 37.8 seconds in latest run | PASS artifact must be supplied to readiness report |
-| Desktop build | React build, unit tests, E2E workflow, Rust check pass | `npm test`, `npm run build`, Playwright, `cargo check` | PASS: 11 component tests, 3 E2E tests, build, and Rust check | PASS artifact must be supplied to readiness report |
+| Desktop build | React build, unit tests, E2E workflow, Rust check pass | `npm test`, `npm run build`, Playwright, `cargo check` | PASS: 12 component tests, 3 E2E tests, build, and Rust check | PASS artifact must be supplied to readiness report |
 | Accessibility | No serious/critical WCAG violations, 200% text scaling, keyboard-only loop | Playwright axe + visual inspection | PASS on synthetic fixture; visual sweep covers 15 screens and 153 visible controls | PASS mechanics; still requires clean-machine app check |
-| Signing/notarization | Signed/notarized app or DMG passes codesign, stapler, spctl | release script + clean Mac | PASS locally after release-script fix: app and DMG are accepted as Notarized Developer ID; clean-machine install still needs behavioral checks | PASS automated signing/notarization evidence; clean-machine behavior remains separate |
-| Clean-machine | First launch, model setup, crash recovery, keyboard review, updater N->N+1 | `scripts/clean_machine_evidence.py` JSON from a clean Mac/VM | BLOCKED: automated notarization checks pass, but first-run models, crash recovery, keyboard-only review, and updater path are not yet asserted on a clean machine | Required for public beta |
-| Release report | Consolidated verdict is `supervised_public_beta` | `scripts/release_readiness.py` | BLOCKED: all gates except clean-machine behavioral validation pass | Final release gate |
+| Signing/notarization | Signed/notarized app or DMG passes codesign, stapler, spctl | release script + clean Mac | BLOCKED: fresh local signing fails with `errSecInternalComponent`, and notarytool profile `grader` is unavailable | PASS automated signing/notarization evidence; clean-machine behavior remains separate |
+| Clean-machine | First launch, model setup, crash recovery, keyboard review, updater N->N+1 | `scripts/clean_machine_evidence.py` JSON from a clean Mac/VM | BLOCKED: current local evidence is missing codesign/spctl plus first-run models, crash recovery, keyboard-only review, and updater path | Required for public beta |
+| Release report | Consolidated verdict is `supervised_public_beta` | `scripts/release_readiness.py` | BLOCKED: signing credentials and clean-machine evidence are incomplete | Final release gate |
 
 ## Required Manual Visual Sweep
 
@@ -53,10 +53,10 @@ inspection after packaging.
 
 ## Current Verdict
 
-Not public beta ready. The current anchored real-data public-proxy quality and fairness runs now
-pass on Mohler ASAG, and the local app/DMG pass automated signed/notarized Gatekeeper checks after
-the release-script fix. The remaining public-beta blocker is clean-machine behavioral evidence:
-first-run model setup, crash recovery, keyboard-only review, and updater N→N+1. Canvas app-level
-score/comment round-trip passes, but Canvas rubric-assessment posting is intentionally disabled
+Not public beta ready. The current anchored real-data public-proxy quality and fairness runs pass on
+Mohler ASAG, Canvas app-level score/comment round-trip passes, and citations are acceptable only in
+visibly experimental beta mode. The remaining public-beta blockers are fresh signing/notarization
+credentials plus clean-machine behavioral evidence: first-run model setup, crash recovery,
+keyboard-only review, and updater N→N+1. Canvas rubric-assessment posting is intentionally disabled
 until real Canvas criterion IDs can be mapped, and attachment write-back still needs separate
 evidence.

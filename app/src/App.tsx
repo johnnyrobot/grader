@@ -7,19 +7,27 @@ import { ModelManager } from "./screens/ModelManager";
 import { SettingsScreen } from "./screens/Settings";
 
 type Screen = "wizard" | "queue" | "split" | "models" | "settings";
+type EngineInfo = { token: string | null; port: string | null };
 
-async function getEngineInfo(): Promise<{ token: string | null; port: string | null }> {
+function applyEngineInfo(info: Record<string, string>): EngineInfo {
+  if (info.port && info.port !== "undefined") {
+    localStorage.setItem("grader_engine_port", info.port);
+    setBaseUrl(`http://127.0.0.1:${info.port}`);
+  }
+  if (info.token && info.token !== "undefined") {
+    localStorage.setItem("grader_engine_token", info.token);
+  }
+  return {
+    token: info.token && info.token !== "undefined" ? info.token : null,
+    port: info.port && info.port !== "undefined" ? info.port : null,
+  };
+}
+
+async function getEngineInfo(): Promise<EngineInfo> {
   try {
     const tauri = await import("@tauri-apps/api/core");
     const info = await tauri.invoke("get_engine_info") as Record<string, string>;
-    if (info.port && info.port !== "undefined") {
-      localStorage.setItem("grader_engine_port", info.port);
-      setBaseUrl(`http://127.0.0.1:${info.port}`);
-    }
-    if (info.token && info.token !== "undefined") {
-      localStorage.setItem("grader_engine_token", info.token);
-      return { token: info.token, port: info.port ?? null };
-    }
+    return applyEngineInfo(info);
   } catch {
     // Browser/dev mode — no Tauri runtime
   }
@@ -36,6 +44,8 @@ export default function App() {
   const [currentItem, setCurrentItem] = useState<GradeItem | null>(null);
   const [assignmentId, setAssignmentId] = useState("default");
   const [selectedLane, setSelectedLane] = useState<string | undefined>(undefined);
+  const [engineIssue, setEngineIssue] = useState("");
+  const [recoveringEngine, setRecoveringEngine] = useState(false);
 
   const checkEngine = useCallback(async () => {
     const info = await getEngineInfo();
@@ -45,6 +55,7 @@ export default function App() {
       const ok = await checkHealth();
       if (ok) {
         setEngineReady(true);
+        setEngineIssue("");
         if (onboardingComplete) setScreen("queue");
         return;
       }
@@ -56,8 +67,9 @@ export default function App() {
     try {
       const data = await fetchQueue(assignmentId, selectedLane);
       setQueueData(data);
-    } catch {
-      // engine not ready yet
+      setEngineIssue("");
+    } catch (error) {
+      setEngineIssue(`Local engine connection failed. ${(error as Error).message}`);
     }
   }, [assignmentId, selectedLane]);
 
@@ -78,6 +90,40 @@ export default function App() {
   useEffect(() => {
     if (engineReady) refreshQueue();
   }, [engineReady, refreshQueue]);
+
+  useEffect(() => {
+    if (!engineReady) return;
+    const interval = window.setInterval(async () => {
+      const ok = await checkHealth();
+      if (!ok) setEngineIssue("Local engine connection lost. Restart the engine, then continue reviewing.");
+    }, 5000);
+    return () => window.clearInterval(interval);
+  }, [engineReady]);
+
+  const recoverEngine = useCallback(async () => {
+    setRecoveringEngine(true);
+    setEngineIssue("Restarting the local engine…");
+    try {
+      const tauri = await import("@tauri-apps/api/core");
+      const info = await tauri.invoke("restart_engine") as Record<string, string>;
+      const applied = applyEngineInfo(info);
+      if (applied.token) setToken(applied.token);
+      for (let i = 0; i < 10; i++) {
+        if (await checkHealth()) {
+          setEngineReady(true);
+          setEngineIssue("");
+          await refreshQueue();
+          return;
+        }
+        await new Promise(r => setTimeout(r, 1000));
+      }
+      setEngineIssue("The local engine restarted, but it did not become ready in time.");
+    } catch (error) {
+      setEngineIssue(`Engine restart failed. ${(error as Error).message}`);
+    } finally {
+      setRecoveringEngine(false);
+    }
+  }, [refreshQueue]);
 
   const handleWizardComplete = async (t: string) => {
     const info = await getEngineInfo();
@@ -123,6 +169,9 @@ export default function App() {
       selectedLane={selectedLane}
       setSelectedLane={setSelectedLane}
       onRefresh={refreshQueue}
+      engineIssue={engineIssue}
+      recoveringEngine={recoveringEngine}
+      onRecoverEngine={recoverEngine}
       onOpenModels={() => setScreen("models")}
       onOpenSettings={() => setScreen("settings")}
     />

@@ -149,11 +149,12 @@ def _signing_preflight() -> dict[str, Any]:
     config = json.loads(conf.read_text())
     macos = config.get("bundle", {}).get("macOS", {})
     updater = config.get("plugins", {}).get("updater", {})
+    keychain_profile = os.environ.get("KEYCHAIN_PROFILE", "grader")
     checks = {
         "hardened_runtime": bool(macos.get("hardenedRuntime")),
         "updater_active": bool(updater.get("active")),
         "updater_pubkey_present": bool(updater.get("pubkey")),
-        "keychain_profile": bool(os.environ.get("KEYCHAIN_PROFILE", "grader")),
+        "keychain_profile": bool(keychain_profile),
         "signing_identity_env": bool(os.environ.get("SIGNING_IDENTITY")),
     }
     cert_proc = subprocess.run(
@@ -169,6 +170,26 @@ def _signing_preflight() -> dict[str, Any]:
             "status": "BLOCKED_SIGNING_CREDENTIALS",
             "checks": checks,
             "reason": "no Developer ID Application certificate found in keychain",
+        }
+    try:
+        notary_proc = subprocess.run(
+            ["xcrun", "notarytool", "history", "--keychain-profile", keychain_profile],
+            text=True,
+            capture_output=True,
+            check=False,
+            timeout=20,
+        )
+        notary_output = redact_secrets(notary_proc.stdout + notary_proc.stderr)
+        checks["notary_keychain_profile"] = notary_proc.returncode == 0
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        notary_output = redact_secrets(str(exc))
+        checks["notary_keychain_profile"] = False
+    if not checks["notary_keychain_profile"]:
+        return {
+            "status": "BLOCKED_SIGNING_CREDENTIALS",
+            "checks": checks,
+            "reason": f"notarytool keychain profile {keychain_profile!r} is unavailable or invalid",
+            "output": notary_output[:2000],
         }
     if not checks["hardened_runtime"] or not checks["updater_active"] or not checks["updater_pubkey_present"]:
         return {"status": "FAIL", "checks": checks, "reason": "release signing/updater config incomplete"}

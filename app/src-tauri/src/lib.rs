@@ -39,8 +39,7 @@ struct EngineToken(String);
 #[derive(Clone, serde::Serialize)]
 struct EnginePort(u16);
 
-#[tauri::command]
-fn get_engine_info() -> std::collections::HashMap<String, String> {
+fn engine_info_map() -> std::collections::HashMap<String, String> {
     let mut info = std::collections::HashMap::new();
     if let Some(token) = engine::get_token() {
         info.insert("token".into(), token);
@@ -51,8 +50,13 @@ fn get_engine_info() -> std::collections::HashMap<String, String> {
 }
 
 #[tauri::command]
-fn restart_engine() -> Result<String, String> {
+fn get_engine_info() -> std::collections::HashMap<String, String> {
+    engine_info_map()
+}
+
+#[tauri::command]
+fn restart_engine() -> Result<std::collections::HashMap<String, String>, String> {
     engine::stop_engine()?;
-    let (_token, port) = engine::start_engine()?;
-    Ok(format!("Engine restarted on port {port}"))
+    let (_token, _port) = engine::start_engine()?;
+    Ok(engine_info_map())
 }

@@ -8,6 +8,7 @@ from scripts.release_readiness import (
     CLEAN_MACHINE_REQUIRED_CHECKS,
     _normalize_citation_artifact,
     _normalize_clean_machine_artifact,
+    _signing_preflight,
     decide_verdict,
     redact_secrets,
     summarize_blockers,
@@ -50,6 +51,30 @@ def test_decide_verdict_allows_accepted_experimental_citations():
 def test_decide_verdict_blocked_when_signing_blocked():
     evidence = {"quality": {"status": "PASS"}, "signing": {"status": "BLOCKED_SIGNING_CREDENTIALS"}}
     assert decide_verdict(evidence) == "blocked"
+
+
+def test_signing_preflight_blocks_when_notary_profile_missing(monkeypatch):
+    class Proc:
+        def __init__(self, returncode: int, stdout: str = "", stderr: str = ""):
+            self.returncode = returncode
+            self.stdout = stdout
+            self.stderr = stderr
+
+    def fake_run(command, **_kwargs):
+        if command[:2] == ["security", "find-identity"]:
+            return Proc(0, stdout='1) ABC "Developer ID Application: Example (TEAMID)"')
+        if command[:2] == ["xcrun", "notarytool"]:
+            return Proc(69, stderr="No Keychain password item found for profile: grader")
+        raise AssertionError(f"unexpected command: {command}")
+
+    monkeypatch.setattr("scripts.release_readiness.subprocess.run", fake_run)
+
+    result = _signing_preflight()
+
+    assert result["status"] == "BLOCKED_SIGNING_CREDENTIALS"
+    assert result["checks"]["developer_id_certificate"] is True
+    assert result["checks"]["notary_keychain_profile"] is False
+    assert "notarytool keychain profile" in result["reason"]
 
 
 def test_normalize_citation_artifact_accepts_safe_experimental_mode(tmp_path):

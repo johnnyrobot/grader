@@ -60,6 +60,9 @@ function renderQueue(data: QueueData | null = queue) {
     selectedLane: undefined,
     setSelectedLane: vi.fn(),
     onRefresh: vi.fn(),
+    engineIssue: "",
+    recoveringEngine: false,
+    onRecoverEngine: vi.fn(),
     onOpenModels: vi.fn(),
     onOpenSettings: vi.fn(),
   };
@@ -93,5 +96,22 @@ describe("QueueScreen", () => {
 
     expect(screen.getByRole("heading", { name: "No submissions to review yet" })).toBeInTheDocument();
     expect(screen.getByText(/Import submissions, then choose Grade submissions/i)).toBeInTheDocument();
+  });
+
+  it("surfaces local engine recovery instead of hiding connection failures", async () => {
+    const user = userEvent.setup();
+    const props = renderQueue();
+    props.onRecoverEngine.mockClear();
+
+    render(
+      <QueueScreen
+        {...props}
+        engineIssue="Local engine connection lost."
+      />,
+    );
+
+    expect(screen.getByRole("alert")).toHaveTextContent("Local engine needs attention");
+    await user.click(screen.getByRole("button", { name: "Restart local engine" }));
+    expect(props.onRecoverEngine).toHaveBeenCalled();
   });
 });
