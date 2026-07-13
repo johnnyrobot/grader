@@ -9,6 +9,7 @@ failures before a tester starts the app:
   - latest.json is unsigned or malformed
   - advertised version is not newer than the installed/current version
   - platform URLs do not point at a release asset
+  - advertised release assets are missing or empty
 """
 
 from __future__ import annotations
@@ -52,6 +53,58 @@ def _artifact_name_from_url(url: str) -> str:
     return url.rstrip("/").rsplit("/", 1)[-1]
 
 
+def _content_length(headers: httpx.Headers) -> int | None:
+    raw = headers.get("content-length")
+    if not raw:
+        return None
+    try:
+        return int(raw)
+    except ValueError:
+        return None
+
+
+def _probe_artifact_url(url: str, *, timeout: float) -> dict[str, Any]:
+    """Check artifact reachability without downloading the full update payload."""
+    result: dict[str, Any] = {
+        "reachable": False,
+        "method": None,
+        "http_status": None,
+        "final_url": None,
+        "content_length": None,
+    }
+    try:
+        response = httpx.head(url, timeout=timeout, follow_redirects=True)
+        result.update({
+            "method": "HEAD",
+            "http_status": response.status_code,
+            "final_url": str(response.url),
+            "content_length": _content_length(response.headers),
+        })
+        if response.status_code == 200:
+            result["reachable"] = True
+            return result
+        if response.status_code not in {403, 405}:
+            return result
+
+        fallback = httpx.get(
+            url,
+            timeout=timeout,
+            follow_redirects=True,
+            headers={"Range": "bytes=0-0"},
+        )
+        result.update({
+            "method": "GET_RANGE",
+            "http_status": fallback.status_code,
+            "final_url": str(fallback.url),
+            "content_length": _content_length(fallback.headers),
+        })
+        result["reachable"] = fallback.status_code in {200, 206}
+        return result
+    except Exception as exc:
+        result["error"] = str(exc)
+        return result
+
+
 def collect(
     *,
     config_path: Path = Path("app/src-tauri/tauri.conf.json"),
@@ -59,6 +112,7 @@ def collect(
     manifest_url: str | None = None,
     expected_artifact_name: str = "Grader.dmg",
     timeout: float = 20,
+    probe_artifacts: bool = True,
 ) -> dict[str, Any]:
     config = _load_config(config_path)
     configured_version = str(config.get("version") or "")
@@ -75,6 +129,7 @@ def collect(
         "configured_endpoints": endpoints,
         "manifest_url": url,
         "expected_artifact_name": expected_artifact_name,
+        "probe_artifacts": probe_artifacts,
     }
 
     if not url:
@@ -130,6 +185,16 @@ def collect(
             )
         if "github.com/johnnyrobot/grader/releases/download/" not in artifact_url:
             failures.append(f"manifest platform {platform} URL is not in the johnnyrobot/grader release channel")
+        if artifact_url and probe_artifacts:
+            probe = _probe_artifact_url(artifact_url, timeout=timeout)
+            platform_details[platform]["artifact_probe"] = probe
+            if not probe.get("reachable"):
+                failures.append(
+                    f"manifest platform {platform} artifact URL is not reachable"
+                    f" (HTTP {probe.get('http_status') or 'unknown'})"
+                )
+            elif probe.get("content_length") == 0:
+                failures.append(f"manifest platform {platform} artifact URL returned empty content")
     details["platforms"] = platform_details
 
     status = "PASS" if not failures else "BLOCKED_UPDATER_CHANNEL"
@@ -148,6 +213,7 @@ def main() -> None:
     parser.add_argument("--manifest-url", default=None)
     parser.add_argument("--expected-artifact-name", default="Grader.dmg")
     parser.add_argument("--timeout", type=float, default=20)
+    parser.add_argument("--skip-artifact-probe", action="store_true", help="Validate latest.json only; do not HEAD/Range-check release assets")
     parser.add_argument("--out", type=Path, default=Path("artifacts/release-evidence/updater-channel-current.json"))
     parser.add_argument("--no-fail", action="store_true", help="Write diagnostics but exit 0 when blocked")
     args = parser.parse_args()
@@ -158,6 +224,7 @@ def main() -> None:
         manifest_url=args.manifest_url,
         expected_artifact_name=args.expected_artifact_name,
         timeout=args.timeout,
+        probe_artifacts=not args.skip_artifact_probe,
     )
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n")

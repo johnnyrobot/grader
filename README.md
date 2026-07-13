@@ -211,7 +211,7 @@ different version. The app is still not public-beta ready until signed updater e
 clean-machine release behavior evidence pass. Use `scripts/updater_key_doctor.py` to verify the
 updater key/password before regenerating `latest.json`, and use
 `scripts/updater_channel_preflight.py` after publishing N+1 to confirm the live release channel
-advertises a signed newer `Grader.dmg` before clean-machine updater testing starts.
+advertises a signed newer, reachable `Grader.dmg` before clean-machine updater testing starts.
 
 ## Docs
 

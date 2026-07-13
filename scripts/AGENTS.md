@@ -37,7 +37,7 @@ scripts/
 | Diagnose updater key | `updater_key_doctor.py` | Writes `artifacts/release-evidence/updater-key.json`; signs a tiny temp file to verify the Tauri updater key and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` |
 | Generate updater manifest | `generate_appcast.py` | Requires `--signing-key` for release manifests; use `--allow-unsigned` only for local smoke fixtures |
 | Validate updater evidence | `updater_evidence.py` | Requires updater config, signed latest.json, artifact filename/hash/source-freshness checks, and local artifact signature/notarization checks |
-| Preflight updater channel | `updater_channel_preflight.py` | Fails fast when the configured GitHub `latest.json` is absent, unsigned, points at the wrong artifact/channel, or is not newer than the installed N version |
+| Preflight updater channel | `updater_channel_preflight.py` | Fails fast when the configured GitHub `latest.json` is absent, unsigned, points at the wrong artifact/channel, is not newer than installed N, or advertises unreachable release assets |
 | Validate signed-app Computer Use sweep | `computer_use_sweep_evidence.py` | Produces PASS/FAIL JSON from `.ax.txt` + `.png` captures and fails stale approved/unsaved review states |
 | Clean-machine release evidence | `clean_machine_evidence.py` | Writes `artifacts/release-evidence/clean-machine.json`; PASS requires signing, app/DMG/latest.json provenance, current-source freshness, plus structured manual evidence for first-run/crash/keyboard/Computer Use/updater checks |
 | Package clean-machine handoff | `release_evidence_package.py` | Copies or references signed release artifacts, evidence JSON, clean-machine runbook, and manual template for a clean-Mac tester |
@@ -82,8 +82,9 @@ scripts/
   manifest and before asking a clean-machine tester to exercise the updater path:
   `uv run python scripts/updater_channel_preflight.py --current-version <installed-N-version>`.
   It fetches the configured GitHub `latest.json`, requires a newer version, signed darwin manifests,
-  the expected `Grader.dmg` artifact name, and the `johnnyrobot/grader` release channel. It does not
-  replace the in-app N→N+1 evidence; it catches a missing or malformed release channel early.
+  the expected `Grader.dmg` artifact name, the `johnnyrobot/grader` release channel, and reachable
+  release asset URLs via HEAD/Range probes. It does not replace the in-app N→N+1 evidence; it catches
+  a missing or malformed release channel early.
 - **`signing_doctor.py`**: run before `sign_and_notarize.sh`. It fail-closes on missing Developer
   ID certificates, inaccessible private keys, invalid notarytool profiles, and missing hardened
   runtime/updater config. Use `--print-repair-runbook` to generate local-only recovery commands for
