@@ -59,6 +59,12 @@ CLEAN_MACHINE_MANUAL_CHECKS = (
     "updater_path",
 )
 
+PASSING_STATUSES = {"PASS", "PASS_EXPERIMENTAL"}
+
+
+def _status_is_passing(status: str) -> bool:
+    return status in PASSING_STATUSES
+
 
 def _gate_summary(gate: dict[str, Any]) -> str:
     missing_checks = gate.get("missing_checks")
@@ -73,6 +79,16 @@ def _gate_summary(gate: dict[str, Any]) -> str:
     for key in ("summary", "reason"):
         value = gate.get(key)
         if value:
+            if isinstance(value, dict):
+                if value.get("visual_sweep_validation"):
+                    return (
+                        f"component_tests={value.get('component_tests')}, "
+                        f"playwright_e2e_tests={value.get('playwright_e2e_tests')}, "
+                        f"visual_sweep={value.get('visual_sweep_validation')}, "
+                        f"screens={value.get('visual_sweep_screens')}, "
+                        f"visible_controls={value.get('visual_sweep_visible_controls')}"
+                    )
+                return json.dumps(value, sort_keys=True)
             return str(value)
     failures = gate.get("failures")
     if isinstance(failures, list) and failures:
@@ -92,13 +108,249 @@ def summarize_blockers(evidence: dict[str, Any]) -> list[dict[str, str]]:
     for gate in REQUIRED_GATES:
         gate_evidence = evidence.get(gate, {})
         status = str(gate_evidence.get("status", "MISSING"))
-        if status not in {"PASS", "PASS_EXPERIMENTAL"}:
+        if not _status_is_passing(status):
             blockers.append({
                 "gate": gate,
                 "status": status,
                 "summary": _gate_summary(gate_evidence),
             })
     return blockers
+
+
+def _matrix_row(
+    *,
+    id: str,
+    area: str,
+    requirement: str,
+    gate: str,
+    status: str,
+    evidence: str,
+    summary: str = "",
+) -> dict[str, str | bool]:
+    return {
+        "id": id,
+        "area": area,
+        "requirement": requirement,
+        "gate": gate,
+        "status": status,
+        "evidence": evidence,
+        "summary": summary,
+        "blocking": not _status_is_passing(status),
+    }
+
+
+def _gate_status(evidence: dict[str, Any], gate: str) -> str:
+    return str(evidence.get(gate, {}).get("status", "MISSING"))
+
+
+def _clean_check_status(evidence: dict[str, Any], check: str) -> str:
+    clean = evidence.get("clean_machine", {})
+    if _gate_status(evidence, "clean_machine") == "PASS":
+        return "PASS"
+    checks = clean.get("checks", {}) if isinstance(clean, dict) else {}
+    if checks.get(check) is True:
+        return "PASS"
+    status = _gate_status(evidence, "clean_machine")
+    return status if status != "PASS" else "FAIL"
+
+
+def _artifact_path(evidence: Any, fallback: str) -> str:
+    if not isinstance(evidence, dict):
+        return fallback
+    artifact = evidence.get("artifact")
+    if isinstance(artifact, dict):
+        return str(artifact.get("path") or fallback)
+    if isinstance(artifact, str):
+        return artifact
+    return fallback
+
+
+def _frontend_matrix_status(evidence: dict[str, Any], expected_screens: int, expected_controls: int) -> str:
+    frontend = evidence.get("frontend", {})
+    status = _gate_status(evidence, "frontend")
+    if status != "PASS":
+        return status
+    summary = frontend.get("summary", {}) if isinstance(frontend, dict) else {}
+    if (
+        summary.get("visual_sweep_validation") == "PASS"
+        and int(summary.get("visual_sweep_required_screens") or 0) >= expected_screens
+        and int(summary.get("visual_sweep_required_controls") or 0) >= expected_controls
+    ):
+        return "PASS"
+    return "FAIL"
+
+
+def build_e2e_matrix(evidence: dict[str, Any]) -> list[dict[str, str | bool]]:
+    frontend = evidence.get("frontend", {})
+    frontend_summary = frontend.get("summary", {}) if isinstance(frontend, dict) else {}
+    frontend_status = _frontend_matrix_status(evidence, expected_screens=16, expected_controls=47)
+    frontend_detail = (
+        f"{frontend_summary.get('visual_sweep_screens', '?')} screens, "
+        f"{frontend_summary.get('visual_sweep_visible_controls', '?')} visible controls, "
+        f"{frontend_summary.get('visual_sweep_required_controls', '?')} required controls"
+    )
+
+    canvas = evidence.get("canvas", {})
+    canvas_summary = _gate_summary(canvas) or (
+        f"course={canvas.get('course_id')} assignment={canvas.get('assignment_id')} "
+        f"posted={canvas.get('posted')} progress={canvas.get('progress_state')}"
+        if isinstance(canvas, dict)
+        else ""
+    )
+
+    clean = evidence.get("clean_machine", {})
+    clean_summary = _gate_summary(clean)
+
+    rows = [
+        _matrix_row(
+            id="quality-public-proxy-qwk",
+            area="grading quality",
+            requirement="Open human-scored public-proxy quality gate meets the beta QWK floor.",
+            gate="quality",
+            status=_gate_status(evidence, "quality"),
+            evidence="engine/gates/quality.py",
+            summary=_gate_summary(evidence.get("quality", {})),
+        ),
+        _matrix_row(
+            id="fairness-perturbations",
+            area="fairness",
+            requirement="Perturbation fairness checks pass across release families.",
+            gate="fairness",
+            status=_gate_status(evidence, "fairness"),
+            evidence="engine/gates/bias.py",
+            summary=_gate_summary(evidence.get("fairness", {})),
+        ),
+        _matrix_row(
+            id="citations-safe-mode",
+            area="citations",
+            requirement="Citation verification is either accurate enough for release or explicitly experimental with safe labeling.",
+            gate="citations",
+            status=_gate_status(evidence, "citations"),
+            evidence="engine/verify_citations.py",
+            summary=_gate_summary(evidence.get("citations", {})),
+        ),
+        _matrix_row(
+            id="privacy-egress",
+            area="privacy",
+            requirement="Network egress is allowlisted and FERPA-safe for local-first operation.",
+            gate="privacy",
+            status=_gate_status(evidence, "privacy"),
+            evidence="engine/gates/egress.py",
+            summary=_gate_summary(evidence.get("privacy", {})),
+        ),
+        _matrix_row(
+            id="performance-floor",
+            area="performance",
+            requirement="Release performance fits the 16 GB / batch budget.",
+            gate="performance",
+            status=_gate_status(evidence, "performance"),
+            evidence="engine/gates/perf.py",
+            summary=_gate_summary(evidence.get("performance", {})),
+        ),
+        _matrix_row(
+            id="ui-onboarding-queue-review-settings-models",
+            area="desktop UI",
+            requirement="Instructor workflow covers onboarding, queue, review, settings, model manager, recovery, accessibility, and 200% reflow.",
+            gate="frontend",
+            status=frontend_status,
+            evidence=_artifact_path(frontend, "artifacts/release-evidence/frontend.json"),
+            summary=frontend_detail,
+        ),
+        _matrix_row(
+            id="canvas-import-approve-post-readback",
+            area="Canvas",
+            requirement="Live Canvas import → approve/override → post → Progress completed → read-back path passes.",
+            gate="canvas",
+            status=_gate_status(evidence, "canvas"),
+            evidence=_artifact_path(canvas, "artifacts/release-evidence/canvas-live.json"),
+            summary=canvas_summary,
+        ),
+        _matrix_row(
+            id="tauri-rust-build",
+            area="desktop shell",
+            requirement="Tauri/Rust shell checks pass for the desktop bundle boundary.",
+            gate="rust",
+            status=_gate_status(evidence, "rust"),
+            evidence="app/src-tauri cargo check evidence",
+            summary=_gate_summary(evidence.get("rust", {})),
+        ),
+        _matrix_row(
+            id="signed-updater-manifest",
+            area="updates",
+            requirement="Signed updater latest.json matches the evaluated release artifact and app version.",
+            gate="updater",
+            status=_gate_status(evidence, "updater"),
+            evidence="scripts/updater_evidence.py",
+            summary=_gate_summary(evidence.get("updater", {})),
+        ),
+        _matrix_row(
+            id="developer-id-notarization",
+            area="distribution",
+            requirement="Developer ID signing, hardened runtime, notarization, and staple preflight pass.",
+            gate="signing",
+            status=_gate_status(evidence, "signing"),
+            evidence="scripts/signing_doctor.py",
+            summary=_gate_summary(evidence.get("signing", {})),
+        ),
+        _matrix_row(
+            id="clean-machine-install",
+            area="clean machine",
+            requirement="Signed/notarized app verifies with codesign, stapler, spctl, and release provenance on the tested artifact.",
+            gate="clean_machine",
+            status=_clean_check_status(evidence, "release_provenance"),
+            evidence="scripts/clean_machine_evidence.py",
+            summary=clean_summary,
+        ),
+        _matrix_row(
+            id="first-run-models",
+            area="clean machine",
+            requirement="First-run model setup works on a clean supported Mac.",
+            gate="clean_machine",
+            status=_clean_check_status(evidence, "first_run_models"),
+            evidence="scripts/clean_machine_evidence.py manual evidence",
+            summary=clean_summary,
+        ),
+        _matrix_row(
+            id="crash-recovery",
+            area="clean machine",
+            requirement="Engine/app crash recovery is validated on the signed clean-machine build.",
+            gate="clean_machine",
+            status=_clean_check_status(evidence, "crash_recovery"),
+            evidence="scripts/clean_machine_evidence.py manual evidence",
+            summary=clean_summary,
+        ),
+        _matrix_row(
+            id="keyboard-only-review",
+            area="clean machine",
+            requirement="Keyboard-only review and approval path works in the signed app.",
+            gate="clean_machine",
+            status=_clean_check_status(evidence, "keyboard_only_review"),
+            evidence="scripts/clean_machine_evidence.py manual evidence",
+            summary=clean_summary,
+        ),
+        _matrix_row(
+            id="clean-machine-updater-path",
+            area="clean machine",
+            requirement="N to N+1 updater path completes without manual replacement.",
+            gate="clean_machine",
+            status=_clean_check_status(evidence, "updater_path"),
+            evidence="scripts/clean_machine_evidence.py manual evidence",
+            summary=clean_summary,
+        ),
+    ]
+    return rows
+
+
+def summarize_e2e_matrix(matrix: list[dict[str, str | bool]]) -> dict[str, int]:
+    summary = {"total": len(matrix), "passing": 0, "blocking": 0}
+    for row in matrix:
+        status = str(row.get("status", "MISSING"))
+        if _status_is_passing(status):
+            summary["passing"] += 1
+        else:
+            summary["blocking"] += 1
+        summary[status] = summary.get(status, 0) + 1
+    return summary
 
 
 def redact_secrets(value: str) -> str:
@@ -330,6 +582,8 @@ def collect_evidence(args: argparse.Namespace) -> dict[str, Any]:
     )
     evidence["verdict"] = decide_verdict(evidence)
     evidence["blockers"] = summarize_blockers(evidence)
+    evidence["e2e_matrix"] = build_e2e_matrix(evidence)
+    evidence["e2e_matrix_summary"] = summarize_e2e_matrix(evidence["e2e_matrix"])
     return evidence
 
 
@@ -352,6 +606,28 @@ def write_reports(evidence: dict[str, Any], out_dir: Path) -> tuple[Path, Path]:
         status = gate_evidence.get("status", "MISSING")
         summary = _gate_summary(gate_evidence).replace("|", "\\|")
         lines.append(f"| {gate} | `{status}` | {summary} |")
+    matrix = evidence.get("e2e_matrix") or build_e2e_matrix(evidence)
+    matrix_summary = evidence.get("e2e_matrix_summary") or summarize_e2e_matrix(matrix)
+    lines.extend([
+        "",
+        "## End-to-End Testing and Evaluation Matrix",
+        "",
+        (
+            f"Passing rows: {matrix_summary.get('passing', 0)}/"
+            f"{matrix_summary.get('total', len(matrix))}; blocking rows: "
+            f"{matrix_summary.get('blocking', 0)}."
+        ),
+        "",
+        "| Area | Requirement | Evidence | Status | Summary |",
+        "| --- | --- | --- | --- | --- |",
+    ])
+    for row in matrix:
+        area = str(row.get("area", "")).replace("|", "\\|")
+        requirement = str(row.get("requirement", "")).replace("|", "\\|")
+        row_evidence = str(row.get("evidence", "")).replace("|", "\\|")
+        status = str(row.get("status", "MISSING"))
+        summary = str(row.get("summary", "")).replace("|", "\\|")
+        lines.append(f"| {area} | {requirement} | {row_evidence} | `{status}` | {summary} |")
     blockers = evidence.get("blockers") or summarize_blockers(evidence)
     if blockers:
         lines.extend(["", "## Blocking Items", ""])

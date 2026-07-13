@@ -231,9 +231,10 @@ uv run python scripts/release_readiness.py --profile public_beta --expected-vers
   artifact. Fresh local signing/notarization is currently blocked: `codesign` returns
   `errSecInternalComponent` and notarytool profile `grader` is unavailable; run
   `scripts/signing_doctor.py` to refresh the fail-closed credential diagnostic before release
-  signing. Teacher-local validation still requires authorized instructor data, and clean-machine
-  behavioral checks still need release validation.
-- **Coverage:** Python collects 128 cases (116 pass, 12 skip). Frontend has 12 passing component
+  signing. The release-readiness JSON/Markdown now includes an end-to-end public-beta matrix that
+  maps requirements to evidence. Teacher-local validation still requires authorized instructor data,
+  and clean-machine behavioral checks still need release validation.
+- **Coverage:** Python collects 130 cases (118 pass, 12 skip). Frontend has 12 passing component
   tests plus four passing Playwright E2E tests.
 - **Public beta verdict:** not ready for unattended public testing with real student work. Limit
   current use to a developer-assisted alpha with synthetic or institution-approved test data.

@@ -11,9 +11,11 @@ from scripts.release_readiness import (
     _normalize_clean_machine_artifact,
     _normalize_updater_artifact,
     _signing_preflight,
+    build_e2e_matrix,
     decide_verdict,
     redact_secrets,
     summarize_blockers,
+    summarize_e2e_matrix,
     write_reports,
 )
 
@@ -55,6 +57,91 @@ def test_decide_verdict_allows_accepted_experimental_citations():
 def test_decide_verdict_blocked_when_signing_blocked():
     evidence = {"quality": {"status": "PASS"}, "signing": {"status": "BLOCKED_SIGNING_CREDENTIALS"}}
     assert decide_verdict(evidence) == "blocked"
+
+
+def test_build_e2e_matrix_maps_public_beta_requirements_to_evidence():
+    evidence = {
+        "quality": {"status": "PASS", "output": "quality ok"},
+        "fairness": {"status": "PASS", "output": "fairness ok"},
+        "citations": {"status": "PASS_EXPERIMENTAL", "reason": "experimental label accepted"},
+        "privacy": {"status": "PASS", "summary": "allowlist pass"},
+        "performance": {"status": "PASS", "summary": "perf pass"},
+        "frontend": {
+            "status": "PASS",
+            "summary": {
+                "visual_sweep_validation": "PASS",
+                "visual_sweep_required_screens": 16,
+                "visual_sweep_required_controls": 47,
+                "visual_sweep_screens": 16,
+                "visual_sweep_visible_controls": 167,
+            },
+            "artifact": {"path": "artifacts/release-evidence/frontend.json"},
+        },
+        "canvas": {
+            "status": "PASS",
+            "course_id": 106,
+            "assignment_id": 2841,
+            "posted": 1,
+            "progress_state": "completed",
+            "artifact": {"path": "artifacts/release-evidence/canvas-live.json"},
+        },
+        "rust": {"status": "PASS"},
+        "updater": {"status": "PASS"},
+        "signing": {"status": "PASS"},
+        "clean_machine": {
+            "status": "PASS",
+            "checks": {name: True for name in CLEAN_MACHINE_REQUIRED_CHECKS},
+        },
+    }
+
+    matrix = build_e2e_matrix(evidence)
+    summary = summarize_e2e_matrix(matrix)
+
+    assert summary["total"] == len(matrix)
+    assert summary["blocking"] == 0
+    assert summary["PASS"] == 14
+    assert summary["PASS_EXPERIMENTAL"] == 1
+    by_id = {row["id"]: row for row in matrix}
+    assert by_id["ui-onboarding-queue-review-settings-models"]["status"] == "PASS"
+    assert by_id["canvas-import-approve-post-readback"]["evidence"] == "artifacts/release-evidence/canvas-live.json"
+
+
+def test_build_e2e_matrix_exposes_clean_machine_subcheck_blockers():
+    evidence = {
+        "quality": {"status": "PASS"},
+        "fairness": {"status": "PASS"},
+        "citations": {"status": "PASS_EXPERIMENTAL"},
+        "privacy": {"status": "PASS"},
+        "performance": {"status": "PASS"},
+        "frontend": {
+            "status": "PASS",
+            "summary": {
+                "visual_sweep_validation": "PASS",
+                "visual_sweep_required_screens": 16,
+                "visual_sweep_required_controls": 47,
+            },
+        },
+        "canvas": {"status": "PASS"},
+        "rust": {"status": "PASS"},
+        "updater": {"status": "BLOCKED_UPDATER_EVIDENCE"},
+        "signing": {"status": "BLOCKED_SIGNING_CREDENTIALS"},
+        "clean_machine": {
+            "status": "BLOCKED_CLEAN_MACHINE_EVIDENCE",
+            "checks": {
+                "stapler_validate": True,
+                "first_run_models": False,
+                "keyboard_only_review": False,
+            },
+            "missing_checks": ["first_run_models", "keyboard_only_review"],
+        },
+    }
+
+    by_id = {row["id"]: row for row in build_e2e_matrix(evidence)}
+
+    assert by_id["first-run-models"]["status"] == "BLOCKED_CLEAN_MACHINE_EVIDENCE"
+    assert by_id["keyboard-only-review"]["status"] == "BLOCKED_CLEAN_MACHINE_EVIDENCE"
+    assert by_id["signed-updater-manifest"]["blocking"] is True
+    assert "missing checks" in by_id["clean-machine-install"]["summary"]
 
 
 def test_signing_preflight_blocks_when_notary_profile_missing(monkeypatch):
@@ -289,6 +376,9 @@ def test_write_reports(tmp_path):
     assert json.loads(json_path.read_text())["verdict"] == "alpha"
     markdown = md_path.read_text()
     assert "alpha" in markdown
+    assert "End-to-End Testing and Evaluation Matrix" in markdown
+    assert "quality-public-proxy-qwk" not in markdown
+    assert "Open human-scored public-proxy quality gate" in markdown
     assert "Blocking Items" in markdown
 
 
