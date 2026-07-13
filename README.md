@@ -46,7 +46,7 @@ validation.
 | UI verification | 🟢 11 component tests + full Playwright workflow; no serious/critical axe findings |
 | Canvas integration | 🟡 Built — import, post grades, offline queue; app-level live round trip still required |
 | Document parsing + handwriting | 🟡 Built — Docling + Apple Vision + grader-vision |
-| Citation verification | 🔴 20/29 correct (69%); retraction check 3/3; labeled experimental until accuracy reaches the gate |
+| Citation verification | 🟡 20/29 correct (69%); retraction check 3/3; accepted only as visibly experimental until accuracy reaches the enabled-mode gate |
 | CI gates | 🟡 Privacy PASS; perf PASS; public-proxy quality/fairness profiles added; teacher-local still unvalidated |
 | Signing + notarization | ⬜ Pipeline exists; clean-machine signed DMG install is unverified |
 | Updates | 🟡 Tauri updater integrated, manifest generator built |
@@ -63,24 +63,23 @@ beta with real student work.
 
 Confirmed in the current checkout:
 
-- Python tests: 41 passed, 12 intentionally skipped.
+- Python tests: 47 passed, 12 intentionally skipped.
 - Frontend tests: 11 passed; TypeScript/Vite production build and Rust `cargo check` pass.
 - The complete mocked desktop workflow passes in Playwright across onboarding, queue, review,
   settings, and model management, including 200% text scaling and automated accessibility scans.
 - The privacy gate passes in isolation: 3/3 captured connections were allowlisted.
-- The performance gate passes: 38.3 seconds for a 1,500-word essay, with a projected 30-item
-  batch of 1,149 seconds against a 2,700-second budget.
+- The performance gate passes: 37.8 seconds for a 1,500-word essay, with a projected 30-item
+  batch of 1,134 seconds against a 2,700-second budget.
 - Public-proxy quality/fairness gate profiles now run against tiny committed mechanics fixtures.
   These fixtures prove gate wiring only; they are not accuracy evidence.
 - `scripts/release_readiness.py` now writes a consolidated JSON/Markdown verdict. The current local
-  verdict is `blocked` without live Canvas, clean-machine, and complete citation evidence.
+  verdict is `blocked` without live Canvas and clean-machine evidence.
 
 Public-beta blockers:
 
 1. Run the public-proxy quality/fairness gates on open human-scored data, then keep teacher-local
    validation separate until an instructor supplies authorized historical grading.
-2. Raise citation verification from 69% to at least 90%, or keep citation checking clearly
-   disabled/labeled experimental for the beta.
+2. Keep citation checking visibly experimental for beta users unless accuracy reaches at least 90%.
 3. Complete the app-level Canvas import -> grade -> approve -> post -> read-back path in the
    guarded `ZZ-GRADER-TEST` course.
 4. Validate a signed/notarized DMG on a clean supported Mac, including first-run model setup,

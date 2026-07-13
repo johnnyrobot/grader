@@ -64,6 +64,29 @@ def _normalize_artifact(path: Path | None, default_status: str) -> dict[str, Any
     return data
 
 
+def _normalize_citation_artifact(path: Path | None) -> dict[str, Any]:
+    citation = _normalize_artifact(path, "SKIP")
+    mode = citation.get("citation_mode", {})
+    if mode:
+        citation["mode"] = mode.get("mode")
+        citation["status"] = mode.get("release_status", citation.get("status"))
+
+    if citation.get("mode") == "experimental":
+        false_positives = int(citation.get("false_positives", 0) or 0)
+        retraction = citation.get("retraction_check", {})
+        retraction_total = int(retraction.get("total", 0) or 0)
+        retraction_caught = int(retraction.get("caught", 0) or 0)
+        if false_positives == 0 and retraction_total == retraction_caught:
+            citation["status"] = "PASS_EXPERIMENTAL"
+            citation["accepted_experimental"] = True
+            citation["reason"] = (
+                "citation checks are explicitly experimental; zero false positives and all "
+                "retraction fixtures are caught"
+            )
+
+    return citation
+
+
 def _signing_preflight() -> dict[str, Any]:
     conf = Path("app/src-tauri/tauri.conf.json")
     if not conf.exists():
@@ -104,7 +127,7 @@ def decide_verdict(evidence: dict[str, Any]) -> str:
     }
     if any(status == "FAIL" or status.startswith("BLOCKED") for status in statuses.values()):
         return "blocked"
-    if all(status == "PASS" for status in statuses.values()):
+    if all(status in {"PASS", "PASS_EXPERIMENTAL"} for status in statuses.values()):
         return "supervised_public_beta"
     return "alpha"
 
@@ -142,11 +165,7 @@ def collect_evidence(args: argparse.Namespace) -> dict[str, Any]:
             args.public_proxy_dir,
         ]
     )
-    citation = _normalize_artifact(args.citation_artifact, "SKIP")
-    if citation.get("citation_mode"):
-        citation["mode"] = citation["citation_mode"].get("mode")
-        citation["status"] = citation["citation_mode"].get("release_status", citation.get("status"))
-    evidence["citations"] = citation
+    evidence["citations"] = _normalize_citation_artifact(args.citation_artifact)
     evidence["canvas"] = _normalize_artifact(args.canvas_artifact, "SKIP")
     evidence["privacy"] = _normalize_artifact(args.privacy_artifact, "SKIP")
     evidence["performance"] = _normalize_artifact(args.performance_artifact, "SKIP")

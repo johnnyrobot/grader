@@ -24,7 +24,7 @@ misrepresented as grading accuracy.
 | Public-proxy quality | QWK >= 0.70, source floor, mean-error bounds, no leakage | `engine/gates/quality.py --profile public_proxy` on real open datasets | PASS only on tiny mechanics fixture | PASS only with real open human-scored artifacts |
 | Public-proxy fairness | Style perturbation deltas within thresholds | `engine/gates/bias.py --profile public_proxy` on real open datasets | PASS only on tiny mechanics fixture | PASS only with real public-proxy artifacts |
 | Teacher-local quality | Instructor-specific QWK and override behavior | `fixtures/golden_set/` local authorized data | Missing | Not required for generic public proxy claim; required for teacher-specific claim |
-| Citations | >=90% fixture accuracy, zero false positives, 3/3 retractions | `engine/verify_citations.py --output ...` | FAIL: 20/29 accuracy, 0 false positives, 3/3 retractions; experimental mode | PASS enabled mode or ship visibly disabled/experimental |
+| Citations | >=90% fixture accuracy, zero false positives, 3/3 retractions | `engine/verify_citations.py --output ...` | PASS_EXPERIMENTAL: 20/29 accuracy, 0 false positives, 3/3 retractions; UI labels citation checks experimental | PASS enabled mode or visibly experimental with zero false positives and all retractions caught |
 | Canvas app round trip | Import -> approve -> post -> Progress completed -> read-back exact score/rubric/comment/attachment | `scripts/live_canvas_e2e.py --apply` against `ZZ-GRADER-TEST` | Dry-run guard only | PASS only with live guarded run evidence |
 | Privacy | Captured outbound connections remain allowlisted | `engine/gates/egress.py` | PASS: 3/3 allowlisted in latest run | PASS artifact must be supplied to readiness report |
 | Performance | 1,500-word essay under 90 seconds on target memory floor | `engine/gates/perf.py --memory-floor 16` | PASS: 37.8 seconds in latest run | PASS artifact must be supplied to readiness report |
@@ -49,6 +49,6 @@ Record each sweep as `PASS`, `FAIL`, or `BLOCKED`, with screenshot paths or a Co
 
 ## Current Verdict
 
-Not public beta ready. The current release-readiness report is blocked because the real
-public-proxy datasets, citation enabled-mode pass or product disablement, live Canvas app round
-trip, and clean-machine signed/notarized evidence are still incomplete.
+Not public beta ready. The current release-readiness report is blocked because live Canvas app
+round-trip evidence and clean-machine signed/notarized evidence are still incomplete. Real
+public-proxy datasets should replace the tiny mechanics fixtures before broadening the beta.

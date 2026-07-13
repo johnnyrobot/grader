@@ -39,6 +39,11 @@ function titleCase(value: string) {
   return value.replace(/_/g, " ").replace(/\b\w/g, char => char.toUpperCase());
 }
 
+function signalLabel(flag: string) {
+  if (flag.toLowerCase().includes("citation")) return "Citation check (experimental)";
+  return titleCase(flag);
+}
+
 export function QueueScreen({ data, onSelectItem, assignmentId, setAssignmentId, selectedLane, setSelectedLane, onRefresh, onOpenModels, onOpenSettings }: Props) {
   const [grading, setGrading] = useState(false);
   const [gradeMsg, setGradeMsg] = useState("");
@@ -197,7 +202,7 @@ export function QueueScreen({ data, onSelectItem, assignmentId, setAssignmentId,
                       <td>{aiTotal === null ? "Not scored" : aiTotal.toFixed(1)}</td>
                       <td>
                         <div className="signal-list">
-                          {item.flags.length ? item.flags.map(flag => <span key={flag} className="signal-tag">{titleCase(flag)}</span>) : <span className="muted">No flags</span>}
+                          {item.flags.length ? item.flags.map(flag => <span key={flag} className="signal-tag">{signalLabel(flag)}</span>) : <span className="muted">No flags</span>}
                         </div>
                       </td>
                       <td><span className={item.approved ? "decision-approved" : "muted"}>{decision}</span></td>

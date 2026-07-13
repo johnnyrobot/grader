@@ -76,7 +76,7 @@ describe("QueueScreen", () => {
     expect(screen.getByRole("button", { name: "Grade submissions" })).toBeInTheDocument();
     expect(screen.getAllByText("Needs teacher review").length).toBeGreaterThan(0);
     expect(screen.getAllByText("High confidence").length).toBeGreaterThan(0);
-    expect(screen.getByText("Citation Check")).toBeInTheDocument();
+    expect(screen.getByText("Citation check (experimental)")).toBeInTheDocument();
     expect(screen.getByText("Approved")).toBeInTheDocument();
 
     const all = screen.getByRole("button", { name: "All submissions" });

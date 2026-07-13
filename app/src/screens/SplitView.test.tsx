@@ -35,7 +35,7 @@ describe("SplitView", () => {
 
     expect(screen.getByRole("heading", { name: "Review Student 1042" })).toBeInTheDocument();
     expect(screen.getByText("AI suggestion — teacher decision required")).toBeInTheDocument();
-    expect(screen.getByText("Citation Check")).toBeInTheDocument();
+    expect(screen.getByText("Citation check (experimental)")).toBeInTheDocument();
     expect(screen.getByText("64% confidence")).toBeInTheDocument();
     expect(screen.getByRole("radio", { name: "5 points for Thesis" })).toHaveAttribute("aria-checked", "false");
     expect(screen.getByRole("textbox", { name: "Feedback for Student 1042" })).toHaveValue(item.ai_feedback);

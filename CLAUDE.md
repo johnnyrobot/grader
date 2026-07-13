@@ -82,20 +82,19 @@ As of 2026-07-12, Grader is suitable only for a developer-assisted alpha using s
 institution-approved test data. It is not ready for an unattended public beta with real student
 work.
 
-- Python: 41 passed, 12 skipped.
-- Frontend: 11 component tests and one full-workflow Playwright test pass.
+- Python: 47 passed, 12 skipped.
+- Frontend: 11 component tests and two full-workflow Playwright tests pass.
 - Privacy: PASS in isolation, 3/3 captured connections allowlisted.
 - Performance: PASS, 38.3 seconds for a 1,500-word essay.
 - Public-proxy quality/fairness: command profiles exist and pass on tiny mechanics fixtures only.
 - Teacher-local quality/fairness: unvalidated until authorized instructor data exists.
-- Citations: FAIL for enabled mode, 20/29 correct (69%) and 3/3 retractions caught; artifact mode
-  remains experimental because accuracy is below 90%.
-- Release readiness: local report currently returns `blocked` without live Canvas, clean-machine,
-  and complete citation evidence.
+- Citations: PASS_EXPERIMENTAL for beta mode, 20/29 correct (69%), 0 false positives, and 3/3
+  retractions caught; enabled mode still requires >=90% accuracy.
+- Release readiness: local report currently returns `blocked` without live Canvas and clean-machine
+  evidence.
 
-Before public beta: run real public-proxy quality/fairness evidence, fix or explicitly disable
-experimental citation checks, validate the app-level Canvas round trip, and complete a
-signed/notarized clean-machine install plus first-run and updater tests.
+Before public beta: run real public-proxy quality/fairness evidence, validate the app-level Canvas
+round trip, and complete a signed/notarized clean-machine install plus first-run and updater tests.
 
 ## Working-Tree Caution
 

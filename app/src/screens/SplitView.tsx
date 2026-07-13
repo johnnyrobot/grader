@@ -17,6 +17,11 @@ function titleCase(value: string) {
   return value.replace(/_/g, " ").replace(/\b\w/g, char => char.toUpperCase());
 }
 
+function signalLabel(flag: string) {
+  if (flag.toLowerCase().includes("citation")) return "Citation check (experimental)";
+  return titleCase(flag);
+}
+
 function total(scores: Record<string, number>) {
   return Object.values(scores).reduce((sum, score) => sum + score, 0);
 }
@@ -173,7 +178,7 @@ export function SplitView({ item, onBack }: Props) {
             </div>
             <div className="signal-list">
               {item.flags.length
-                ? item.flags.map(flag => <span key={flag} className="signal-tag">{titleCase(flag)}</span>)
+                ? item.flags.map(flag => <span key={flag} className="signal-tag">{signalLabel(flag)}</span>)
                 : <p className="muted">No additional review signals were raised.</p>}
             </div>
           </section>

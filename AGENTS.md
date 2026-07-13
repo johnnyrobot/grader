@@ -195,20 +195,20 @@ uv run python scripts/release_readiness.py --profile public_beta --out artifacts
 - **P1 complete:** five calibration experiments ran. At k=6, anchors improved QWK by about
   +0.127/+0.135, but absolute public-data QWK remains far below the 0.70 release floor.
 - **P2 in progress:** the complete light-first neuroinclusive UI is implemented across onboarding,
-  queue, review, settings, and model management. Eleven component tests and the mocked Playwright
-  workflow pass, including automated accessibility checks and 200% text scaling. Still validate a
+  queue, review, settings, and model management. Eleven component tests and two mocked Playwright
+  workflows pass, including automated accessibility checks and 200% text scaling. Still validate a
   clean-machine `.app`, crash recovery, real first-run model setup, and packaging.
 - **P3 in progress:** Canvas client/API/offline queue exist and sandbox mechanics were verified;
   run the app-level import → approve → post → read-back path before calling it complete.
 - **P4 in progress:** parse/transcribe/write-back/citation modules exist. The 2026-07-12 citation
-  rerun scored 20/29 (69%), with 3/3 retractions caught; this still fails the >=90% phase goal and
-  is reported as experimental by the citation mode artifact.
+  rerun scored 20/29 (69%), with 0 false positives and 3/3 retractions caught; enabled mode still
+  fails the >=90% phase goal, so beta readiness accepts it only as visibly experimental.
 - **P5 in progress:** privacy passes in isolation (3/3 captured connections allowlisted) and the
   performance gate passes at 38.3s per 1,500-word essay. Public-proxy quality/fairness profiles
   pass on tiny committed mechanics fixtures only; teacher-local validation still requires
   authorized instructor data. Signing/notarization still needs clean-machine release validation.
-- **Coverage:** Python collects 53 cases (41 pass, 12 skip). Frontend has 11 passing component
-  tests plus one passing full-workflow Playwright test.
+- **Coverage:** Python collects 59 cases (47 pass, 12 skip). Frontend has 11 passing component
+  tests plus two passing full-workflow Playwright tests.
 - **Public beta verdict:** not ready for unattended public testing with real student work. Limit
   current use to a developer-assisted alpha with synthetic or institution-approved test data.
 - **Highest-value next action:** run the public-proxy gates on real open human-scored datasets,
