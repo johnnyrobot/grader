@@ -45,7 +45,7 @@ behavioral validation.
 | Engine (grading, calibration, triage) | 🟢 Working |
 | Calibration validation | 🟡 P1 built (anchors +0.135 QWK at k=6) |
 | Desktop app (Tauri + React) | 🟢 Built — light/dark preferences, onboarding, queue, review, settings, model manager |
-| UI verification | 🟢 14 component tests + 4 Playwright E2E tests; no serious/critical axe findings |
+| UI verification | 🟢 15 component tests + 4 Playwright E2E tests; no serious/critical axe findings |
 | Canvas integration | 🟢 Live app-level import → teacher override/approve → post → Progress complete → score/comment read-back passed in `ZZ-GRADER-TEST` |
 | Document parsing + handwriting | 🟡 Built — Docling + Apple Vision + grader-vision |
 | Citation verification | 🟡 20/29 correct (69%); retraction check 3/3; accepted only as visibly experimental until accuracy reaches the enabled-mode gate |
@@ -68,7 +68,7 @@ beta with real student work.
 Confirmed in the current checkout:
 
 - Python tests: 173 passed, 12 intentionally skipped.
-- Frontend tests: 14 passed; TypeScript/Vite production build and Rust `cargo check` pass.
+- Frontend tests: 15 passed; TypeScript/Vite production build and Rust `cargo check` pass.
 - The complete mocked desktop workflow passes in Playwright across onboarding, queue, review,
   settings, model management, and local-engine recovery. The visual sweep now fail-closes unless it
   records all 16 required screens, screenshots, 47 required instructor controls, 167 visible
