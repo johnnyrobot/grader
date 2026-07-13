@@ -37,6 +37,7 @@ REQUIRED_GATES = (
     "frontend",
     "rust",
     "release_version",
+    "github_release",
     "updater",
     "updater_channel",
     "signing",
@@ -297,6 +298,18 @@ def build_e2e_matrix(evidence: dict[str, Any]) -> list[dict[str, str | bool]]:
             summary=_gate_summary(evidence.get("release_version", {})),
         ),
         _matrix_row(
+            id="github-release-publication-preflight",
+            area="distribution",
+            requirement="GitHub release workflow, updater endpoint, Actions secrets, and optional candidate tag checks are ready for publishing N+1.",
+            gate="github_release",
+            status=_gate_status(evidence, "github_release"),
+            evidence=_artifact_path(
+                evidence.get("github_release", {}),
+                "artifacts/release-evidence/github-release-preflight-current.json",
+            ),
+            summary=_gate_summary(evidence.get("github_release", {})),
+        ),
+        _matrix_row(
             id="signed-updater-manifest",
             area="updates",
             requirement="Signed updater latest.json matches the evaluated release artifact and app version.",
@@ -528,6 +541,10 @@ def _normalize_updater_key_artifact(path: Path | None) -> dict[str, Any]:
     return _normalize_artifact(path, "SKIP")
 
 
+def _normalize_github_release_artifact(path: Path | None) -> dict[str, Any]:
+    return _normalize_artifact(path, "BLOCKED_GITHUB_RELEASE_PREFLIGHT")
+
+
 def _normalize_updater_channel_artifact(path: Path | None, expected_version: str) -> dict[str, Any]:
     channel = _normalize_artifact(path, "SKIP")
     if channel.get("status") != "PASS":
@@ -667,6 +684,7 @@ def collect_evidence(args: argparse.Namespace) -> dict[str, Any]:
     evidence["frontend"] = _normalize_artifact(args.frontend_artifact, "SKIP")
     evidence["rust"] = _normalize_artifact(args.rust_artifact, "SKIP")
     evidence["release_version"] = _normalize_artifact(args.release_version_artifact, "BLOCKED_RELEASE_VERSION")
+    evidence["github_release"] = _normalize_github_release_artifact(args.github_release_artifact)
     evidence["updater_key"] = _normalize_updater_key_artifact(args.updater_key_artifact)
     evidence["updater"] = _augment_updater_with_key_diagnostic(
         _normalize_updater_artifact(args.updater_artifact, expected_version),
@@ -757,6 +775,12 @@ def main() -> None:
     parser.add_argument("--frontend-artifact", type=Path, default=None)
     parser.add_argument("--rust-artifact", type=Path, default=None)
     parser.add_argument("--release-version-artifact", type=Path, default=None)
+    parser.add_argument(
+        "--github-release-artifact",
+        type=Path,
+        default=Path("artifacts/release-evidence/github-release-preflight-current.json"),
+        help="Optional read-only publication preflight artifact from scripts/github_release_preflight.py",
+    )
     parser.add_argument("--updater-artifact", type=Path, default=None)
     parser.add_argument(
         "--updater-channel-artifact",
@@ -767,7 +791,7 @@ def main() -> None:
     parser.add_argument(
         "--updater-key-artifact",
         type=Path,
-        default=Path("artifacts/release-evidence/updater-key.json"),
+        default=Path("artifacts/release-evidence/updater-key-current.json"),
         help="Optional updater signing-key preflight artifact from scripts/updater_key_doctor.py",
     )
     parser.add_argument("--clean-machine-artifact", type=Path, default=None)

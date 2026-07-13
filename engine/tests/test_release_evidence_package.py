@@ -15,6 +15,7 @@ def test_build_package_copies_artifacts_and_writes_runbook_template(tmp_path):
     readiness = tmp_path / "release-readiness.json"
     signing = tmp_path / "signing.json"
     release_version = tmp_path / "release-version.json"
+    github_release = tmp_path / "github-release-preflight-current.json"
     updater_channel = tmp_path / "updater-channel-current.json"
     updater_key = tmp_path / "updater-key.json"
     dmg.write_bytes(b"signed dmg")
@@ -35,6 +36,7 @@ def test_build_package_copies_artifacts_and_writes_runbook_template(tmp_path):
     }))
     signing.write_text(json.dumps({"status": "PASS"}))
     release_version.write_text(json.dumps({"status": "PASS"}))
+    github_release.write_text(json.dumps({"status": "BLOCKED_GITHUB_RELEASE_PREFLIGHT"}))
     updater_channel.write_text(json.dumps({"status": "BLOCKED_UPDATER_CHANNEL"}))
     updater_key.write_text(json.dumps({"status": "BLOCKED_UPDATER_KEY"}))
 
@@ -48,6 +50,7 @@ def test_build_package_copies_artifacts_and_writes_runbook_template(tmp_path):
         readiness_report=readiness,
         signing_evidence=signing,
         release_version_evidence=release_version,
+        github_release_evidence=github_release,
         updater_channel_evidence=updater_channel,
         updater_key_evidence=updater_key,
     )
@@ -59,6 +62,7 @@ def test_build_package_copies_artifacts_and_writes_runbook_template(tmp_path):
     assert (out / "release-artifacts" / "latest.json").exists()
     assert (out / "evidence" / "updater.json").exists()
     assert (out / "evidence" / "release-version.json").exists()
+    assert (out / "evidence" / "github-release-preflight-current.json").exists()
     assert (out / "evidence" / "updater-channel-current.json").exists()
     assert (out / "evidence" / "updater-key.json").exists()
     assert "first_run_models" in (out / "clean-machine-runbook.md").read_text()
@@ -67,6 +71,7 @@ def test_build_package_copies_artifacts_and_writes_runbook_template(tmp_path):
     readme = (out / "README.md").read_text()
     assert "TAURI_SIGNING_PRIVATE_KEY_PASSWORD" in readme
     assert "release_version_guard.py" in readme
+    assert "github_release_preflight.py" in readme
     assert "updater_channel_preflight.py" in readme
     manifest_payload = json.loads((out / "release-evidence-package.json").read_text())
     assert manifest_payload["files"]["dmg"]["sha256"] == package["files"]["dmg"]["sha256"]

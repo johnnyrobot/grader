@@ -37,7 +37,8 @@ review workflow work, including the neuroinclusive light-first interface and the
 release-gate machinery. Public-proxy quality/fairness pass and Canvas score/comment round-trip is
 validated, and a current-source local app/DMG now signs, notarizes, staples, and passes macOS
 signature checks. Signed updater-manifest evidence now passes locally. Public beta is still blocked
-by clean-machine updater N→N+1 behavioral validation.
+by GitHub release-publication setup, the live updater channel, and clean-machine updater N→N+1
+behavioral validation.
 
 | | |
 |---|---|
@@ -49,6 +50,7 @@ by clean-machine updater N→N+1 behavioral validation.
 | Document parsing + handwriting | 🟡 Built — Docling + Apple Vision + grader-vision |
 | Citation verification | 🟡 20/29 correct (69%); retraction check 3/3; accepted only as visibly experimental until accuracy reaches the enabled-mode gate |
 | CI gates | 🟢 Privacy PASS; perf PASS; public-proxy quality/fairness PASS; teacher-local still unvalidated |
+| GitHub release preflight | 🔴 Missing required Actions secrets for signed/notarized updater releases |
 | Updater evidence | 🟢 Signed `latest.json` references the current-source signed/notarized DMG and passes updater evidence |
 | Signing + notarization | 🟢 Current-source local app/DMG signed, notarized, stapled, and passed `codesign`/`stapler`/`spctl` checks |
 | Updates | 🟡 Tauri updater integrated with signed manifest generation and in-app install/restart UI; real N→N+1 path still needs release-channel evidence |
@@ -65,8 +67,8 @@ beta with real student work.
 
 Confirmed in the current checkout:
 
-- Python tests: 130 passed, 12 intentionally skipped.
-- Frontend tests: 13 passed; TypeScript/Vite production build and Rust `cargo check` pass.
+- Python tests: 161 passed, 12 intentionally skipped.
+- Frontend tests: 14 passed; TypeScript/Vite production build and Rust `cargo check` pass.
 - The complete mocked desktop workflow passes in Playwright across onboarding, queue, review,
   settings, model management, and local-engine recovery. The visual sweep now fail-closes unless it
   records all 16 required screens, screenshots, 47 required instructor controls, 167 visible
@@ -89,8 +91,8 @@ Confirmed in the current checkout:
   notarizes, staples, and passes macOS signature checks; signed updater manifest/release provenance
   passes; and local signed-app evidence covers fresh-profile first-run model reconciliation, crash
   recovery, keyboard-only review, and the Computer Use instructor sweep. The remaining release
-  blockers are the missing live GitHub updater channel (`latest.json` currently 404s) and the
-  clean-machine in-app updater N→N+1 path.
+  blockers are the missing GitHub Actions release secrets, the missing live GitHub updater channel
+  (`latest.json` currently 404s), and the clean-machine in-app updater N→N+1 path.
 
 Public-beta blockers:
 
@@ -98,15 +100,17 @@ Public-beta blockers:
 2. Keep Canvas rubric-assessment posting disabled until local rubric criteria can be mapped to real
    Canvas criterion IDs; score/comment round-trip is validated, attachment write-back still needs
    separate evidence.
-3. Publish a signed N+1 GitHub updater channel whose `latest.json` advertises reachable signed
+3. Add the required GitHub Actions release secrets and require
+   `scripts/github_release_preflight.py --candidate-tag v<N+1>` to pass before tagging/publishing.
+4. Publish a signed N+1 GitHub updater channel whose `latest.json` advertises reachable signed
    `Grader.dmg` release assets, then validate the updater N→N+1 path on a clean supported Mac
    against that signed `latest.json` and
    signed/notarized DMG. The current local signed-app fresh-profile first-run, crash recovery,
    Computer Use sweep, keyboard-only review path, signed updater manifest, and native
    install/restart UI pass static/build checks against `/Applications/Grader.app` installed as
    `com.grader.app`; rerun those checks if the release bundle identity changes.
-4. Keep teacher-local validation separate until an instructor supplies authorized historical grading.
-5. Complete a supervised private pilot before opening enrollment publicly.
+5. Keep teacher-local validation separate until an instructor supplies authorized historical grading.
+6. Complete a supervised private pilot before opening enrollment publicly.
 
 ## Design commitments
 
@@ -157,18 +161,19 @@ uv run python scripts/dev_mock_engine.py  # optional: safe synthetic backend for
 uv run python scripts/signing_doctor.py --out artifacts/release-evidence/signing.json --no-fail
 uv run python scripts/signing_doctor.py --print-repair-runbook > signing-repair-runbook.md  # local-only recovery steps if the doctor blocks
 uv run python scripts/release_version_guard.py --tag v0.1.0 --out artifacts/release-evidence/release-version.json
+uv run python scripts/github_release_preflight.py --candidate-tag v0.1.1 --out artifacts/release-evidence/github-release-preflight-current.json --no-fail
 export TAURI_SIGNING_PRIVATE_KEY_PASSWORD='<updater-key-password>'  # required for encrypted updater keys
-uv run python scripts/updater_key_doctor.py --signing-key /path/to/tauri-updater-key.pem --out artifacts/release-evidence/updater-key.json
+uv run python scripts/updater_key_doctor.py --signing-key /path/to/tauri-updater-key.pem --out artifacts/release-evidence/updater-key-current.json
 uv run python scripts/generate_appcast.py --dmg /path/to/Grader.dmg --version 0.1.0 --signing-key /path/to/tauri-updater-key.pem --output latest.json
-uv run python scripts/updater_evidence.py --manifest latest.json --artifact /path/to/Grader.dmg --out artifacts/release-evidence/updater.json  # fails if local artifacts predate the current git commit
+uv run python scripts/updater_evidence.py --manifest latest.json --artifact /path/to/Grader.dmg --out artifacts/release-evidence/updater-current.json  # fails if local artifacts predate the current git commit
 uv run python scripts/updater_channel_preflight.py --current-version 0.1.0 --out artifacts/release-evidence/updater-channel-current.json  # run after publishing the N+1 release
 uv run python scripts/live_canvas_e2e.py --dry-run
 uv run python scripts/clean_machine_evidence.py --print-manual-runbook > clean-machine-runbook.md
 uv run python scripts/clean_machine_evidence.py --print-manual-template > clean-machine-manual-evidence.json
 uv run python scripts/computer_use_sweep_evidence.py --capture-dir /path/to/computer-use-captures --out /path/to/evidence-root/computer_use_instructor_sweep.json
 uv run python scripts/clean_machine_evidence.py --app /Applications/Grader.app --dmg /path/to/Grader.dmg --updater-manifest /path/to/latest.json --expected-version 0.1.0 --manual-evidence clean-machine-manual-evidence.json --evidence-root /path/to/screenshots-and-logs --out artifacts/release-evidence/clean-machine.json
-uv run python scripts/release_evidence_package.py --out-dir artifacts/release-evidence/clean-machine-handoff --updater-channel-evidence artifacts/release-evidence/updater-channel-current.json
-uv run python scripts/release_readiness.py --profile public_beta --expected-version 0.1.0 --public-proxy-dir artifacts/public_proxy/mohler_asag_diverse_anchored_pilot --citation-artifact artifacts/citation-results.json --canvas-artifact artifacts/release-evidence/canvas-live.json --privacy-artifact artifacts/release-evidence/privacy.json --performance-artifact artifacts/release-evidence/performance.json --frontend-artifact artifacts/release-evidence/frontend.json --rust-artifact artifacts/release-evidence/rust.json --release-version-artifact artifacts/release-evidence/release-version.json --updater-artifact artifacts/release-evidence/updater.json --updater-channel-artifact artifacts/release-evidence/updater-channel-current.json --updater-key-artifact artifacts/release-evidence/updater-key.json --clean-machine-artifact artifacts/release-evidence/clean-machine-local-current.json --out artifacts/release-readiness
+uv run python scripts/release_evidence_package.py --out-dir artifacts/release-evidence/clean-machine-handoff --github-release-evidence artifacts/release-evidence/github-release-preflight-current.json --updater-channel-evidence artifacts/release-evidence/updater-channel-current.json
+uv run python scripts/release_readiness.py --profile public_beta --expected-version 0.1.0 --public-proxy-dir artifacts/public_proxy/mohler_asag_diverse_anchored_pilot --citation-artifact artifacts/citation-results.json --canvas-artifact artifacts/release-evidence/canvas-live.json --privacy-artifact artifacts/release-evidence/privacy.json --performance-artifact artifacts/release-evidence/performance.json --frontend-artifact artifacts/release-evidence/frontend.json --rust-artifact artifacts/release-evidence/rust.json --release-version-artifact artifacts/release-evidence/release-version.json --github-release-artifact artifacts/release-evidence/github-release-preflight-current.json --updater-artifact artifacts/release-evidence/updater-current.json --updater-channel-artifact artifacts/release-evidence/updater-channel-current.json --updater-key-artifact artifacts/release-evidence/updater-key-current.json --clean-machine-artifact artifacts/release-evidence/clean-machine-local-current.json --out artifacts/release-readiness
 ```
 
 The clean-machine manual template is fail-closed: every manual row must include `passed: true`,
@@ -210,11 +215,14 @@ keys in non-interactive release runs. `--allow-unsigned` is only for local smoke
 `scripts/release_readiness.py --expected-version ...` records artifact path/mtime/SHA-256 metadata
 and fails PASS updater or clean-machine artifacts that do not match the evaluated app version.
 `scripts/release_version_guard.py` fails release tags whose app/package metadata still reports a
-different version. The app is still not public-beta ready until signed updater evidence and
-clean-machine release behavior evidence pass. Use `scripts/updater_key_doctor.py` to verify the
-updater key/password before regenerating `latest.json`, and use
-`scripts/updater_channel_preflight.py` after publishing N+1 to confirm the live release channel
-advertises a signed newer, reachable `Grader.dmg` before clean-machine updater testing starts.
+different version. The app is still not public-beta ready until GitHub release publication,
+signed-updater-channel, and clean-machine release behavior evidence pass. Use
+`scripts/github_release_preflight.py --candidate-tag v<N+1>` before creating the release tag so
+missing Actions secrets or stale tag/release state are caught without writing to GitHub. Use
+`scripts/updater_key_doctor.py` to verify the updater key/password before regenerating
+`latest.json`, and use `scripts/updater_channel_preflight.py` after publishing N+1 to confirm the
+live release channel advertises a signed newer, reachable `Grader.dmg` before clean-machine updater
+testing starts.
 
 ## Docs
 

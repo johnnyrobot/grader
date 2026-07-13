@@ -13,6 +13,7 @@ scripts/
 ├── dev_mock_engine.py          # synthetic loopback engine for safe local UI/Computer Use inspection
 ├── frontend_evidence.py        # collect component/build/E2E/visual-sweep release artifact
 ├── release_version_guard.py    # fail closed when tag/app/package versions drift
+├── github_release_preflight.py # read-only GitHub release publication readiness
 ├── signing_doctor.py           # diagnose Developer ID private-key and notarytool readiness
 ├── updater_key_doctor.py       # diagnose Tauri updater private-key/password readiness
 ├── generate_appcast.py         # generate signed Tauri updater latest.json manifests
@@ -33,8 +34,9 @@ scripts/
 | Inspect UI safely | `dev_mock_engine.py` | Serves synthetic queue/settings/models/rubric responses on loopback for local browser/Computer Use inspection only |
 | Collect frontend release evidence | `frontend_evidence.py` | Runs component tests, production build, managed Playwright E2E, and validates visual-sweep screenshots/control coverage |
 | Guard release version | `release_version_guard.py` | Requires the release tag/version to match Tauri config, Rust crate, frontend package, and Python project before publishing assets |
+| Preflight GitHub release publication | `github_release_preflight.py` | Read-only check for GitHub repo access, updater endpoint, release workflow, required Actions secrets, and optional N+1 tag/release availability |
 | Diagnose signing credentials | `signing_doctor.py` | Writes `artifacts/release-evidence/signing.json`; probes Developer ID private-key access and notarytool profile before signing; `--print-repair-runbook` emits secret-free local recovery steps |
-| Diagnose updater key | `updater_key_doctor.py` | Writes `artifacts/release-evidence/updater-key.json`; signs a tiny temp file to verify the Tauri updater key and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` |
+| Diagnose updater key | `updater_key_doctor.py` | Writes `artifacts/release-evidence/updater-key-current.json`; signs a tiny temp file to verify the Tauri updater key and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` |
 | Generate updater manifest | `generate_appcast.py` | Requires `--signing-key` for release manifests; use `--allow-unsigned` only for local smoke fixtures |
 | Validate updater evidence | `updater_evidence.py` | Requires updater config, signed latest.json, artifact filename/hash/source-freshness checks, and local artifact signature/notarization checks |
 | Preflight updater channel | `updater_channel_preflight.py` | Fails fast when the configured GitHub `latest.json` is absent, unsigned, points at the wrong artifact/channel, is not newer than installed N, or advertises unreachable release assets |
@@ -64,6 +66,13 @@ scripts/
   It prevents tag/app metadata drift across `tauri.conf.json`, `Cargo.toml`, `package.json`, and
   `pyproject.toml`. The GitHub release workflow runs it before building so a tag such as `v0.1.1`
   cannot publish an app bundle still reporting `0.1.0`.
+- **`github_release_preflight.py`**: run before creating or pushing the N+1 release tag:
+  `uv run python scripts/github_release_preflight.py --candidate-tag v<N+1>`.
+  It is read-only: it checks `gh` access, the configured updater endpoint, release workflow
+  presence, required Actions secrets, recent releases, and optional candidate tag/release
+  availability without creating tags, releases, assets, or secrets. A stale inactive GitHub account
+  can be a warning if the active account can read the target repo, but missing release secrets block
+  public beta.
 - **`updater_evidence.py`**: blocks public beta when `latest.json` is missing, any platform
   signature is empty, the manifest does not reference the supplied artifact, the supplied
   manifest/artifact predates the current git commit, or the local artifact fails
@@ -112,7 +121,9 @@ scripts/
   clean-machine tester receives one deterministic, gitignored handoff folder:
   `uv run python scripts/release_evidence_package.py --out-dir artifacts/release-evidence/clean-machine-handoff`.
   It writes hashes/status summaries, copies the release DMG/latest.json when supplied, and includes
-  `clean-machine-runbook.md` plus `clean-machine-manual-evidence.json`. It is a handoff package, not
+  `clean-machine-runbook.md` plus `clean-machine-manual-evidence.json`. Include
+  `--github-release-evidence artifacts/release-evidence/github-release-preflight-current.json` so
+  the tester sees whether publication prerequisites have passed. It is a handoff package, not
   release evidence by itself.
 - **`release_readiness.py`**: pass `--expected-version ...` for release runs. The script defaults
   to `app/src-tauri/tauri.conf.json`, records artifact path/mtime/SHA-256 metadata, and rejects PASS
