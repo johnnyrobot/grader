@@ -71,8 +71,8 @@ last signed-app Computer Use sweep also fails because it was captured from an ol
 stale review-state bug. The remaining public-beta blockers are a signed updater manifest plus
 clean-machine behavioral evidence: first-run model setup, crash recovery, keyboard-only review,
 Computer Use instructor sweep, and updater N→N+1. Set `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` before
-generating the release `latest.json`, refresh the local signing diagnostic artifact before release
-attempts, and generate
+generating the release `latest.json`, run `scripts/updater_key_doctor.py` to verify the updater
+key/password, refresh the local signing diagnostic artifact before release attempts, and generate
 `clean-machine-runbook.md` with `scripts/clean_machine_evidence.py --print-manual-runbook` before
 clean-Mac testing. `scripts/release_evidence_package.py` can assemble the signed DMG/latest.json,
 current evidence JSON, runbook, and manual template into one clean-machine tester handoff folder, but

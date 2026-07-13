@@ -154,6 +154,7 @@ uv run python scripts/dev_mock_engine.py  # optional: safe synthetic backend for
 uv run python scripts/signing_doctor.py --out artifacts/release-evidence/signing.json --no-fail
 uv run python scripts/signing_doctor.py --print-repair-runbook > signing-repair-runbook.md  # local-only recovery steps if the doctor blocks
 export TAURI_SIGNING_PRIVATE_KEY_PASSWORD='<updater-key-password>'  # required for encrypted updater keys
+uv run python scripts/updater_key_doctor.py --signing-key /path/to/tauri-updater-key.pem --out artifacts/release-evidence/updater-key.json
 uv run python scripts/generate_appcast.py --dmg /path/to/Grader.dmg --version 0.1.0 --signing-key /path/to/tauri-updater-key.pem --output latest.json
 uv run python scripts/updater_evidence.py --manifest latest.json --artifact /path/to/Grader.dmg --out artifacts/release-evidence/updater.json  # fails if local artifacts predate the current git commit
 uv run python scripts/live_canvas_e2e.py --dry-run
@@ -204,7 +205,8 @@ keys in non-interactive release runs. `--allow-unsigned` is only for local smoke
 `scripts/release_readiness.py --expected-version ...` records artifact path/mtime/SHA-256 metadata
 and fails PASS updater or clean-machine artifacts that do not match the evaluated app version. The app
 is still not public-beta ready until signed updater evidence and clean-machine release behavior
-evidence pass.
+evidence pass. Use `scripts/updater_key_doctor.py` to verify the updater key/password before
+regenerating `latest.json`.
 
 ## Docs
 

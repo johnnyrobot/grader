@@ -14,6 +14,7 @@ def test_build_package_copies_artifacts_and_writes_runbook_template(tmp_path):
     clean = tmp_path / "clean-machine.json"
     readiness = tmp_path / "release-readiness.json"
     signing = tmp_path / "signing.json"
+    updater_key = tmp_path / "updater-key.json"
     dmg.write_bytes(b"signed dmg")
     manifest.write_text('{"version":"0.1.0","platforms":{"darwin-aarch64":{"signature":""}}}')
     updater.write_text(json.dumps({
@@ -31,6 +32,7 @@ def test_build_package_copies_artifacts_and_writes_runbook_template(tmp_path):
         "e2e_matrix_summary": {"blocking": 1, "passing": 15},
     }))
     signing.write_text(json.dumps({"status": "PASS"}))
+    updater_key.write_text(json.dumps({"status": "BLOCKED_UPDATER_KEY"}))
 
     out = tmp_path / "handoff"
     package = build_package(
@@ -41,6 +43,7 @@ def test_build_package_copies_artifacts_and_writes_runbook_template(tmp_path):
         clean_machine_evidence=clean,
         readiness_report=readiness,
         signing_evidence=signing,
+        updater_key_evidence=updater_key,
     )
 
     assert package["status"] == "PASS_PACKAGE_READY"
@@ -49,6 +52,7 @@ def test_build_package_copies_artifacts_and_writes_runbook_template(tmp_path):
     assert (out / "release-artifacts" / "Grader.dmg").exists()
     assert (out / "release-artifacts" / "latest.json").exists()
     assert (out / "evidence" / "updater.json").exists()
+    assert (out / "evidence" / "updater-key.json").exists()
     assert "first_run_models" in (out / "clean-machine-runbook.md").read_text()
     template = json.loads((out / "clean-machine-manual-evidence.json").read_text())
     assert template["computer_use_instructor_sweep"]["assertions"]

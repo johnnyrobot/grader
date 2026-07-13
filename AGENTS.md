@@ -196,6 +196,7 @@ uv run python scripts/frontend_evidence.py --out artifacts/release-evidence/fron
 uv run python scripts/signing_doctor.py --out artifacts/release-evidence/signing.json --no-fail
 uv run python scripts/signing_doctor.py --print-repair-runbook > signing-repair-runbook.md
 export TAURI_SIGNING_PRIVATE_KEY_PASSWORD='<updater-key-password>'  # required for encrypted updater keys
+uv run python scripts/updater_key_doctor.py --signing-key /path/to/tauri-updater-key.pem --out artifacts/release-evidence/updater-key.json
 uv run python scripts/generate_appcast.py --dmg /path/to/Grader.dmg --version 0.1.0 --signing-key /path/to/tauri-updater-key.pem --output latest.json
 uv run python scripts/updater_evidence.py --manifest latest.json --artifact /path/to/Grader.dmg --out artifacts/release-evidence/updater.json  # fails if artifacts predate current git commit
 uv run python scripts/live_canvas_e2e.py --dry-run
@@ -254,9 +255,10 @@ package is a clean-Mac handoff bundle only; do not treat it as passing clean-mac
   tests plus four passing Playwright E2E tests.
 - **Public beta verdict:** not ready for unattended public testing with real student work. Limit
   current use to a developer-assisted alpha with synthetic or institution-approved test data.
-- **Highest-value next action:** set `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` and generate a signed
-  updater manifest for the current-source signed/notarized DMG, rerun updater and clean-machine
-  evidence, then collect clean-machine first-run model setup, crash recovery, keyboard-only review,
-  Computer Use instructor sweep, and updater-path evidence before broadening beta claims.
+- **Highest-value next action:** set `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`, run
+  `scripts/updater_key_doctor.py`, generate a signed updater manifest for the current-source
+  signed/notarized DMG, rerun updater and clean-machine evidence, then collect clean-machine first-run
+  model setup, crash recovery, keyboard-only review, Computer Use instructor sweep, and updater-path
+  evidence before broadening beta claims.
 - The existing modification under `.omo/run-continuation/` is unrelated operational state; do not
   overwrite or commit it unless explicitly requested.

@@ -13,6 +13,7 @@ scripts/
 ├── dev_mock_engine.py          # synthetic loopback engine for safe local UI/Computer Use inspection
 ├── frontend_evidence.py        # collect component/build/E2E/visual-sweep release artifact
 ├── signing_doctor.py           # diagnose Developer ID private-key and notarytool readiness
+├── updater_key_doctor.py       # diagnose Tauri updater private-key/password readiness
 ├── generate_appcast.py         # generate signed Tauri updater latest.json manifests
 ├── updater_evidence.py         # validate updater config/latest.json/signature/artifact
 ├── computer_use_sweep_evidence.py # validate signed-app Computer Use AX/screenshot captures
@@ -30,6 +31,7 @@ scripts/
 | Inspect UI safely | `dev_mock_engine.py` | Serves synthetic queue/settings/models/rubric responses on loopback for local browser/Computer Use inspection only |
 | Collect frontend release evidence | `frontend_evidence.py` | Runs component tests, production build, managed Playwright E2E, and validates visual-sweep screenshots/control coverage |
 | Diagnose signing credentials | `signing_doctor.py` | Writes `artifacts/release-evidence/signing.json`; probes Developer ID private-key access and notarytool profile before signing; `--print-repair-runbook` emits secret-free local recovery steps |
+| Diagnose updater key | `updater_key_doctor.py` | Writes `artifacts/release-evidence/updater-key.json`; signs a tiny temp file to verify the Tauri updater key and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` |
 | Generate updater manifest | `generate_appcast.py` | Requires `--signing-key` for release manifests; use `--allow-unsigned` only for local smoke fixtures |
 | Validate updater evidence | `updater_evidence.py` | Requires updater config, signed latest.json, artifact filename/hash/source-freshness checks, and local artifact signature/notarization checks |
 | Validate signed-app Computer Use sweep | `computer_use_sweep_evidence.py` | Produces PASS/FAIL JSON from `.ax.txt` + `.png` captures and fails stale approved/unsaved review states |
@@ -63,6 +65,10 @@ scripts/
   `--allow-unsigned` is supplied for a non-release smoke fixture. Encrypted updater keys also need
   `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` in non-interactive release runs. `--app` zips the `.app`
   bundle before signing the updater artifact.
+- **`updater_key_doctor.py`**: run before `generate_appcast.py` when the updater manifest is the
+  blocker. It signs a temporary file and writes a secret-free JSON artifact; it does not print or
+  store the private key or password. A PASS means the key/password can sign updater artifacts, not
+  that the release manifest or clean-machine updater path has passed.
 - **`signing_doctor.py`**: run before `sign_and_notarize.sh`. It fail-closes on missing Developer
   ID certificates, inaccessible private keys, invalid notarytool profiles, and missing hardened
   runtime/updater config. Use `--print-repair-runbook` to generate local-only recovery commands for
