@@ -203,12 +203,14 @@ uv run python scripts/clean_machine_evidence.py --print-manual-runbook > clean-m
 uv run python scripts/clean_machine_evidence.py --print-manual-template > clean-machine-manual-evidence.json
 uv run python scripts/computer_use_sweep_evidence.py --capture-dir /path/to/computer-use-captures --out /path/to/evidence-root/computer_use_instructor_sweep.json
 uv run python scripts/clean_machine_evidence.py --app /Applications/Grader.app --dmg /path/to/Grader.dmg --updater-manifest /path/to/latest.json --expected-version 0.1.0 --manual-evidence clean-machine-manual-evidence.json --evidence-root /path/to/screenshots-and-logs --out artifacts/release-evidence/clean-machine.json
+uv run python scripts/release_evidence_package.py --out-dir artifacts/release-evidence/clean-machine-handoff
 uv run python scripts/release_readiness.py --profile public_beta --expected-version 0.1.0 --public-proxy-dir artifacts/public_proxy/mohler_asag_diverse_anchored_pilot --citation-artifact artifacts/citation-results.json --canvas-artifact artifacts/release-evidence/canvas-live.json --privacy-artifact artifacts/release-evidence/privacy.json --performance-artifact artifacts/release-evidence/performance.json --frontend-artifact artifacts/release-evidence/frontend.json --rust-artifact artifacts/release-evidence/rust.json --updater-artifact artifacts/release-evidence/updater.json --clean-machine-artifact artifacts/release-evidence/clean-machine-local-current.json --out artifacts/release-readiness
 ```
 
 The clean-machine manual template must be filled with `passed: true`, tester/timestamp/notes,
 existing evidence files, and every check-specific `assertions` entry set to `true`; the Computer Use
-row also needs a PASS JSON from `scripts/computer_use_sweep_evidence.py`.
+row also needs a PASS JSON from `scripts/computer_use_sweep_evidence.py`. The release-evidence
+package is a clean-Mac handoff bundle only; do not treat it as passing clean-machine evidence.
 
 ## CURRENT STATUS / NEXT WORK
 

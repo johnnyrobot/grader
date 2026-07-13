@@ -74,6 +74,8 @@ Computer Use instructor sweep, and updater N→N+1. Set `TAURI_SIGNING_PRIVATE_K
 generating the release `latest.json`, refresh the local signing diagnostic artifact before release
 attempts, and generate
 `clean-machine-runbook.md` with `scripts/clean_machine_evidence.py --print-manual-runbook` before
-clean-Mac testing. Canvas rubric-assessment
+clean-Mac testing. `scripts/release_evidence_package.py` can assemble the signed DMG/latest.json,
+current evidence JSON, runbook, and manual template into one clean-machine tester handoff folder, but
+the package is not itself passing evidence. Canvas rubric-assessment
 posting is intentionally disabled until real Canvas criterion IDs can be mapped, and attachment
 write-back still needs separate evidence.

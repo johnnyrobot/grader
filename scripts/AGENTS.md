@@ -17,6 +17,7 @@ scripts/
 ├── updater_evidence.py         # validate updater config/latest.json/signature/artifact
 ├── computer_use_sweep_evidence.py # validate signed-app Computer Use AX/screenshot captures
 ├── clean_machine_evidence.py   # collect signed/notarized clean-machine release evidence
+├── release_evidence_package.py # assemble clean-machine tester handoff package
 └── seed_canvas_sandbox.py      # Canvas round-trip seeder/verifier (dry-run by default)
 ```
 
@@ -33,6 +34,7 @@ scripts/
 | Validate updater evidence | `updater_evidence.py` | Requires updater config, signed latest.json, artifact filename/hash/source-freshness checks, and local artifact signature/notarization checks |
 | Validate signed-app Computer Use sweep | `computer_use_sweep_evidence.py` | Produces PASS/FAIL JSON from `.ax.txt` + `.png` captures and fails stale approved/unsaved review states |
 | Clean-machine release evidence | `clean_machine_evidence.py` | Writes `artifacts/release-evidence/clean-machine.json`; PASS requires signing, app/DMG/latest.json provenance, current-source freshness, plus structured manual evidence for first-run/crash/keyboard/Computer Use/updater checks |
+| Package clean-machine handoff | `release_evidence_package.py` | Copies or references signed release artifacts, evidence JSON, clean-machine runbook, and manual template for a clean-Mac tester |
 | Seed Canvas sandbox | `seed_canvas_sandbox.py` | `--apply --students 6` to create + exercise |
 | Tear down sandbox | `seed_canvas_sandbox.py` | `--teardown --course-id 106 --apply` |
 | Understand Canvas API quirks | `seed_canvas_sandbox.py` | All 4 gotchas encoded in code comments |
@@ -84,6 +86,12 @@ scripts/
   complements the automated Playwright visual sweep. That manual check requires a PASS JSON artifact
   from `computer_use_sweep_evidence.py`. Manual flags without evidence are legacy-only and should not
   be used for release claims.
+- **`release_evidence_package.py`**: build this after signing/notarization and updater evidence so a
+  clean-machine tester receives one deterministic, gitignored handoff folder:
+  `uv run python scripts/release_evidence_package.py --out-dir artifacts/release-evidence/clean-machine-handoff`.
+  It writes hashes/status summaries, copies the release DMG/latest.json when supplied, and includes
+  `clean-machine-runbook.md` plus `clean-machine-manual-evidence.json`. It is a handoff package, not
+  release evidence by itself.
 - **`release_readiness.py`**: pass `--expected-version ...` for release runs. The script defaults
   to `app/src-tauri/tauri.conf.json`, records artifact path/mtime/SHA-256 metadata, and rejects PASS
   updater or clean-machine artifacts whose recorded version does not match the evaluated app. Its
