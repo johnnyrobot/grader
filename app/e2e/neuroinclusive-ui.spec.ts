@@ -1,17 +1,54 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
-import { readFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const instructorFixture = JSON.parse(readFileSync(join(__dirname, "fixtures/instructor-beta.json"), "utf8"));
 const queue = instructorFixture.queue;
+const visualEvidenceDir = join(__dirname, "..", "..", "artifacts", "release-evidence", "visual-sweep");
+const visualEvidenceJson = join(__dirname, "..", "..", "artifacts", "release-evidence", "visual-sweep.json");
 
 async function expectNoSeriousAccessibilityViolations(page: Page) {
   const result = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze();
   const serious = result.violations.filter(violation => ["serious", "critical"].includes(violation.impact || ""));
   expect(serious, JSON.stringify(serious, null, 2)).toEqual([]);
+}
+
+async function collectControlInventory(page: Page) {
+  return page.locator("button, input, textarea, select, a[href], [role='tab']").evaluateAll(elements => elements.map((element, index) => {
+    const el = element as HTMLElement;
+    const input = element as HTMLInputElement;
+    const label = input.labels?.[0]?.textContent?.replace(/\s+/g, " ").trim();
+    const rect = el.getBoundingClientRect();
+    return {
+      index,
+      tag: element.tagName.toLowerCase(),
+      type: input.type || null,
+      role: el.getAttribute("role"),
+      id: el.id || null,
+      label: label || el.getAttribute("aria-label") || el.textContent?.replace(/\s+/g, " ").trim() || input.placeholder || null,
+      ariaPressed: el.getAttribute("aria-pressed"),
+      ariaSelected: el.getAttribute("aria-selected"),
+      disabled: input.disabled || el.getAttribute("aria-disabled") === "true",
+      visible: rect.width > 0 && rect.height > 0,
+    };
+  }));
+}
+
+async function captureVisualScreen(page: Page, name: string) {
+  mkdirSync(visualEvidenceDir, { recursive: true });
+  const screenshot = join(visualEvidenceDir, `${name}.png`);
+  await page.screenshot({ path: screenshot, fullPage: true });
+  const controls = await collectControlInventory(page);
+  return {
+    name,
+    screenshot,
+    control_count: controls.length,
+    visible_control_count: controls.filter(control => control.visible).length,
+    controls,
+  };
 }
 
 test.beforeEach(async ({ page }) => {
@@ -199,4 +236,138 @@ test("instructor exercises every core control surface", async ({ page }, testInf
   await page.screenshot({ path: testInfo.outputPath("models-all-controls.png"), fullPage: true });
   await page.getByRole("button", { name: /Back to queue/ }).click();
   await expectNoSeriousAccessibilityViolations(page);
+});
+
+test("visual sweep records every core screen and visible control inventory", async ({ page }) => {
+  const screens: Awaited<ReturnType<typeof captureVisualScreen>>[] = [];
+  const capture = async (name: string) => {
+    await expectNoSeriousAccessibilityViolations(page);
+    screens.push(await captureVisualScreen(page, name));
+  };
+
+  await page.goto("/");
+  await page.waitForLoadState("networkidle");
+  await expect(page.getByRole("heading", { name: "Your grading stays yours" })).toBeVisible();
+  await capture("01-onboarding-welcome");
+
+  await page.getByRole("button", { name: "Continue" }).click();
+  await expect(page.getByRole("heading", { name: "Choose a comfortable view" })).toBeVisible();
+  await page.getByRole("radio", { name: "Dark mode" }).check();
+  await page.getByRole("radio", { name: "Light mode" }).check();
+  await page.getByRole("radio", { name: "Spacious density" }).check();
+  await page.getByRole("radio", { name: "Comfortable density" }).check();
+  await page.getByRole("checkbox", { name: "Reduce interface motion" }).check();
+  await capture("02-onboarding-appearance");
+
+  await page.getByRole("button", { name: "Continue" }).click();
+  await expect(page.getByRole("heading", { name: "Check this Mac" })).toBeVisible();
+  await capture("03-onboarding-readiness");
+
+  await page.getByRole("button", { name: "Continue" }).click();
+  await expect(page.getByText("Local engine connected")).toBeVisible();
+  await capture("04-onboarding-connect");
+  await page.getByRole("button", { name: "Start grading" }).click();
+
+  await expect(page.getByRole("heading", { name: "Grading queue" })).toBeVisible();
+  await capture("05-queue-all");
+  await page.getByRole("button", { name: "All submissions" }).click();
+  await page.getByRole("button", { name: "Needs review" }).click();
+  await page.getByRole("button", { name: "Standard review" }).click();
+  await page.getByRole("button", { name: "Confident drafts" }).click();
+  await page.getByRole("button", { name: "Refresh queue" }).click();
+  await page.getByRole("button", { name: "Grade submissions" }).click();
+  await expect(page.getByText("3 submissions queued.")).toBeVisible();
+  await capture("06-queue-controls");
+
+  await page.getByRole("button", { name: /Student 1042/ }).click();
+  await expect(page.getByRole("heading", { name: "Review Student 1042" })).toBeVisible();
+  await capture("07-review-draft");
+  await page.getByRole("radio", { name: "5 points for Thesis" }).check();
+  await page.getByRole("textbox", { name: "Feedback for Student 1042" }).fill("Strong claim. Add one more cited example.");
+  await capture("08-review-edited");
+  await page.getByRole("button", { name: "Save changes and approve" }).click();
+  await expect(page.getByText("Your changes are approved. Score updated from 7 to 8.")).toBeVisible();
+  await capture("09-review-approved");
+  await page.getByRole("button", { name: /Back to queue/ }).click();
+
+  await page.getByRole("button", { name: "Settings" }).click();
+  await expect(page.getByRole("heading", { name: "Settings", exact: true })).toBeVisible();
+  await page.getByRole("tab", { name: "General" }).click();
+  await page.getByLabel("Canvas URL").fill("https://canvas.example.invalid");
+  await page.getByPlaceholder("Paste a new token").fill("synthetic-token");
+  await page.getByLabel("Local data directory").fill("/tmp/grader-synthetic");
+  await page.getByRole("button", { name: "Save general settings" }).click();
+  await expect(page.getByText("Settings saved on this Mac.")).toBeVisible();
+  await capture("10-settings-general");
+
+  await page.getByRole("tab", { name: "Appearance" }).click();
+  await page.getByRole("radio", { name: "Dark mode" }).check();
+  await page.getByRole("radio", { name: "Light mode" }).check();
+  await page.getByRole("button", { name: "Restore appearance defaults" }).click();
+  await capture("11-settings-appearance");
+
+  await page.getByRole("tab", { name: "Model defaults" }).click();
+  await page.getByLabel("Text grading model").fill("grader-text:8b");
+  await page.getByLabel("Vision and handwriting model").fill("grader-vision:1.3b");
+  await page.getByLabel("Embedding model").fill("nomic-embed-text:latest");
+  await page.getByRole("button", { name: "Save model defaults" }).click();
+  await capture("12-settings-model-defaults");
+
+  await page.getByRole("tab", { name: "Rubrics" }).click();
+  await page.getByRole("button", { name: "Load into editor" }).click();
+  await expect(page.getByText("Loaded “Synthetic Essay Rubric” into the editor.")).toBeVisible();
+  await page.getByLabel("Rubric title").fill("Synthetic Essay Rubric v2");
+  await page.getByLabel("Rubric text").fill("Thesis: 0-5\nEvidence: 0-5");
+  await page.getByRole("button", { name: "Save rubric" }).click();
+  await expect(page.getByText("Rubric “Synthetic Essay Rubric v2” saved.")).toBeVisible();
+  await capture("13-settings-rubrics");
+  await page.getByRole("button", { name: /Back to queue/ }).click();
+
+  await page.getByRole("button", { name: "Local models" }).click();
+  await expect(page.getByRole("heading", { name: "Local models" })).toBeVisible();
+  await page.getByRole("button", { name: "Refresh status" }).click();
+  await page.getByRole("button", { name: "Install handwriting model" }).click();
+  await expect(page.getByText("minicpm-v4.6:latest downloaded.")).toBeVisible();
+  await page.getByRole("button", { name: "Install exemplar finder model" }).click();
+  await expect(page.getByText("nomic-embed-text:latest downloaded.")).toBeVisible();
+  await capture("14-model-manager");
+
+  await page.setViewportSize({ width: 720, height: 900 });
+  await page.getByRole("button", { name: /Back to queue/ }).click();
+  await expect(page.getByRole("heading", { name: "Grading queue" })).toBeVisible();
+  await page.evaluate(() => { document.documentElement.style.fontSize = "200%"; });
+  const pageOverflows = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1);
+  expect(pageOverflows).toBe(false);
+  await capture("15-responsive-200-percent");
+
+  const requiredScreens = [
+    "01-onboarding-welcome",
+    "02-onboarding-appearance",
+    "03-onboarding-readiness",
+    "04-onboarding-connect",
+    "05-queue-all",
+    "06-queue-controls",
+    "07-review-draft",
+    "08-review-edited",
+    "09-review-approved",
+    "10-settings-general",
+    "11-settings-appearance",
+    "12-settings-model-defaults",
+    "13-settings-rubrics",
+    "14-model-manager",
+    "15-responsive-200-percent",
+  ];
+  expect(screens.map(screen => screen.name)).toEqual(requiredScreens);
+  expect(screens.every(screen => screen.visible_control_count > 0)).toBe(true);
+
+  const evidence = {
+    status: "PASS",
+    generated_at: new Date().toISOString(),
+    method: "Playwright visual sweep with screenshots, control inventory, axe serious/critical checks, and 200% text reflow check",
+    screen_count: screens.length,
+    total_visible_controls: screens.reduce((sum, screen) => sum + screen.visible_control_count, 0),
+    screens,
+  };
+  mkdirSync(dirname(visualEvidenceJson), { recursive: true });
+  writeFileSync(visualEvidenceJson, `${JSON.stringify(evidence, null, 2)}\n`);
 });

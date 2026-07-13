@@ -20,6 +20,7 @@
   --accent-soft: #d9f1ec;
   --solid-accent: #006f65;
   --solid-accent-hover: #005b53;
+  --solid-disabled: #4f6873;
   --focus: #2458c6;
   --success: #187447;
   --success-soft: #dff1e7;
@@ -56,6 +57,7 @@
   --accent-soft: #214d4a;
   --solid-accent: #006b61;
   --solid-accent-hover: #00574f;
+  --solid-disabled: #4f6873;
   --focus: #8fb2ff;
   --success: #7ad9a4;
   --success-soft: #224737;
@@ -133,7 +135,8 @@ button { color: inherit; }
   .button-secondary:hover { border-color: var(--accent); background: var(--surface-soft); }
   .button-quiet { color: var(--ink-muted); @apply inline-flex min-h-10 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold transition; }
   .button-quiet:hover { color: var(--ink-strong); background: var(--surface-soft); }
-  .button-primary:disabled, .button-secondary:disabled { opacity: 0.48; cursor: not-allowed; transform: none; }
+  .button-primary:disabled { background: var(--solid-disabled); color: white; cursor: not-allowed; opacity: 1; transform: none; box-shadow: none; }
+  .button-secondary:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
   .status-pill { @apply inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-bold; }
   .status-review { background: var(--danger-soft); color: var(--danger); }
   .status-standard { background: var(--warning-soft); color: var(--warning); }

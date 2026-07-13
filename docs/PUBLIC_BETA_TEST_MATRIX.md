@@ -16,11 +16,11 @@ misrepresented as grading accuracy.
 
 | Area | Requirement | Evidence source | Current status | Public beta gate |
 | --- | --- | --- | --- | --- |
-| Onboarding | First-run explains local-first boundary, engine readiness, appearance controls, and start path | Playwright + screenshot visual sweep | PASS on synthetic fixture, desktop width | PASS mechanics; not a grading-quality gate |
-| Queue | Instructor can filter lanes, refresh, change assignment, start grading, and open submissions | Playwright + synthetic instructor fixture | PASS on synthetic fixture | PASS mechanics; not a grading-quality gate |
-| Review | Instructor can approve unchanged AI draft, edit scores/feedback, save override, use keyboard shortcuts, and return | Playwright + keyboard-only check + visual sweep | PASS on synthetic fixture | PASS mechanics; not a grading-quality gate |
-| Settings | General, appearance, model defaults, and rubrics tabs can be opened, edited, saved, reset, and loaded | Playwright + visual sweep | PASS on synthetic fixture | PASS mechanics; not a grading-quality gate |
-| Model manager | Runtime status, refresh, install buttons, installed/needed states, and inventory display work | Playwright + visual sweep | PASS on synthetic fixture | PASS mechanics; not a grading-quality gate |
+| Onboarding | First-run explains local-first boundary, engine readiness, appearance controls, and start path | Playwright + screenshot visual sweep | PASS on synthetic fixture; visual evidence generated under `artifacts/release-evidence/visual-sweep/` | PASS mechanics; not a grading-quality gate |
+| Queue | Instructor can filter lanes, refresh, change assignment, start grading, and open submissions | Playwright + synthetic instructor fixture + visual sweep | PASS on synthetic fixture; visual evidence generated under `artifacts/release-evidence/visual-sweep/` | PASS mechanics; not a grading-quality gate |
+| Review | Instructor can approve unchanged AI draft, edit scores/feedback, save override, use keyboard shortcuts, and return | Playwright + keyboard-only check + visual sweep | PASS on synthetic fixture; visual evidence generated under `artifacts/release-evidence/visual-sweep/` | PASS mechanics; not a grading-quality gate |
+| Settings | General, appearance, model defaults, and rubrics tabs can be opened, edited, saved, reset, and loaded | Playwright + visual sweep | PASS on synthetic fixture; all settings tabs captured in the visual sweep | PASS mechanics; not a grading-quality gate |
+| Model manager | Runtime status, refresh, install buttons, installed/needed states, and inventory display work | Playwright + visual sweep | PASS on synthetic fixture; install controls captured after WCAG contrast fix | PASS mechanics; not a grading-quality gate |
 | Public-proxy quality | QWK >= 0.70, source floor, mean-error bounds, no leakage | `engine/gates/quality.py --profile public_proxy` on real open datasets | PASS only on tiny mechanics fixture | PASS only with real open human-scored artifacts |
 | Public-proxy fairness | Style perturbation deltas within thresholds | `engine/gates/bias.py --profile public_proxy` on real open datasets | PASS only on tiny mechanics fixture | PASS only with real public-proxy artifacts |
 | Teacher-local quality | Instructor-specific QWK and override behavior | `fixtures/golden_set/` local authorized data | Missing | Not required for generic public proxy claim; required for teacher-specific claim |
@@ -28,8 +28,8 @@ misrepresented as grading accuracy.
 | Canvas app round trip | Import -> teacher override/approval -> post -> Progress completed -> read-back exact score and teacher feedback comment | `scripts/live_canvas_e2e.py --apply` against `ZZ-GRADER-TEST` | PASS: live guarded run on `canvas.johnnyrobot.ai`, course `106`, assignment `2841`, Canvas user `8`; score `4` and one teacher comment read back | PASS for score/comment beta scope; rubric assessment remains disabled until Canvas criterion-ID mapping exists, and attachment write-back still needs separate evidence |
 | Privacy | Captured outbound connections remain allowlisted | `engine/gates/egress.py` | PASS: 3/3 allowlisted in latest run | PASS artifact must be supplied to readiness report |
 | Performance | 1,500-word essay under 90 seconds on target memory floor | `engine/gates/perf.py --memory-floor 16` | PASS: 37.8 seconds in latest run | PASS artifact must be supplied to readiness report |
-| Desktop build | React build, unit tests, E2E workflow, Rust check pass | `npm test`, `npm run build`, Playwright, `cargo check` | PASS: 11 component tests, 2 E2E tests, build, and Rust check | PASS artifact must be supplied to readiness report |
-| Accessibility | No serious/critical WCAG violations, 200% text scaling, keyboard-only loop | Playwright axe + visual inspection | PASS on synthetic fixture | PASS mechanics; still requires clean-machine app check |
+| Desktop build | React build, unit tests, E2E workflow, Rust check pass | `npm test`, `npm run build`, Playwright, `cargo check` | PASS: 11 component tests, 3 E2E tests, build, and Rust check | PASS artifact must be supplied to readiness report |
+| Accessibility | No serious/critical WCAG violations, 200% text scaling, keyboard-only loop | Playwright axe + visual inspection | PASS on synthetic fixture; visual sweep covers 15 screens and 153 visible controls | PASS mechanics; still requires clean-machine app check |
 | Signing/notarization | Signed/notarized app or DMG passes codesign, stapler, spctl | release script + clean Mac | Signing preflight pass; no clean artifact | PASS only with notarized artifact evidence |
 | Clean-machine | First launch, model setup, crash recovery, keyboard review, updater N->N+1 | manual/VM evidence JSON | Missing | Required for public beta |
 | Release report | Consolidated verdict is `supervised_public_beta` | `scripts/release_readiness.py` | BLOCKED: Canvas now PASS; clean-machine evidence missing | Final release gate |
@@ -37,7 +37,9 @@ misrepresented as grading accuracy.
 ## Required Manual Visual Sweep
 
 Use Computer Use or Playwright screenshots to inspect every visible screen at desktop width and at
-a narrow responsive width:
+a narrow responsive width. The current Playwright visual sweep writes
+`artifacts/release-evidence/visual-sweep.json`, screenshots for 15 named screens, and a control
+inventory covering 153 visible controls:
 
 1. Onboarding: intro, appearance, machine check, connected state.
 2. Queue: all lane filters, assignment field, empty state, populated table, update notice.
@@ -46,6 +48,8 @@ a narrow responsive width:
 5. Model manager: runtime online/offline, installed/needed models, refresh, install, inventory.
 
 Record each sweep as `PASS`, `FAIL`, or `BLOCKED`, with screenshot paths or a Computer Use note.
+The latest local sweep is `PASS`; the clean-machine signed app still needs the same instructor
+inspection after packaging.
 
 ## Current Verdict
 

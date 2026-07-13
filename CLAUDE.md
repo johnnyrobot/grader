@@ -83,7 +83,8 @@ institution-approved test data. It is not ready for an unattended public beta wi
 work.
 
 - Python: 59 passed, 12 skipped.
-- Frontend: 11 component tests and two full-workflow Playwright tests pass.
+- Frontend: 11 component tests and three Playwright E2E tests pass, including a 15-screen visual
+  sweep with 153 visible controls recorded.
 - Privacy: PASS in isolation, 3/3 captured connections allowlisted.
 - Performance: PASS, 38.3 seconds for a 1,500-word essay.
 - Public-proxy quality/fairness: command profiles exist and pass on tiny mechanics fixtures only.

@@ -195,9 +195,10 @@ uv run python scripts/release_readiness.py --profile public_beta --out artifacts
 - **P1 complete:** five calibration experiments ran. At k=6, anchors improved QWK by about
   +0.127/+0.135, but absolute public-data QWK remains far below the 0.70 release floor.
 - **P2 in progress:** the complete light-first neuroinclusive UI is implemented across onboarding,
-  queue, review, settings, and model management. Eleven component tests and two mocked Playwright
-  workflows pass, including automated accessibility checks and 200% text scaling. Still validate a
-  clean-machine `.app`, crash recovery, real first-run model setup, and packaging.
+  queue, review, settings, and model management. Eleven component tests and three mocked Playwright
+  E2E tests pass, including a 15-screen visual sweep with 153 visible controls, automated
+  accessibility checks, and 200% text scaling. Still validate a clean-machine `.app`, crash
+  recovery, real first-run model setup, and packaging.
 - **P3 in progress:** Canvas client/API/offline queue exist and the guarded live app-level path
   passed for score/comment: import → targeted grade → teacher override/approval → post → Progress
   completed → read-back on `canvas.johnnyrobot.ai` course `106`, assignment `2841`, Canvas user `8`.
@@ -211,7 +212,7 @@ uv run python scripts/release_readiness.py --profile public_beta --out artifacts
   pass on tiny committed mechanics fixtures only; teacher-local validation still requires
   authorized instructor data. Signing/notarization still needs clean-machine release validation.
 - **Coverage:** Python collects 71 cases (59 pass, 12 skip). Frontend has 11 passing component
-  tests plus two passing full-workflow Playwright tests.
+  tests plus three passing Playwright E2E tests.
 - **Public beta verdict:** not ready for unattended public testing with real student work. Limit
   current use to a developer-assisted alpha with synthetic or institution-approved test data.
 - **Highest-value next action:** collect clean-machine signed/notarized evidence, then replace the
