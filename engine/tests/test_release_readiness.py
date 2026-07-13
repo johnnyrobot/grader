@@ -6,8 +6,10 @@ sys.path.insert(0, str(Path(__file__).parents[2]))
 
 from scripts.release_readiness import (
     CLEAN_MACHINE_REQUIRED_CHECKS,
+    _normalize_artifact,
     _normalize_citation_artifact,
     _normalize_clean_machine_artifact,
+    _normalize_updater_artifact,
     _signing_preflight,
     decide_verdict,
     redact_secrets,
@@ -148,6 +150,58 @@ def test_normalize_citation_artifact_rejects_experimental_false_positives(tmp_pa
     assert citation["status"] == "FAIL"
 
 
+def test_normalize_artifact_records_file_provenance(tmp_path):
+    artifact = tmp_path / "frontend.json"
+    artifact.write_text(json.dumps({"status": "PASS", "summary": "component tests passed"}))
+
+    normalized = _normalize_artifact(artifact, "SKIP")
+
+    assert normalized["status"] == "PASS"
+    assert normalized["artifact"]["path"] == str(artifact)
+    assert normalized["artifact"]["exists"] is True
+    assert normalized["artifact"]["size_bytes"] > 0
+    assert len(normalized["artifact"]["sha256"]) == 64
+    assert normalized["artifact"]["mtime"]
+
+
+def test_normalize_artifact_records_missing_path_metadata(tmp_path):
+    artifact = tmp_path / "missing.json"
+
+    normalized = _normalize_artifact(artifact, "SKIP")
+
+    assert normalized["status"] == "SKIP"
+    assert normalized["artifact"] == {"path": str(artifact), "exists": False}
+
+
+def test_normalize_updater_artifact_rejects_wrong_version_pass(tmp_path):
+    artifact = tmp_path / "updater.json"
+    artifact.write_text(json.dumps({
+        "status": "PASS",
+        "details": {
+            "config_version": "0.1.0",
+            "expected_version": "0.1.0",
+            "manifest_version": "0.0.9",
+        },
+    }))
+
+    updater = _normalize_updater_artifact(artifact, "0.1.0")
+
+    assert updater["status"] == "FAIL"
+    assert updater["reason"] == "release artifact version mismatch"
+    assert "manifest_version" in updater["version_mismatches"][0]
+
+
+def test_normalize_updater_artifact_rejects_missing_version_fields(tmp_path):
+    artifact = tmp_path / "updater.json"
+    artifact.write_text(json.dumps({"status": "PASS", "details": {}}))
+
+    updater = _normalize_updater_artifact(artifact, "0.1.0")
+
+    assert updater["status"] == "FAIL"
+    assert "details.expected_version is missing" in updater["version_mismatches"]
+    assert "details.manifest_version is missing" in updater["version_mismatches"]
+
+
 def test_normalize_clean_machine_artifact_requires_all_checks(tmp_path):
     artifact = tmp_path / "clean-machine.json"
     artifact.write_text(json.dumps({
@@ -181,6 +235,33 @@ def test_normalize_clean_machine_artifact_accepts_complete_pass(tmp_path):
     clean = _normalize_clean_machine_artifact(artifact)
 
     assert clean["status"] == "PASS"
+
+
+def test_normalize_clean_machine_artifact_rejects_wrong_release_version(tmp_path):
+    artifact = tmp_path / "clean-machine.json"
+    artifact.write_text(json.dumps({
+        "status": "PASS",
+        "checks": {name: True for name in CLEAN_MACHINE_REQUIRED_CHECKS},
+        "expected_version": "0.0.9",
+        "details": {
+            "release_provenance": {
+                "expected_version": "0.0.9",
+                "updater_manifest": {"ok": True, "version": "0.0.9"},
+            },
+            "manual_evidence": {
+                "first_run_models": {"ok": True},
+                "crash_recovery": {"ok": True},
+                "keyboard_only_review": {"ok": True},
+                "updater_path": {"ok": True},
+            },
+        },
+    }))
+
+    clean = _normalize_clean_machine_artifact(artifact, expected_version="0.1.0")
+
+    assert clean["status"] == "FAIL"
+    assert clean["reason"] == "release artifact version mismatch"
+    assert len(clean["version_mismatches"]) == 3
 
 
 def test_normalize_clean_machine_artifact_rejects_missing_manual_evidence(tmp_path):

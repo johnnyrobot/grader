@@ -59,6 +59,9 @@ scripts/
   --expected-version ... --manual-evidence ... --evidence-root ...` so the PASS records the exact
   tested app/DMG/latest.json hashes. Manual flags without evidence are legacy-only and should not be
   used for release claims.
+- **`release_readiness.py`**: pass `--expected-version ...` for release runs. The script defaults
+  to `app/src-tauri/tauri.conf.json`, records artifact path/mtime/SHA-256 metadata, and rejects PASS
+  updater or clean-machine artifacts whose recorded version does not match the evaluated app.
 - Fake students use `ZZGraderTest` prefix + `.invalid` email domain (RFC 2606 — can never resolve)
 - Canvas credentials: env vars (`CANVAS_BASE_URL`, `CANVAS_API_TOKEN`) or canvas-pp-cli's `credentials.toml`
 

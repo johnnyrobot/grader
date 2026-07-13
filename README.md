@@ -148,7 +148,7 @@ uv run python scripts/live_canvas_e2e.py --dry-run
 uv run python scripts/clean_machine_evidence.py --print-manual-runbook > clean-machine-runbook.md
 uv run python scripts/clean_machine_evidence.py --print-manual-template > clean-machine-manual-evidence.json
 uv run python scripts/clean_machine_evidence.py --app /Applications/Grader.app --dmg /path/to/Grader.dmg --updater-manifest /path/to/latest.json --expected-version 0.1.0 --manual-evidence clean-machine-manual-evidence.json --evidence-root /path/to/screenshots-and-logs --out artifacts/release-evidence/clean-machine.json
-uv run python scripts/release_readiness.py --profile public_beta --public-proxy-dir artifacts/public_proxy/mohler_asag_diverse_anchored_pilot --citation-artifact artifacts/citation-results.json --canvas-artifact artifacts/release-evidence/canvas-live.json --privacy-artifact artifacts/release-evidence/privacy.json --performance-artifact artifacts/release-evidence/performance.json --frontend-artifact artifacts/release-evidence/frontend.json --rust-artifact artifacts/release-evidence/rust.json --updater-artifact artifacts/release-evidence/updater.json --clean-machine-artifact artifacts/release-evidence/clean-machine-local-current.json --out artifacts/release-readiness
+uv run python scripts/release_readiness.py --profile public_beta --expected-version 0.1.0 --public-proxy-dir artifacts/public_proxy/mohler_asag_diverse_anchored_pilot --citation-artifact artifacts/citation-results.json --canvas-artifact artifacts/release-evidence/canvas-live.json --privacy-artifact artifacts/release-evidence/privacy.json --performance-artifact artifacts/release-evidence/performance.json --frontend-artifact artifacts/release-evidence/frontend.json --rust-artifact artifacts/release-evidence/rust.json --updater-artifact artifacts/release-evidence/updater.json --clean-machine-artifact artifacts/release-evidence/clean-machine-local-current.json --out artifacts/release-readiness
 ```
 
 The committed `fixtures/public_proxy/` set is a tiny mechanics fixture. Real public-proxy datasets
@@ -176,8 +176,10 @@ gate at QWK 0.845 against a 0.623 adjusted floor, and the matching fairness pert
 passes. Use `scripts/signing_doctor.py` before `scripts/sign_and_notarize.sh` to verify the
 Developer ID private key and notarytool profile before mutating a release bundle. `scripts/generate_appcast.py`
 now fails closed unless a Tauri updater signing key is provided; `--allow-unsigned` is only for local
-smoke fixtures. The app is still not public-beta ready until updater, signing/notarization
-credentials, and clean-machine release evidence pass.
+smoke fixtures. `scripts/release_readiness.py --expected-version ...` records artifact path/mtime/SHA-256
+metadata and fails PASS updater or clean-machine artifacts that do not match the evaluated app
+version. The app is still not public-beta ready until updater, signing/notarization credentials, and
+clean-machine release evidence pass.
 
 ## Docs
 

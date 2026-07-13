@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import platform
@@ -66,6 +67,9 @@ def _gate_summary(gate: dict[str, Any]) -> str:
     missing_manual = gate.get("missing_manual_evidence")
     if isinstance(missing_manual, list) and missing_manual:
         return "missing manual evidence: " + ", ".join(str(check) for check in missing_manual)
+    version_mismatches = gate.get("version_mismatches")
+    if isinstance(version_mismatches, list) and version_mismatches:
+        return "version mismatches: " + "; ".join(str(item) for item in version_mismatches[:5])
     for key in ("summary", "reason"):
         value = gate.get(key)
         if value:
@@ -115,16 +119,73 @@ def _load_json(path: Path | None) -> dict[str, Any] | None:
     return json.loads(path.read_text())
 
 
+def _artifact_ref(path: Path | None) -> dict[str, Any]:
+    if path is None:
+        return {"path": None, "exists": False}
+    ref: dict[str, Any] = {"path": str(path), "exists": path.exists()}
+    if not path.exists():
+        return ref
+    stat = path.stat()
+    ref.update({
+        "size_bytes": stat.st_size,
+        "mtime": datetime.fromtimestamp(stat.st_mtime, timezone.utc).isoformat(),
+        "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+    })
+    return ref
+
+
 def _normalize_artifact(path: Path | None, default_status: str) -> dict[str, Any]:
+    artifact = _artifact_ref(path)
     data = _load_json(path)
     if data is None:
-        return {"status": default_status, "artifact": str(path) if path else None}
+        return {"status": default_status, "artifact": artifact}
+    data = dict(data)
+    data["artifact"] = artifact
     if "status" not in data:
         if data.get("release_status"):
             data["status"] = data["release_status"]
         elif data.get("citation_mode", {}).get("release_status"):
             data["status"] = data["citation_mode"]["release_status"]
     return data
+
+
+def _app_version_from_config(config_path: Path | None = None) -> str:
+    config = config_path or PROJECT_ROOT / "app" / "src-tauri" / "tauri.conf.json"
+    try:
+        data = json.loads(config.read_text())
+    except FileNotFoundError as exc:
+        raise SystemExit(f"missing Tauri config: {config}") from exc
+    version = str(data.get("version") or "").strip()
+    if not version:
+        raise SystemExit(f"missing version in Tauri config: {config}")
+    return version
+
+
+def _version_mismatches(pairs: list[tuple[str, Any]], expected_version: str) -> list[str]:
+    mismatches: list[str] = []
+    for label, value in pairs:
+        if value is None or value == "":
+            mismatches.append(f"{label} is missing")
+            continue
+        if str(value) != expected_version:
+            mismatches.append(f"{label} {value!r} does not match expected {expected_version!r}")
+    return mismatches
+
+
+def _fail_for_version_mismatch(
+    evidence: dict[str, Any],
+    *,
+    expected_version: str,
+    pairs: list[tuple[str, Any]],
+) -> dict[str, Any]:
+    mismatches = _version_mismatches(pairs, expected_version)
+    if not mismatches:
+        return evidence
+    evidence["status"] = "FAIL"
+    evidence["reason"] = "release artifact version mismatch"
+    evidence["expected_version"] = expected_version
+    evidence["version_mismatches"] = mismatches
+    return evidence
 
 
 def _normalize_citation_artifact(path: Path | None) -> dict[str, Any]:
@@ -150,7 +211,25 @@ def _normalize_citation_artifact(path: Path | None) -> dict[str, Any]:
     return citation
 
 
-def _normalize_clean_machine_artifact(path: Path | None) -> dict[str, Any]:
+def _normalize_updater_artifact(path: Path | None, expected_version: str) -> dict[str, Any]:
+    updater = _normalize_artifact(path, "BLOCKED_UPDATER_EVIDENCE")
+    if updater.get("status") != "PASS":
+        return updater
+    details = updater.get("details", {})
+    if not isinstance(details, dict):
+        details = {}
+    return _fail_for_version_mismatch(
+        updater,
+        expected_version=expected_version,
+        pairs=[
+            ("details.expected_version", details.get("expected_version")),
+            ("details.config_version", details.get("config_version")),
+            ("details.manifest_version", details.get("manifest_version")),
+        ],
+    )
+
+
+def _normalize_clean_machine_artifact(path: Path | None, expected_version: str | None = None) -> dict[str, Any]:
     clean = _normalize_artifact(path, "BLOCKED_CLEAN_MACHINE_EVIDENCE")
     if clean.get("status") != "PASS":
         return clean
@@ -171,6 +250,18 @@ def _normalize_clean_machine_artifact(path: Path | None) -> dict[str, Any]:
         clean["status"] = "FAIL"
         clean["reason"] = "clean-machine PASS artifact is missing auditable manual evidence"
         clean["missing_manual_evidence"] = weak_manual
+    elif expected_version:
+        provenance = details.get("release_provenance", {}) if isinstance(details, dict) else {}
+        manifest = provenance.get("updater_manifest", {}) if isinstance(provenance, dict) else {}
+        clean = _fail_for_version_mismatch(
+            clean,
+            expected_version=expected_version,
+            pairs=[
+                ("expected_version", clean.get("expected_version")),
+                ("details.release_provenance.expected_version", provenance.get("expected_version")),
+                ("details.release_provenance.updater_manifest.version", manifest.get("version")),
+            ],
+        )
     return clean
 
 
@@ -191,9 +282,11 @@ def decide_verdict(evidence: dict[str, Any]) -> str:
 
 
 def collect_evidence(args: argparse.Namespace) -> dict[str, Any]:
+    expected_version = args.expected_version or _app_version_from_config()
     evidence: dict[str, Any] = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "profile": args.profile,
+        "expected_version": expected_version,
         "system": {
             "platform": platform.platform(),
             "python": sys.version.split()[0],
@@ -229,9 +322,12 @@ def collect_evidence(args: argparse.Namespace) -> dict[str, Any]:
     evidence["performance"] = _normalize_artifact(args.performance_artifact, "SKIP")
     evidence["frontend"] = _normalize_artifact(args.frontend_artifact, "SKIP")
     evidence["rust"] = _normalize_artifact(args.rust_artifact, "SKIP")
-    evidence["updater"] = _normalize_artifact(args.updater_artifact, "BLOCKED_UPDATER_EVIDENCE")
+    evidence["updater"] = _normalize_updater_artifact(args.updater_artifact, expected_version)
     evidence["signing"] = _signing_preflight()
-    evidence["clean_machine"] = _normalize_clean_machine_artifact(args.clean_machine_artifact)
+    evidence["clean_machine"] = _normalize_clean_machine_artifact(
+        args.clean_machine_artifact,
+        expected_version=expected_version,
+    )
     evidence["verdict"] = decide_verdict(evidence)
     evidence["blockers"] = summarize_blockers(evidence)
     return evidence
@@ -285,6 +381,11 @@ def main() -> None:
     parser.add_argument("--rust-artifact", type=Path, default=None)
     parser.add_argument("--updater-artifact", type=Path, default=None)
     parser.add_argument("--clean-machine-artifact", type=Path, default=None)
+    parser.add_argument(
+        "--expected-version",
+        default=None,
+        help="Expected Grader app/updater version; defaults to app/src-tauri/tauri.conf.json",
+    )
     parser.add_argument("--out", type=Path, default=Path("artifacts/release-readiness"))
     args = parser.parse_args()
 
