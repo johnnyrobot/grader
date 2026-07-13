@@ -26,6 +26,8 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import multiprocessing as mp
+import queue
 import re
 import signal
 import sys
@@ -303,8 +305,11 @@ def populate_model_scores(
             example["anchor_ids"] = anchor_ids
         try:
             if not example.get("ai_scores"):
-                example["ai_scores"] = _call_with_timeout(
-                    lambda: _grade_text(example, example["student_text"], model, anchors=anchors),
+                example["ai_scores"] = _grade_text_with_timeout(
+                    example,
+                    example["student_text"],
+                    model,
+                    anchors=anchors,
                     seconds=grade_timeout_seconds,
                     label=f"{example['id']} original",
                 )
@@ -314,8 +319,11 @@ def populate_model_scores(
                     if name in perturbed_scores:
                         continue
                     text = perturb(example["student_text"], name)
-                    perturbed_scores[name] = _call_with_timeout(
-                        lambda: _grade_text(example, text, model, anchors=anchors),
+                    perturbed_scores[name] = _grade_text_with_timeout(
+                        example,
+                        text,
+                        model,
+                        anchors=anchors,
                         seconds=grade_timeout_seconds,
                         label=f"{example['id']} perturbation={name}",
                     )
@@ -339,6 +347,64 @@ def _has_complete_perturbations(example: dict[str, Any], expected_perturbations:
 
 class GradeTimeoutError(TimeoutError):
     pass
+
+
+def _grade_text_worker(
+    result_queue: mp.Queue,
+    example: dict[str, Any],
+    text: str,
+    model: str,
+    anchors: str,
+) -> None:
+    try:
+        result_queue.put(("ok", _grade_text(example, text, model, anchors=anchors)))
+    except BaseException as error:  # pragma: no cover - exercised through parent error path.
+        result_queue.put(("error", f"{type(error).__name__}: {error}"))
+
+
+def _grade_text_with_timeout(
+    example: dict[str, Any],
+    text: str,
+    model: str,
+    *,
+    anchors: str = "",
+    seconds: int,
+    label: str,
+) -> dict[str, float]:
+    """Grade text in a killable child process.
+
+    ``SIGALRM`` can fail to interrupt blocking model-client paths on macOS. A separate
+    process makes the public-proxy builder's per-call timeout enforceable, so one
+    pathological perturbation cannot stall the whole release evidence run.
+    """
+    if seconds <= 0:
+        return _grade_text(example, text, model, anchors=anchors)
+
+    context_name = "fork" if sys.platform != "win32" else "spawn"
+    context = mp.get_context(context_name)
+    result_queue = context.Queue(maxsize=1)
+    process = context.Process(
+        target=_grade_text_worker,
+        args=(result_queue, example, text, model, anchors),
+    )
+    process.start()
+    process.join(seconds)
+    if process.is_alive():
+        process.terminate()
+        process.join(5)
+        if process.is_alive():  # pragma: no cover - terminate should be sufficient.
+            process.kill()
+            process.join(5)
+        raise GradeTimeoutError(f"{label} exceeded {seconds}s")
+
+    try:
+        status, payload = result_queue.get_nowait()
+    except queue.Empty:
+        exit_code = process.exitcode
+        raise RuntimeError(f"{label} exited without a result (exit_code={exit_code})")
+    if status == "ok":
+        return payload
+    raise RuntimeError(f"{label} failed: {payload}")
 
 
 def _call_with_timeout(func: Callable[[], T], *, seconds: int, label: str) -> T:

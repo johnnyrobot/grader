@@ -12,6 +12,7 @@ import scripts.build_public_proxy as builder
 from scripts.build_public_proxy import (
     GradeTimeoutError,
     _call_with_timeout,
+    _grade_text_with_timeout,
     populate_model_scores,
     row_to_example,
     select_mohler_anchor_rows,
@@ -194,10 +195,36 @@ def test_populate_model_scores_resumes_partial_perturbations(monkeypatch):
         [example],
         model="grader-text:8b",
         grade_perturbations=True,
+        grade_timeout_seconds=0,
     )
 
     assert set(example["perturbed_scores"]) == set(PERTURBATIONS)
     assert len(calls) == len(PERTURBATIONS) - 1
+
+
+def test_grade_text_with_timeout_kills_slow_model_call(monkeypatch):
+    import time
+
+    example = row_to_example(select_mohler_rows(_fake_mohler(), sources=1, items_per_source=1, seed=7)[0])
+
+    def slow_grade_text(_example, _text, _model, *, anchors=""):
+        time.sleep(5)
+        return {"correctness": 2.0}
+
+    monkeypatch.setattr(builder, "_grade_text", slow_grade_text)
+
+    try:
+        _grade_text_with_timeout(
+            example,
+            example["student_text"],
+            "grader-text:8b",
+            seconds=1,
+            label="slow model call",
+        )
+    except GradeTimeoutError as error:
+        assert "slow model call exceeded 1s" in str(error)
+    else:  # pragma: no cover
+        raise AssertionError("expected timeout")
 
 
 def test_call_with_timeout_can_be_disabled():
