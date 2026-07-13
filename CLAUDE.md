@@ -113,7 +113,8 @@ work.
   `uv run python scripts/signing_doctor.py --print-repair-runbook` for local-only recovery steps.
   After credentials are restored, rebuild/re-sign/notarize from current source, then rerun
   clean-machine first-run models, crash recovery, keyboard-only review, Computer Use instructor
-  sweep, and updater path with structured manual evidence notes plus screenshot/log paths.
+  sweep, and updater path with structured manual evidence notes, screenshot/log paths, and all
+  check-specific assertions set true. The Computer Use row must include a PASS sweep JSON.
 
 Before public beta: keep citation checks visibly experimental unless accuracy improves, restore
 signing/notarization credentials, regenerate release artifacts from the current source commit, and

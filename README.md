@@ -163,6 +163,11 @@ uv run python scripts/clean_machine_evidence.py --app /Applications/Grader.app -
 uv run python scripts/release_readiness.py --profile public_beta --expected-version 0.1.0 --public-proxy-dir artifacts/public_proxy/mohler_asag_diverse_anchored_pilot --citation-artifact artifacts/citation-results.json --canvas-artifact artifacts/release-evidence/canvas-live.json --privacy-artifact artifacts/release-evidence/privacy.json --performance-artifact artifacts/release-evidence/performance.json --frontend-artifact artifacts/release-evidence/frontend.json --rust-artifact artifacts/release-evidence/rust.json --updater-artifact artifacts/release-evidence/updater.json --clean-machine-artifact artifacts/release-evidence/clean-machine-local-current.json --out artifacts/release-readiness
 ```
 
+The clean-machine manual template is fail-closed: every manual row must include `passed: true`,
+tester/timestamp/notes, at least one existing evidence file, and all check-specific `assertions`
+set to `true`. The Computer Use row additionally requires a `PASS` JSON from
+`scripts/computer_use_sweep_evidence.py`.
+
 The committed `fixtures/public_proxy/` set is a tiny mechanics fixture. Real public-proxy datasets
 must be downloaded into gitignored local storage and reported separately from teacher-local data.
 The release commands above intentionally fail on the tiny fixture; use

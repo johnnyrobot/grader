@@ -54,6 +54,12 @@ CHECK_DEFINITIONS: dict[str, dict[str, object]] = {
     "first_run_models": {
         "title": "First-run model setup",
         "objective": "Install Grader on a clean supported Mac and verify the first-run model flow completes without hidden terminal help.",
+        "required_assertions": [
+            {"id": "clean_profile", "label": "Started from a clean user profile without existing Grader app data."},
+            {"id": "models_absent_or_reconciled", "label": "Confirmed required Grader model tags were absent before first run or explicitly reconciled by the app."},
+            {"id": "model_flow_completed_or_resumable", "label": "Completed model setup or reached a clear resumable model-readiness state without terminal-only instructions."},
+            {"id": "queue_reachable", "label": "Reached the queue/review workflow or a non-crashing state that clearly explains what remains."},
+        ],
         "steps": [
             "Start from a user account without existing Grader app data or preinstalled grader-text/grader-vision Ollama tags.",
             "Install the signed/notarized release artifact.",
@@ -67,6 +73,12 @@ CHECK_DEFINITIONS: dict[str, dict[str, object]] = {
     "crash_recovery": {
         "title": "Local engine crash recovery",
         "objective": "Prove the desktop app detects a local engine failure and recovers without losing the review context.",
+        "required_assertions": [
+            {"id": "review_context_open", "label": "Started from a queue/review state with teacher work visible."},
+            {"id": "engine_forced_stopped", "label": "Forced the local engine process to stop during the session."},
+            {"id": "visible_recovery_alert", "label": "Observed a readable in-app recovery alert or disconnected state."},
+            {"id": "restart_action_works", "label": "Used the in-app restart/retry action and restored a usable queue/review state."},
+        ],
         "steps": [
             "Launch the signed app and enter the queue/review workflow.",
             "Force-stop the local Grader engine process.",
@@ -80,6 +92,12 @@ CHECK_DEFINITIONS: dict[str, dict[str, object]] = {
     "keyboard_only_review": {
         "title": "Keyboard-only review flow",
         "objective": "Verify an instructor can review, edit, approve, and return to the queue without using a mouse.",
+        "required_assertions": [
+            {"id": "queue_to_review_keyboard", "label": "Moved from queue to a review item using only keyboard input."},
+            {"id": "visible_focus", "label": "Observed visible focus indicators on interactive controls."},
+            {"id": "edit_and_approve_keyboard", "label": "Edited feedback or score and approved/saved using only keyboard input."},
+            {"id": "no_focus_trap", "label": "Returned to the queue without a keyboard focus trap."},
+        ],
         "steps": [
             "Launch the signed app.",
             "Navigate from queue to a review item with Tab/Shift+Tab/Enter/Space and documented shortcuts.",
@@ -93,6 +111,12 @@ CHECK_DEFINITIONS: dict[str, dict[str, object]] = {
     "computer_use_instructor_sweep": {
         "title": "Computer Use instructor sweep",
         "objective": "Use Computer Use against the signed app to inspect the visible instructor UI as an actual teacher, not only through headless Playwright.",
+        "required_assertions": [
+            {"id": "signed_app_target", "label": "Computer Use targeted the installed signed app, not only the dev server or headless browser."},
+            {"id": "screens_and_controls_covered", "label": "Captured onboarding, queue, review, settings, model manager, recovery, and safe visible controls."},
+            {"id": "pass_json_included", "label": "Included a PASS JSON artifact from scripts/computer_use_sweep_evidence.py."},
+            {"id": "no_ui_blockers", "label": "Recorded no unresolved inaccessible label, focus trap, stale state, or instructor-blocking ambiguity."},
+        ],
         "steps": [
             "Launch the signed app from Finder or the installed Applications location.",
             "Use Computer Use to capture the app accessibility tree and screenshot before each navigation decision.",
@@ -107,6 +131,12 @@ CHECK_DEFINITIONS: dict[str, dict[str, object]] = {
     "updater_path": {
         "title": "Updater N-to-N+1 path",
         "objective": "Verify the signed app can discover, download, install, and relaunch into an N+1 update using the signed latest.json manifest.",
+        "required_assertions": [
+            {"id": "installed_version_n", "label": "Started from a signed installed N release."},
+            {"id": "signed_manifest_n_plus_1", "label": "Hosted or supplied a signed latest.json and signed N+1 artifact."},
+            {"id": "in_app_update_completed", "label": "Completed download/install through the app updater path."},
+            {"id": "relaunched_version_n_plus_1", "label": "Relaunched into N+1 and verified the displayed or recorded app version."},
+        ],
         "steps": [
             "Install the signed N release on the clean Mac.",
             "Host or publish a signed N+1 release artifact plus latest.json.",
@@ -450,6 +480,18 @@ def validate_manual_evidence(
         if isinstance(evidence_files, str):
             evidence_files = [evidence_files]
         evidence_files = [str(path) for path in evidence_files if str(path).strip()]
+        expected_assertions = [
+            str(assertion["id"])
+            for assertion in CHECK_DEFINITIONS[name].get("required_assertions", [])  # type: ignore[union-attr]
+            if isinstance(assertion, Mapping) and assertion.get("id")
+        ]
+        raw_assertions = raw.get("assertions") or {}
+        assertion_values: dict[str, bool] = {}
+        if isinstance(raw_assertions, Mapping):
+            assertion_values = {str(key): value is True for key, value in raw_assertions.items()}
+        missing_assertions = [
+            assertion_id for assertion_id in expected_assertions if assertion_values.get(assertion_id) is not True
+        ]
 
         missing_files: list[str] = []
         resolved_files: list[Path] = []
@@ -491,6 +533,7 @@ def validate_manual_evidence(
             and bool(notes)
             and (not require_files or bool(evidence_files))
             and not missing_files
+            and not missing_assertions
             and computer_use_status_ok
         )
         details[name] = {
@@ -501,6 +544,8 @@ def validate_manual_evidence(
             "notes": notes,
             "evidence_files": evidence_files,
             "missing_files": missing_files,
+            "assertions": assertion_values,
+            "missing_assertions": missing_assertions,
         }
         if name == "computer_use_instructor_sweep":
             details[name]["computer_use_sweep_status"] = computer_use_status
@@ -520,6 +565,11 @@ def manual_evidence_template() -> dict[str, object]:
             "objective": str(CHECK_DEFINITIONS[name]["objective"]),
             "steps": CHECK_DEFINITIONS[name]["steps"],
             "expected_result": str(CHECK_DEFINITIONS[name]["expected_result"]),
+            "assertions": {
+                str(assertion["id"]): False
+                for assertion in CHECK_DEFINITIONS[name].get("required_assertions", [])  # type: ignore[union-attr]
+                if isinstance(assertion, Mapping) and assertion.get("id")
+            },
             "passed": False,
             "performed_at": datetime.now(timezone.utc).isoformat(),
             "tester": "",
@@ -546,7 +596,7 @@ def manual_evidence_runbook() -> str:
         "uv run python scripts/clean_machine_evidence.py --app /Applications/Grader.app --dmg /path/to/Grader.dmg --updater-manifest /path/to/latest.json --expected-version 0.1.0 --manual-evidence clean-machine-manual-evidence.json --evidence-root clean-machine-evidence --out artifacts/release-evidence/clean-machine.json",
         "```",
         "",
-        "Every manual check must include `passed: true`, `performed_at`, `tester`, non-empty `notes`, and at least one existing evidence file. The `computer_use_instructor_sweep` check must include a PASS JSON artifact generated by `scripts/computer_use_sweep_evidence.py`. The final evidence also records hashes for the tested `.app`, DMG, and signed updater manifest.",
+        "Every manual check must include `passed: true`, `performed_at`, `tester`, non-empty `notes`, all required `assertions` set to `true`, and at least one existing evidence file. The `computer_use_instructor_sweep` check must include a PASS JSON artifact generated by `scripts/computer_use_sweep_evidence.py`. The final evidence also records hashes for the tested `.app`, DMG, and signed updater manifest.",
         "",
         "## Manual checks",
         "",
@@ -565,6 +615,13 @@ def manual_evidence_runbook() -> str:
         lines.extend([
             "",
             f"Expected result: {spec['expected_result']}",
+            "",
+            "Required assertions:",
+        ])
+        for assertion in spec.get("required_assertions", []):  # type: ignore[union-attr]
+            if isinstance(assertion, Mapping):
+                lines.append(f"- `{assertion.get('id')}`: {assertion.get('label')}")
+        lines.extend([
             "",
             "Suggested evidence files:",
         ])

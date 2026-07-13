@@ -58,6 +58,8 @@ approved/unsaved state. That evidence is not accepted for public beta. The curre
 and DMG have been rebuilt unsigned, so the next step is signing/notarizing from current source, rerunning
 the signed-app Computer Use sweep on a clean machine, and validating the captures with
 `scripts/computer_use_sweep_evidence.py` before marking `computer_use_instructor_sweep` complete.
+For clean-machine evidence, each manual check must also set all check-specific `assertions` to
+`true`; generic screenshots or notes alone no longer satisfy the public-beta gate.
 
 ## Current Verdict
 

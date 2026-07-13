@@ -8,6 +8,7 @@ sys.path.insert(0, str(Path(__file__).parents[2]))
 
 import scripts.clean_machine_evidence as clean_machine_evidence
 from scripts.clean_machine_evidence import (
+    CHECK_DEFINITIONS,
     MANUAL_CHECKS,
     REQUIRED_CHECKS,
     build_evidence,
@@ -17,6 +18,14 @@ from scripts.clean_machine_evidence import (
     manual_evidence_runbook,
     validate_manual_evidence,
 )
+
+
+def _passing_assertions(name: str) -> dict[str, bool]:
+    return {
+        str(assertion["id"]): True
+        for assertion in CHECK_DEFINITIONS[name].get("required_assertions", [])
+        if isinstance(assertion, dict) and assertion.get("id")
+    }
 
 
 def _runner(command, text, capture_output, check):
@@ -125,6 +134,7 @@ def test_validate_manual_evidence_requires_notes_and_files(tmp_path):
             "performed_at": "2026-07-13T12:00:00Z",
             "tester": "QA",
             "notes": "Killed the engine and used Restart local engine.",
+            "assertions": _passing_assertions("crash_recovery"),
             "evidence_files": ["crash-recovery.png"],
         }
     }
@@ -144,6 +154,7 @@ def test_validate_manual_evidence_rejects_missing_files(tmp_path):
             "performed_at": "2026-07-13T12:00:00Z",
             "tester": "QA",
             "notes": f"{name} checked",
+            "assertions": _passing_assertions(name),
             "evidence_files": [f"{name}.png"],
         }
         for name in MANUAL_CHECKS
@@ -164,6 +175,8 @@ def test_manual_evidence_template_covers_every_manual_check():
         assert row["objective"]
         assert row["steps"]
         assert row["expected_result"]
+        assert row["assertions"]
+        assert all(value is False for value in row["assertions"].values())
         assert row["passed"] is False
         assert row["notes"] == ""
         assert row["evidence_files"]
@@ -176,6 +189,7 @@ def test_validate_manual_evidence_rejects_missing_tester_and_timestamp(tmp_path)
         "first_run_models": {
             "passed": True,
             "notes": "First run completed.",
+            "assertions": _passing_assertions("first_run_models"),
             "evidence_files": ["first-run.png"],
         }
     }
@@ -199,6 +213,7 @@ def test_validate_manual_evidence_requires_passing_computer_use_sweep_json(tmp_p
             "performed_at": "2026-07-13T12:00:00Z",
             "tester": "QA",
             "notes": "Computer Use sweep completed.",
+            "assertions": _passing_assertions("computer_use_instructor_sweep"),
             "evidence_files": ["computer_use_instructor_sweep.json", "computer_use_instructor_sweep.png"],
         }
     }
@@ -221,6 +236,7 @@ def test_validate_manual_evidence_accepts_passing_computer_use_sweep_json(tmp_pa
             "performed_at": "2026-07-13T12:00:00Z",
             "tester": "QA",
             "notes": "Computer Use sweep completed.",
+            "assertions": _passing_assertions("computer_use_instructor_sweep"),
             "evidence_files": ["computer_use_instructor_sweep.json", "computer_use_instructor_sweep.png"],
         }
     }
@@ -232,12 +248,40 @@ def test_validate_manual_evidence_accepts_passing_computer_use_sweep_json(tmp_pa
     assert details["computer_use_instructor_sweep"]["computer_use_sweep_status"] == "PASS"
 
 
+def test_validate_manual_evidence_requires_check_specific_assertions(tmp_path):
+    screenshot = tmp_path / "keyboard-only-review.png"
+    screenshot.write_text("fake image bytes")
+    evidence = {
+        "keyboard_only_review": {
+            "passed": True,
+            "performed_at": "2026-07-13T12:00:00Z",
+            "tester": "QA",
+            "notes": "Keyboard review completed.",
+            "assertions": {
+                "queue_to_review_keyboard": True,
+                "visible_focus": True,
+                "edit_and_approve_keyboard": False,
+                "no_focus_trap": True,
+            },
+            "evidence_files": ["keyboard-only-review.png"],
+        }
+    }
+
+    passed, details = validate_manual_evidence(evidence, evidence_root=tmp_path)
+
+    assert "keyboard_only_review" not in passed
+    assert details["keyboard_only_review"]["ok"] is False
+    assert details["keyboard_only_review"]["missing_assertions"] == ["edit_and_approve_keyboard"]
+
+
 def test_manual_evidence_runbook_includes_every_manual_check():
     runbook = manual_evidence_runbook()
 
     assert "Grader Clean-Machine Evidence Runbook" in runbook
     for name in MANUAL_CHECKS:
         assert f"### `{name}`" in runbook
+        for assertion in CHECK_DEFINITIONS[name]["required_assertions"]:
+            assert f"`{assertion['id']}`" in runbook
     assert "--print-manual-template" in runbook
     assert "--updater-manifest" in runbook
 

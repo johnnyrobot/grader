@@ -205,6 +205,10 @@ uv run python scripts/clean_machine_evidence.py --app /Applications/Grader.app -
 uv run python scripts/release_readiness.py --profile public_beta --expected-version 0.1.0 --public-proxy-dir artifacts/public_proxy/mohler_asag_diverse_anchored_pilot --citation-artifact artifacts/citation-results.json --canvas-artifact artifacts/release-evidence/canvas-live.json --privacy-artifact artifacts/release-evidence/privacy.json --performance-artifact artifacts/release-evidence/performance.json --frontend-artifact artifacts/release-evidence/frontend.json --rust-artifact artifacts/release-evidence/rust.json --updater-artifact artifacts/release-evidence/updater.json --clean-machine-artifact artifacts/release-evidence/clean-machine-local-current.json --out artifacts/release-readiness
 ```
 
+The clean-machine manual template must be filled with `passed: true`, tester/timestamp/notes,
+existing evidence files, and every check-specific `assertions` entry set to `true`; the Computer Use
+row also needs a PASS JSON from `scripts/computer_use_sweep_evidence.py`.
+
 ## CURRENT STATUS / NEXT WORK
 
 - **P0 complete:** `qwen3:8b` + Pydantic AI tool output is schema-reliable; MiniCPM-V replaced
