@@ -60,7 +60,7 @@ jobs:
             --version "$VERSION" \
             --output latest.json \
             --signing-key "$UPDATER_KEY_PATH" \
-            --release-url "https://github.com/laccd/grader/releases/download/${{ github.ref_name }}/Grader.dmg"
+            --release-url "https://github.com/johnnyrobot/grader/releases/download/${{ github.ref_name }}/Grader.dmg"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2

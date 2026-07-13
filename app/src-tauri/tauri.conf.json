@@ -46,7 +46,7 @@
     "updater": {
       "active": true,
       "endpoints": [
-        "https://github.com/laccd/grader/releases/latest/download/latest.json"
+        "https://github.com/johnnyrobot/grader/releases/latest/download/latest.json"
       ],
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDZBNDM1QTBFODNEMzVBRTUKUldUbFd0T0REbHBEYWxBVk9MSDEyVUdaeHBVUFJkdTVocTVOR3M2cmtOWU84TFRURDJ1T2xRMEoK"
     }

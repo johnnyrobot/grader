@@ -7,7 +7,7 @@ Sparkle's XML appcast. This script generates the manifest from a built +
 
 The manifest is uploaded to GitHub Releases as the `latest.json` asset.
 The app's tauri.conf.json points to:
-  https://github.com/laccd/grader/releases/latest/download/latest.json
+  https://github.com/johnnyrobot/grader/releases/latest/download/latest.json
 
 Usage:
   # Generate from a signed DMG
@@ -137,7 +137,7 @@ def generate_manifest(
         sys.exit(1)
 
     if release_url is None:
-        release_url = f"https://github.com/laccd/grader/releases/download/v{version}/{artifact_path.name}"
+        release_url = f"https://github.com/johnnyrobot/grader/releases/download/v{version}/{artifact_path.name}"
 
     pub_date = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
