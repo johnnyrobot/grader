@@ -107,6 +107,7 @@ def test_summarize_blockers_includes_fail_skip_and_blocked_reasons():
     blockers = summarize_blockers({
         "quality": {"status": "PASS"},
         "fairness": {"status": "FAIL", "output": "\n✗ FAIRNESS\n  incomplete perturbed_scores\n"},
+        "canvas": {"status": "DRY_RUN", "summary": "pass --apply for live writes"},
         "citations": {"status": "SKIP", "reason": "missing artifact"},
         "clean_machine": {"status": "BLOCKED_CLEAN_MACHINE_EVIDENCE"},
     })
@@ -114,6 +115,7 @@ def test_summarize_blockers_includes_fail_skip_and_blocked_reasons():
     by_gate = {blocker["gate"]: blocker for blocker in blockers}
     assert "quality" not in by_gate
     assert by_gate["fairness"]["status"] == "FAIL"
+    assert by_gate["canvas"]["status"] == "DRY_RUN"
     assert "FAIRNESS" in by_gate["fairness"]["summary"]
     assert "incomplete perturbed_scores" in by_gate["fairness"]["summary"]
     assert by_gate["citations"]["summary"] == "missing artifact"

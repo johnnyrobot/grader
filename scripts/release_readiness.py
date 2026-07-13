@@ -54,7 +54,7 @@ def summarize_blockers(evidence: dict[str, Any]) -> list[dict[str, str]]:
     for gate in REQUIRED_GATES:
         gate_evidence = evidence.get(gate, {})
         status = str(gate_evidence.get("status", "MISSING"))
-        if status == "FAIL" or status.startswith("BLOCKED") or status in {"MISSING", "SKIP"}:
+        if status not in {"PASS", "PASS_EXPERIMENTAL"}:
             blockers.append({
                 "gate": gate,
                 "status": status,
