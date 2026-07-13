@@ -26,7 +26,12 @@ from typing import Any
 import httpx
 
 CLI_PATH = os.environ.get("CANVAS_PP_CLI", "canvas-pp-cli")
-CANVAS_TOKEN = os.environ.get("CANVAS_TOKEN", "")
+CANVAS_TOKEN = (
+    os.environ.get("CANVAS_TOKEN")
+    or os.environ.get("CANVAS_API_TOKEN")
+    or os.environ.get("CANVAS_ACCESS_TOKEN")
+    or ""
+)
 CANVAS_BASE = os.environ.get("CANVAS_BASE_URL", "")
 
 

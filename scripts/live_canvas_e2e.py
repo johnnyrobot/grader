@@ -12,6 +12,9 @@ import json
 import os
 import re
 import sys
+import time
+import urllib.error
+import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -31,6 +34,10 @@ class CanvasE2EConfig:
     course_name: str
     apply: bool
     course_prefix: str = "ZZ-GRADER-TEST"
+    engine_url: str = "http://127.0.0.1:8756"
+    engine_token: str = "dev"
+    model: str = "grader-text:8b"
+    timeout_seconds: int = 180
 
 
 def redact(value: str) -> str:
@@ -77,14 +84,73 @@ def _blocked(status: str, reason: str, config: CanvasE2EConfig) -> dict[str, Any
     }
 
 
+def _engine_request(config: CanvasE2EConfig, method: str, path: str, data: dict | None = None) -> dict:
+    body = json.dumps(data or {}).encode() if data is not None else None
+    req = urllib.request.Request(
+        f"{config.engine_url.rstrip('/')}{path}",
+        data=body,
+        method=method,
+        headers={
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {config.engine_token}",
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            payload = resp.read()
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", "replace")[:500]
+        raise RuntimeError(f"{method} {path} -> HTTP {exc.code}: {detail}") from exc
+    if not payload:
+        return {}
+    return json.loads(payload.decode("utf-8"))
+
+
+def _wait_for_drafts(config: CanvasE2EConfig, assignment_key: str, expected: int) -> list[dict]:
+    deadline = time.monotonic() + config.timeout_seconds
+    last_items: list[dict] = []
+    while time.monotonic() < deadline:
+        queue = _engine_request(config, "GET", f"/api/queue?assignment_id={assignment_key}")
+        items = queue.get("items", [])
+        last_items = items
+        ready = [item for item in items if item.get("ai_scores")]
+        if len(items) >= expected and ready:
+            return ready
+        time.sleep(2)
+    raise TimeoutError(
+        f"timed out waiting for drafted Canvas grades; last queue size={len(last_items)}"
+    )
+
+
+def _read_back_from_canvas(course_id: int, assignment_id: int, posted_scores: dict[str, Any]) -> list[dict]:
+    from grader.canvas import get_submission
+
+    rows: list[dict] = []
+    for user_id, expected_score in posted_scores.items():
+        sub = get_submission(course_id, assignment_id, user_id)
+        rows.append({
+            "submission_id": user_id,
+            "expected_score": float(expected_score),
+            "actual_score": sub.get("score"),
+            "has_rubric": bool(sub.get("rubric_assessment")),
+            "comments": len(sub.get("submission_comments") or []),
+        })
+    return rows
+
+
 def run(config: CanvasE2EConfig) -> dict[str, Any]:
     if not config.apply:
         return _blocked("DRY_RUN", "pass --apply to perform guarded live Canvas writes", config)
 
     validate_course_name(config.course_name, config.course_prefix)
-    missing = [
-        name for name in ("CANVAS_BASE_URL", "CANVAS_TOKEN") if not os.environ.get(name)
-    ]
+    missing = ["CANVAS_BASE_URL"] if not os.environ.get("CANVAS_BASE_URL") else []
+    if not (
+        os.environ.get("CANVAS_TOKEN")
+        or os.environ.get("CANVAS_API_TOKEN")
+        or os.environ.get("CANVAS_ACCESS_TOKEN")
+    ):
+        missing.append("CANVAS_TOKEN or CANVAS_API_TOKEN")
     if missing:
         return _blocked(
             "BLOCKED_CANVAS_CREDENTIALS",
@@ -98,11 +164,74 @@ def run(config: CanvasE2EConfig) -> dict[str, Any]:
             config,
         )
 
-    return _blocked(
-        "BLOCKED_CANVAS_IMPLEMENTATION",
-        "live app import -> approve -> post -> read-back orchestration is not implemented yet",
-        config,
-    )
+    try:
+        health = _engine_request(config, "GET", "/health")
+    except Exception as exc:
+        return _blocked("BLOCKED_ENGINE", f"local Grader engine is not reachable: {exc}", config)
+    if health.get("status") != "ok":
+        return _blocked("BLOCKED_ENGINE", f"unexpected engine health response: {health}", config)
+
+    assignment_key = f"canvas_{config.course_id}_{config.assignment_id}"
+    try:
+        _engine_request(config, "POST", "/api/rubrics", {
+            "title": "ZZ-GRADER-TEST Live E2E Rubric",
+            "rubric_text": (
+                "# ZZ-GRADER-TEST Live E2E Rubric\n"
+                "## Thesis (5 pts, analytic)\n"
+                "- 5: Clear, specific claim\n"
+                "- 3: General but relevant claim\n"
+                "- 1: Unclear claim\n"
+                "## Evidence (5 pts, analytic)\n"
+                "- 5: Specific, relevant evidence\n"
+                "- 3: Some relevant evidence\n"
+                "- 1: Little support\n"
+            ),
+        })
+        imported = _engine_request(config, "POST", "/api/canvas/import", {
+            "course_id": config.course_id,
+            "assignment_id": config.assignment_id,
+            "download_attachments": True,
+        })
+        if int(imported.get("imported", 0) or 0) < 1:
+            return _blocked(
+                "BLOCKED_CANVAS_DATA",
+                f"no ungraded Canvas submissions imported: {imported}",
+                config,
+            )
+
+        _engine_request(config, "POST", "/api/grade/batch", {
+            "assignment_id": assignment_key,
+            "model": config.model,
+        })
+        drafts = _wait_for_drafts(config, assignment_key, int(imported["imported"]))
+        grade_id = drafts[0]["id"]
+        _engine_request(config, "POST", f"/api/grades/{grade_id}/approve", {})
+        posted = _engine_request(config, "POST", "/api/canvas/post", {
+            "course_id": config.course_id,
+            "assignment_id": config.assignment_id,
+            "grade_ids": [grade_id],
+        })
+        read_back = _read_back_from_canvas(
+            config.course_id,
+            config.assignment_id,
+            posted.get("posted_scores", {}),
+        )
+        result = {
+            "status": "PASS",
+            "applied": True,
+            "course_id": config.course_id,
+            "assignment_id": config.assignment_id,
+            "assignment_key": assignment_key,
+            "imported": imported.get("imported", 0),
+            "grade_ids": [grade_id],
+            "posted": posted.get("posted", 0),
+            "progress_state": posted.get("progress_state", "unknown"),
+            "read_back": read_back,
+        }
+        result.update(summarize_result(result))
+        return result
+    except Exception as exc:
+        return _blocked("FAIL", f"live Canvas E2E failed: {exc}", config)
 
 
 def main() -> None:
@@ -111,6 +240,10 @@ def main() -> None:
     parser.add_argument("--assignment-id", type=int, default=None)
     parser.add_argument("--course-name", default="ZZ-GRADER-TEST-SANDBOX")
     parser.add_argument("--course-prefix", default="ZZ-GRADER-TEST")
+    parser.add_argument("--engine-url", default=os.environ.get("GRADER_ENGINE_URL", "http://127.0.0.1:8756"))
+    parser.add_argument("--engine-token", default=os.environ.get("GRADER_ENGINE_TOKEN", "dev"))
+    parser.add_argument("--model", default="grader-text:8b")
+    parser.add_argument("--timeout-seconds", type=int, default=180)
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--output", type=Path, default=None)
@@ -122,6 +255,10 @@ def main() -> None:
         course_name=args.course_name,
         course_prefix=args.course_prefix,
         apply=args.apply and not args.dry_run,
+        engine_url=args.engine_url,
+        engine_token=args.engine_token,
+        model=args.model,
+        timeout_seconds=args.timeout_seconds,
     )
     try:
         result = run(config)

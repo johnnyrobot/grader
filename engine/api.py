@@ -784,6 +784,10 @@ def canvas_post(req: CanvasPostReq) -> dict:
     return {
         "posted": len(grade_data),
         "skipped": skipped,
+        "posted_scores": {
+            user_id: payload["posted_grade"]
+            for user_id, payload in grade_data.items()
+        },
         "progress_state": result.get("workflow_state", "completed"),
         "completion": result.get("completion", 100),
     }
