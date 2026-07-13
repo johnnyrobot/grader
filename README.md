@@ -64,7 +64,7 @@ beta with real student work.
 
 Confirmed in the current checkout:
 
-- Python tests: 120 passed, 12 intentionally skipped.
+- Python tests: 121 passed, 12 intentionally skipped.
 - Frontend tests: 12 passed; TypeScript/Vite production build and Rust `cargo check` pass.
 - The complete mocked desktop workflow passes in Playwright across onboarding, queue, review,
   settings, model management, and local-engine recovery. The visual sweep now fail-closes unless it
@@ -82,8 +82,8 @@ Confirmed in the current checkout:
 - `scripts/release_readiness.py` writes a consolidated JSON/Markdown verdict with blocker
   summaries plus an end-to-end testing and evaluation matrix that maps public-beta requirements to
   evidence. With current local artifacts, the report is `blocked` on signing credentials and
-  clean-machine evidence: missing clean-machine app codesign/spctl, first-run models, crash
-  recovery, keyboard-only review, Computer Use instructor sweep, and updater path.
+  clean-machine behavior evidence: first-run models, crash recovery, keyboard-only review, Computer
+  Use instructor sweep, and updater path.
 
 Public-beta blockers:
 

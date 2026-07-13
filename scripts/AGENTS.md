@@ -66,9 +66,11 @@ scripts/
   `--print-manual-template`. Fill it on the clean Mac with `passed: true`, `performed_at`, `tester`,
   notes, and existing screenshot/log paths, then run with `--app ... --dmg ... --updater-manifest ...
   --expected-version ... --manual-evidence ... --evidence-root ...` so the PASS records the exact
-  tested app/DMG/latest.json hashes. The template includes `computer_use_instructor_sweep`; this is
-  the required signed-app Computer Use inspection and complements the automated Playwright visual
-  sweep. Manual flags without evidence are legacy-only and should not be used for release claims.
+  tested app/DMG/latest.json hashes. If the loose build `.app` signature is stale, the script mounts
+  the supplied DMG and verifies the bundled `.app` for the app codesign/spctl checks. The template
+  includes `computer_use_instructor_sweep`; this is the required signed-app Computer Use inspection
+  and complements the automated Playwright visual sweep. Manual flags without evidence are
+  legacy-only and should not be used for release claims.
 - **`release_readiness.py`**: pass `--expected-version ...` for release runs. The script defaults
   to `app/src-tauri/tauri.conf.json`, records artifact path/mtime/SHA-256 metadata, and rejects PASS
   updater or clean-machine artifacts whose recorded version does not match the evaluated app. Its

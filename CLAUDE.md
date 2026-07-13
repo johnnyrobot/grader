@@ -104,9 +104,10 @@ work.
   clean-machine evidence. Static updater evidence passes with signed `latest.json`, DMG artifact
   metadata, stapler/spctl checks, and mounted bundled-app codesign/spctl checks. Fresh local
   signing/notarization is blocked because `codesign` returns `errSecInternalComponent` and notarytool
-  profile `grader` is unavailable; clean-machine first-run models, crash recovery, keyboard-only
-  review, and updater path also remain unverified and now require structured manual evidence notes
-  plus screenshot/log paths.
+  profile `grader` is unavailable; clean-machine DMG/app signature checks now pass via the mounted
+  DMG, but first-run models, crash recovery, keyboard-only review, Computer Use instructor sweep, and
+  updater path remain unverified and require structured manual evidence notes plus screenshot/log
+  paths.
 
 Before public beta: keep citation checks visibly experimental unless accuracy improves, restore
 signing/notarization credentials and complete a signed/notarized clean-machine install plus

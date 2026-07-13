@@ -60,11 +60,59 @@ def test_collect_checks_runs_app_and_dmg_commands(tmp_path):
     )
 
     assert all(checks.values())
-    assert details["codesign_verify"]["command"][:2] == ["codesign", "--verify"]
+    assert details["app_signature"]["codesign_verify"]["command"][:2] == ["codesign", "--verify"]
+    assert details["app_signature_source"] == "app_path"
     assert details["stapler_validate"]["command"][:3] == ["xcrun", "stapler", "validate"]
     assert details["release_provenance"]["app"]["sha256_tree"]
     assert details["release_provenance"]["dmg"]["sha256"]
     assert details["release_provenance"]["updater_manifest"]["ok"] is True
+
+
+def test_collect_checks_can_use_app_inside_dmg_when_loose_app_signature_fails(tmp_path):
+    loose_app = tmp_path / "target" / "Grader.app"
+    mounted = tmp_path / "mounted"
+    mounted_app = mounted / "Grader.app"
+    dmg = tmp_path / "Grader.dmg"
+    manifest = tmp_path / "latest.json"
+    loose_app.mkdir(parents=True)
+    mounted_app.mkdir(parents=True)
+    dmg.write_text("fake dmg")
+    manifest.write_text('{"version":"0.1.0","pub_date":"2026-07-13T00:00:00Z","platforms":{"darwin-aarch64":{"signature":"sig","url":"https://example.invalid/Grader.dmg"}}}')
+    attach_plist = f"""<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict><key>system-entities</key><array><dict><key>mount-point</key><string>{mounted}</string></dict></array></dict></plist>"""
+
+    def runner(command, text, capture_output, check):
+        if command[:2] == ["hdiutil", "attach"]:
+            return subprocess.CompletedProcess(command, 0, stdout=attach_plist, stderr="")
+        if command[:2] == ["hdiutil", "detach"]:
+            return subprocess.CompletedProcess(command, 0, stdout="ejected", stderr="")
+        if command[:1] == ["codesign"] and str(loose_app) in command:
+            return subprocess.CompletedProcess(command, 1, stdout="", stderr="loose app failed")
+        if command[:1] == ["spctl"] and str(loose_app) in command:
+            return subprocess.CompletedProcess(command, 1, stdout="", stderr="loose app rejected")
+        return subprocess.CompletedProcess(command, 0, stdout="ok", stderr="")
+
+    checks, details = collect_checks(
+        app_path=loose_app,
+        dmg_path=dmg,
+        updater_manifest=manifest,
+        expected_version="0.1.0",
+        manual_passes=[
+            "first_run_models",
+            "crash_recovery",
+            "keyboard_only_review",
+            "computer_use_instructor_sweep",
+            "updater_path",
+        ],
+        runner=runner,
+    )
+
+    assert all(checks.values())
+    assert details["app_signature"]["codesign_verify"]["ok"] is False
+    assert details["app_signature_source"] == "mounted_dmg_app"
+    assert details["mounted_dmg_app_signature"]["app_path"] == str(mounted_app)
+    assert details["mounted_dmg_app_signature"]["app_signature"]["codesign_verify"]["ok"] is True
 
 
 def test_validate_manual_evidence_requires_notes_and_files(tmp_path):

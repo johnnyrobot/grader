@@ -21,6 +21,7 @@ import argparse
 import hashlib
 import json
 import platform
+import plistlib
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
@@ -225,15 +226,85 @@ def collect_release_provenance(
     return ok, details
 
 
-def _run_check(command: list[str], *, runner: Runner = subprocess.run) -> dict[str, object]:
+def _run_check(
+    command: list[str],
+    *,
+    runner: Runner = subprocess.run,
+    output_limit: int | None = 2000,
+) -> dict[str, object]:
     proc = runner(command, text=True, capture_output=True, check=False)
     output = ((proc.stdout or "") + (proc.stderr or "")).strip()
     return {
         "command": command,
         "returncode": proc.returncode,
         "ok": proc.returncode == 0,
-        "output": output[:2000],
+        "output": output if output_limit is None else output[:output_limit],
     }
+
+
+def _find_app_bundle(root: Path) -> Path | None:
+    for child in sorted(root.iterdir()):
+        if child.is_dir() and child.suffix == ".app":
+            return child
+    for child in sorted(root.rglob("*.app")):
+        if child.is_dir():
+            return child
+    return None
+
+
+def _check_app_signature(app_path: Path, *, runner: Runner = subprocess.run) -> tuple[bool, bool, dict[str, object]]:
+    codesign = _run_check(["codesign", "--verify", "--deep", "--strict", str(app_path)], runner=runner)
+    spctl = _run_check(["spctl", "--assess", "--type", "execute", str(app_path)], runner=runner)
+    return bool(codesign["ok"]), bool(spctl["ok"]), {
+        "source": "app_path",
+        "app_path": str(app_path),
+        "codesign_verify": codesign,
+        "spctl_assess": spctl,
+    }
+
+
+def _check_app_signature_from_dmg(dmg_path: Path, *, runner: Runner = subprocess.run) -> tuple[bool, bool, dict[str, object]]:
+    details: dict[str, object] = {"source": "mounted_dmg_app", "dmg_path": str(dmg_path)}
+    attach = _run_check(
+        ["hdiutil", "attach", "-nobrowse", "-readonly", "-plist", str(dmg_path)],
+        runner=runner,
+        output_limit=None,
+    )
+    details["hdiutil_attach"] = attach
+    if not attach.get("ok"):
+        details["reason"] = "could not mount DMG to verify bundled app"
+        return False, False, details
+
+    mount_point: Path | None = None
+    try:
+        plist = plistlib.loads(str(attach.get("output") or "").encode())
+        for entity in plist.get("system-entities", []):
+            candidate = entity.get("mount-point")
+            if candidate:
+                mount_point = Path(candidate)
+                break
+    except Exception as exc:
+        details["reason"] = f"could not parse mounted DMG metadata: {exc}"
+
+    if mount_point is None:
+        details["reason"] = details.get("reason") or "mounted DMG did not report a mount point"
+        return False, False, details
+
+    details["mount_point"] = str(mount_point)
+    try:
+        app_path = _find_app_bundle(mount_point)
+        if app_path is None:
+            details["reason"] = "mounted DMG does not contain a .app bundle"
+            return False, False, details
+        details["app_path"] = str(app_path)
+        codesign_ok, spctl_ok, app_details = _check_app_signature(app_path, runner=runner)
+        details["app_signature"] = app_details
+        return codesign_ok, spctl_ok, details
+    finally:
+        details["hdiutil_detach"] = _run_check(
+            ["hdiutil", "detach", str(mount_point)],
+            runner=runner,
+        )
 
 
 def load_manual_evidence(path: Path | None) -> dict[str, Any]:
@@ -389,15 +460,33 @@ def collect_checks(
     checks = {name: False for name in REQUIRED_CHECKS}
     details: dict[str, object] = {}
 
+    app_check_details: dict[str, object] | None = None
     if app_path is not None and app_path.exists():
-        codesign = _run_check(["codesign", "--verify", "--deep", "--strict", str(app_path)], runner=runner)
-        spctl = _run_check(["spctl", "--assess", "--type", "execute", str(app_path)], runner=runner)
-        checks["codesign_verify"] = bool(codesign["ok"])
-        checks["spctl_assess"] = bool(spctl["ok"])
-        details["codesign_verify"] = codesign
-        details["spctl_assess"] = spctl
+        codesign_ok, spctl_ok, app_check_details = _check_app_signature(app_path, runner=runner)
+        checks["codesign_verify"] = codesign_ok
+        checks["spctl_assess"] = spctl_ok
+        details["app_signature"] = app_check_details
     elif app_path is not None:
         details["app_path"] = {"ok": False, "reason": "app path does not exist", "path": str(app_path)}
+
+    if (
+        dmg_path is not None
+        and dmg_path.exists()
+        and (checks["codesign_verify"] is not True or checks["spctl_assess"] is not True)
+    ):
+        dmg_codesign_ok, dmg_spctl_ok, dmg_app_details = _check_app_signature_from_dmg(
+            dmg_path,
+            runner=runner,
+        )
+        details["mounted_dmg_app_signature"] = dmg_app_details
+        if dmg_codesign_ok and dmg_spctl_ok:
+            checks["codesign_verify"] = True
+            checks["spctl_assess"] = True
+            details["app_signature_source"] = "mounted_dmg_app"
+        elif app_check_details is not None:
+            details["app_signature_source"] = "app_path_failed_mounted_dmg_failed"
+    elif app_check_details is not None:
+        details["app_signature_source"] = "app_path"
 
     stapler_target = dmg_path if dmg_path is not None else app_path
     if stapler_target is not None and stapler_target.exists():

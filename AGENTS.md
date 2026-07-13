@@ -235,13 +235,13 @@ uv run python scripts/release_readiness.py --profile public_beta --expected-vers
   signing. The release-readiness JSON/Markdown now includes an end-to-end public-beta matrix that
   maps requirements to evidence. Teacher-local validation still requires authorized instructor data,
   and clean-machine behavioral checks still need release validation.
-- **Coverage:** Python collects 132 cases (120 pass, 12 skip). Frontend has 12 passing component
+- **Coverage:** Python collects 133 cases (121 pass, 12 skip). Frontend has 12 passing component
   tests plus four passing Playwright E2E tests.
 - **Public beta verdict:** not ready for unattended public testing with real student work. Limit
   current use to a developer-assisted alpha with synthetic or institution-approved test data.
 - **Highest-value next action:** restore signing/notarization credentials, then collect
-  clean-machine app codesign/spctl, first-run model setup, crash recovery,
-  keyboard-only review, Computer Use instructor sweep, and updater-path evidence before broadening
+  clean-machine first-run model setup, crash recovery, keyboard-only review, Computer Use instructor
+  sweep, and updater-path evidence before broadening
   beta claims.
 - The existing modification under `.omo/run-continuation/` is unrelated operational state; do not
   overwrite or commit it unless explicitly requested.
