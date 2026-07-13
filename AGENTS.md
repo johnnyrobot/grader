@@ -253,10 +253,10 @@ package is a clean-Mac handoff bundle only; do not treat it as passing clean-mac
   performance gate passes at 37.8s per 1,500-word essay. Public-proxy quality/fairness release mode
   rejects the tiny committed mechanics fixtures. The local anchored 40-item Mohler ASAG public-proxy
   artifact passes quality at QWK 0.845 and passes fairness across all five perturbation families.
-  Updater/DMG/app evidence now fails closed when artifacts predate the current git commit. The latest
-  local app/DMG build signs, notarizes, staples, installs to `/Applications/Grader.app` as
-  `com.grader.app`, and passes macOS signature checks, but the final release artifact must be rebuilt
-  after the last committed source change. The local signed-app Computer Use sweep now
+  Updater/DMG/app evidence now fails closed when artifacts predate the current git commit. Local
+  Developer ID codesigning still works, but the current notarytool profile `grader` is missing, so
+  fresh notarization/stapling is blocked until Apple notarization credentials are restored. The local
+  signed-app Computer Use sweep now
   passes with 73 accessibility/screenshot capture pairs, local keyboard-only review evidence
   passes through Tab/Enter, `E`, text entry, Command+Enter, Shift+Tab, and Enter back to queue,
   local crash recovery evidence passes by force-stopping the engine sidecar and restarting it
