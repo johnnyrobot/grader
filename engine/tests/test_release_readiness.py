@@ -63,6 +63,8 @@ def test_signing_preflight_blocks_when_notary_profile_missing(monkeypatch):
     def fake_run(command, **_kwargs):
         if command[:2] == ["security", "find-identity"]:
             return Proc(0, stdout='1) ABC "Developer ID Application: Example (TEAMID)"')
+        if command[:1] == ["codesign"]:
+            return Proc(0)
         if command[:2] == ["xcrun", "notarytool"]:
             return Proc(69, stderr="No Keychain password item found for profile: grader")
         raise AssertionError(f"unexpected command: {command}")
@@ -73,8 +75,36 @@ def test_signing_preflight_blocks_when_notary_profile_missing(monkeypatch):
 
     assert result["status"] == "BLOCKED_SIGNING_CREDENTIALS"
     assert result["checks"]["developer_id_certificate"] is True
+    assert result["checks"]["codesign_private_key_access"] is True
     assert result["checks"]["notary_keychain_profile"] is False
     assert "notarytool keychain profile" in result["reason"]
+
+
+def test_signing_preflight_blocks_when_codesign_private_key_unavailable(monkeypatch):
+    class Proc:
+        def __init__(self, returncode: int, stdout: str = "", stderr: str = ""):
+            self.returncode = returncode
+            self.stdout = stdout
+            self.stderr = stderr
+
+    def fake_run(command, **_kwargs):
+        if command[:2] == ["security", "find-identity"]:
+            return Proc(0, stdout='1) ABC "Developer ID Application: Example (TEAMID)"')
+        if command[:1] == ["codesign"]:
+            return Proc(1, stderr="errSecInternalComponent")
+        if command[:2] == ["xcrun", "notarytool"]:
+            return Proc(0)
+        raise AssertionError(f"unexpected command: {command}")
+
+    monkeypatch.setattr("scripts.release_readiness.subprocess.run", fake_run)
+
+    result = _signing_preflight()
+
+    assert result["status"] == "BLOCKED_SIGNING_CREDENTIALS"
+    assert result["checks"]["developer_id_certificate"] is True
+    assert result["checks"]["codesign_private_key_access"] is False
+    assert result["checks"]["notary_keychain_profile"] is True
+    assert "codesign cannot use the Developer ID private key" in result["reason"]
 
 
 def test_normalize_citation_artifact_accepts_safe_experimental_mode(tmp_path):

@@ -36,6 +36,7 @@ grader/
 │   ├── collect_golden.py        # Canvas/local golden-set collector and validator
 │   ├── start_engine.sh          # desktop engine launcher
 │   ├── sign_and_notarize.sh     # macOS release signing pipeline
+│   ├── frontend_evidence.py     # frontend component/build/E2E/visual-sweep artifact
 │   └── generate_appcast.py      # Tauri updater manifest generator
 ├── docs/                        # handoff, product/spec, FERPA, rollout, phases P0-P5, research
 ├── .github/workflows/           # ship gates and tag-triggered release workflow
@@ -56,7 +57,7 @@ Nested guidance exists in `engine/AGENTS.md`, `engine/grader/AGENTS.md`,
 | Grading behavior | `engine/grader/agent.py`, `schema.py`, `triage.py` | `grade()` is the non-raising entry point |
 | Calibration/anchors | `engine/grader/exemplars.py`, `calibration.py`, `overrides.py` | P1 result artifacts live in `engine/results_pointer_*.json` |
 | Desktop UX | `app/src/App.tsx`, `app/src/screens/`, `app/src/index.css` | Light-first semantic theme; queue and split view are the central workflow |
-| Frontend verification | `app/src/**/*.test.tsx`, `app/e2e/neuroinclusive-ui.spec.ts` | 12 component tests plus three mocked Playwright E2E tests |
+| Frontend verification | `app/src/**/*.test.tsx`, `app/e2e/neuroinclusive-ui.spec.ts` | 12 component tests plus four mocked Playwright E2E tests |
 | Desktop ↔ engine boundary | `app/src/api.ts`, `engine/api.py` | Dynamic loopback HTTP port + per-launch bearer token; dev fallback remains `127.0.0.1:8756` |
 | Engine process lifecycle | `app/src-tauri/src/engine.rs`, `lib.rs`, `scripts/start_engine.sh` | Starts/stops uvicorn with the Tauri app |
 | Canvas round-trip | `engine/grader/canvas.py`, Canvas routes in `engine/api.py` | Live sandbox helper is `scripts/seed_canvas_sandbox.py` |
@@ -200,10 +201,10 @@ uv run python scripts/release_readiness.py --profile public_beta --out artifacts
   +0.127/+0.135. The local anchored Mohler ASAG public-proxy artifact now passes quality
   at QWK 0.845 against a 0.623 human-ceiling-adjusted floor.
 - **P2 in progress:** the complete light-first neuroinclusive UI is implemented across onboarding,
-  queue, review, settings, and model management. Twelve component tests and three mocked Playwright
-  E2E tests pass, including a 15-screen visual sweep with 153 visible controls, automated
-  accessibility checks, and 200% text scaling. Still validate a clean-machine `.app`, crash
-  recovery, real first-run model setup, and packaging.
+  queue, review, settings, and model management. Twelve component tests and four mocked Playwright
+  E2E tests pass, including a 16-screen visual sweep with 167 visible controls, automated
+  accessibility checks, local-engine recovery alert coverage, and 200% text scaling. Still validate
+  a clean-machine `.app`, crash recovery, real first-run model setup, and packaging.
 - **P3 in progress:** Canvas client/API/offline queue exist and the guarded live app-level path
   passed for score/comment: import → targeted grade → teacher override/approval → post → Progress
   completed → read-back on `canvas.johnnyrobot.ai` course `106`, assignment `2841`, Canvas user `8`.
@@ -220,8 +221,8 @@ uv run python scripts/release_readiness.py --profile public_beta --out artifacts
   `errSecInternalComponent` and notarytool profile `grader` is unavailable. Teacher-local
   validation still requires authorized instructor data, and clean-machine behavioral checks still
   need release validation.
-- **Coverage:** Python collects 94 cases (82 pass, 12 skip). Frontend has 12 passing component
-  tests plus three passing Playwright E2E tests.
+- **Coverage:** Python collects 95 cases (83 pass, 12 skip). Frontend has 12 passing component
+  tests plus four passing Playwright E2E tests.
 - **Public beta verdict:** not ready for unattended public testing with real student work. Limit
   current use to a developer-assisted alpha with synthetic or institution-approved test data.
 - **Highest-value next action:** restore signing/notarization credentials, then collect

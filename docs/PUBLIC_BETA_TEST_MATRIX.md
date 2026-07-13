@@ -28,8 +28,8 @@ misrepresented as grading accuracy.
 | Canvas app round trip | Import -> teacher override/approval -> post -> Progress completed -> read-back exact score and teacher feedback comment | `scripts/live_canvas_e2e.py --apply` against `ZZ-GRADER-TEST` | PASS: live guarded run on `canvas.johnnyrobot.ai`, course `106`, assignment `2841`, Canvas user `8`; score `4` and one teacher comment read back | PASS for score/comment beta scope; rubric assessment remains disabled until Canvas criterion-ID mapping exists, and attachment write-back still needs separate evidence |
 | Privacy | Captured outbound connections remain allowlisted | `engine/gates/egress.py` | PASS: 3/3 allowlisted in latest run | PASS artifact must be supplied to readiness report |
 | Performance | 1,500-word essay under 90 seconds on target memory floor | `engine/gates/perf.py --memory-floor 16` | PASS: 37.8 seconds in latest run | PASS artifact must be supplied to readiness report |
-| Desktop build | React build, unit tests, E2E workflow, Rust check pass | `npm test`, `npm run build`, Playwright, `cargo check` | PASS: 12 component tests, 3 E2E tests, build, and Rust check | PASS artifact must be supplied to readiness report |
-| Accessibility | No serious/critical WCAG violations, 200% text scaling, keyboard-only loop | Playwright axe + visual inspection | PASS on synthetic fixture; visual sweep covers 15 screens and 153 visible controls | PASS mechanics; still requires clean-machine app check |
+| Desktop build | React build, unit tests, E2E workflow, Rust check pass | `scripts/frontend_evidence.py`, `cargo check` | PASS: 12 component tests, 4 E2E tests, build, and Rust check; frontend artifact records 16 visual-sweep screens and 167 controls | PASS artifact must be supplied to readiness report |
+| Accessibility | No serious/critical WCAG violations, 200% text scaling, keyboard-only loop | Playwright axe + visual inspection | PASS on synthetic fixture; visual sweep covers 16 screens and 167 visible controls | PASS mechanics; still requires clean-machine app check |
 | Signing/notarization | Signed/notarized app or DMG passes codesign, stapler, spctl | release script + clean Mac | BLOCKED: fresh local signing fails with `errSecInternalComponent`, and notarytool profile `grader` is unavailable | PASS automated signing/notarization evidence; clean-machine behavior remains separate |
 | Clean-machine | First launch, model setup, crash recovery, keyboard review, updater N->N+1 | `scripts/clean_machine_evidence.py` JSON from a clean Mac/VM | BLOCKED: current local evidence is missing codesign/spctl plus first-run models, crash recovery, keyboard-only review, and updater path | Required for public beta |
 | Release report | Consolidated verdict is `supervised_public_beta` | `scripts/release_readiness.py` | BLOCKED: signing credentials and clean-machine evidence are incomplete | Final release gate |
@@ -38,14 +38,15 @@ misrepresented as grading accuracy.
 
 Use Computer Use or Playwright screenshots to inspect every visible screen at desktop width and at
 a narrow responsive width. The current Playwright visual sweep writes
-`artifacts/release-evidence/visual-sweep.json`, screenshots for 15 named screens, and a control
-inventory covering 153 visible controls:
+`artifacts/release-evidence/visual-sweep.json`, screenshots for 16 named screens, and a control
+inventory covering 167 visible controls:
 
 1. Onboarding: intro, appearance, machine check, connected state.
 2. Queue: all lane filters, assignment field, empty state, populated table, update notice.
 3. Review: unchanged approval, score changes, feedback editing, unsaved warning, approval result.
 4. Settings: general, appearance, model defaults, rubrics, validation messages.
 5. Model manager: runtime online/offline, installed/needed models, refresh, install, inventory.
+6. Recovery: local-engine disconnect alert and restart action.
 
 Record each sweep as `PASS`, `FAIL`, or `BLOCKED`, with screenshot paths or a Computer Use note.
 The latest local sweep is `PASS`; the clean-machine signed app still needs the same instructor

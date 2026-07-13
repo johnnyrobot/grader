@@ -10,6 +10,7 @@ import platform
 import re
 import subprocess
 import sys
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -164,13 +165,48 @@ def _signing_preflight() -> dict[str, Any]:
         check=False,
     )
     cert_output = redact_secrets(cert_proc.stdout + cert_proc.stderr)
+    identity_match = re.search(r'"([^"]*Developer ID Application[^"]*)"', cert_output)
+    signing_identity = os.environ.get("SIGNING_IDENTITY") or (identity_match.group(1) if identity_match else "")
     checks["developer_id_certificate"] = "Developer ID Application" in cert_output
     if not checks["developer_id_certificate"]:
         return {
             "status": "BLOCKED_SIGNING_CREDENTIALS",
             "checks": checks,
             "reason": "no Developer ID Application certificate found in keychain",
-        }
+    }
+    checks["codesign_private_key_access"] = False
+    probe_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile("w", prefix="grader-codesign-probe-", delete=False) as probe:
+            probe.write("#!/bin/sh\nexit 0\n")
+            probe_path = Path(probe.name)
+        probe_path.chmod(0o700)
+        codesign_proc = subprocess.run(
+            [
+                "codesign",
+                "--force",
+                "--sign",
+                signing_identity,
+                "--timestamp=none",
+                "--options",
+                "runtime",
+                str(probe_path),
+            ],
+            text=True,
+            capture_output=True,
+            check=False,
+            timeout=20,
+        )
+        codesign_output = redact_secrets(codesign_proc.stdout + codesign_proc.stderr)
+        checks["codesign_private_key_access"] = codesign_proc.returncode == 0
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        codesign_output = redact_secrets(str(exc))
+    finally:
+        try:
+            if probe_path is not None:
+                probe_path.unlink()
+        except Exception:
+            pass
     try:
         notary_proc = subprocess.run(
             ["xcrun", "notarytool", "history", "--keychain-profile", keychain_profile],
@@ -184,12 +220,20 @@ def _signing_preflight() -> dict[str, Any]:
     except (OSError, subprocess.TimeoutExpired) as exc:
         notary_output = redact_secrets(str(exc))
         checks["notary_keychain_profile"] = False
+    credential_failures: list[str] = []
+    output_parts: list[str] = []
+    if not checks["codesign_private_key_access"]:
+        credential_failures.append("codesign cannot use the Developer ID private key")
+        output_parts.append(codesign_output)
     if not checks["notary_keychain_profile"]:
+        credential_failures.append(f"notarytool keychain profile {keychain_profile!r} is unavailable or invalid")
+        output_parts.append(notary_output)
+    if credential_failures:
         return {
             "status": "BLOCKED_SIGNING_CREDENTIALS",
             "checks": checks,
-            "reason": f"notarytool keychain profile {keychain_profile!r} is unavailable or invalid",
-            "output": notary_output[:2000],
+            "reason": "; ".join(credential_failures),
+            "output": "\n".join(part for part in output_parts if part)[:2000],
         }
     if not checks["hardened_runtime"] or not checks["updater_active"] or not checks["updater_pubkey_present"]:
         return {"status": "FAIL", "checks": checks, "reason": "release signing/updater config incomplete"}

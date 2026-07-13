@@ -238,6 +238,26 @@ test("instructor exercises every core control surface", async ({ page }, testInf
   await expectNoSeriousAccessibilityViolations(page);
 });
 
+test("engine disconnect is surfaced with an instructor recovery action", async ({ page }) => {
+  await page.route("http://127.0.0.1:8756/health", route => {
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true }) });
+  });
+  await page.goto("/");
+  await page.waitForLoadState("networkidle");
+  await page.getByRole("button", { name: "Continue" }).click();
+  await page.getByRole("button", { name: "Skip appearance choices" }).click();
+  await page.getByRole("button", { name: "Continue" }).click();
+  await expect(page.getByText("Local engine connected")).toBeVisible();
+  await page.getByRole("button", { name: "Start grading" }).click();
+  await expect(page.getByRole("heading", { name: "Grading queue" })).toBeVisible();
+
+  await page.route("http://127.0.0.1:8756/health", route => route.abort());
+
+  await expect(page.getByRole("alert")).toContainText("Local engine needs attention", { timeout: 7000 });
+  await expect(page.getByRole("button", { name: "Restart local engine" })).toBeVisible();
+  await expectNoSeriousAccessibilityViolations(page);
+});
+
 test("visual sweep records every core screen and visible control inventory", async ({ page }) => {
   const screens: Awaited<ReturnType<typeof captureVisualScreen>>[] = [];
   const capture = async (name: string) => {
@@ -340,6 +360,12 @@ test("visual sweep records every core screen and visible control inventory", asy
   expect(pageOverflows).toBe(false);
   await capture("15-responsive-200-percent");
 
+  await page.evaluate(() => { document.documentElement.style.fontSize = ""; });
+  await page.route("http://127.0.0.1:8756/health", route => route.abort());
+  await expect(page.getByRole("alert")).toContainText("Local engine needs attention", { timeout: 7000 });
+  await expect(page.getByRole("button", { name: "Restart local engine" })).toBeVisible();
+  await capture("16-engine-recovery-alert");
+
   const requiredScreens = [
     "01-onboarding-welcome",
     "02-onboarding-appearance",
@@ -356,6 +382,7 @@ test("visual sweep records every core screen and visible control inventory", asy
     "13-settings-rubrics",
     "14-model-manager",
     "15-responsive-200-percent",
+    "16-engine-recovery-alert",
   ];
   expect(screens.map(screen => screen.name)).toEqual(requiredScreens);
   expect(screens.every(screen => screen.visible_control_count > 0)).toBe(true);
