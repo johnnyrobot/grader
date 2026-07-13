@@ -146,7 +146,8 @@ scripts/
   clean-machine tester receives one deterministic, gitignored handoff folder:
   `uv run python scripts/release_evidence_package.py --out-dir artifacts/release-evidence/clean-machine-handoff`.
   It writes hashes/status summaries, copies the release DMG/latest.json when supplied, and includes
-  `clean-machine-runbook.md` plus `clean-machine-manual-evidence.json`. Include
+  `clean-machine-runbook.md`, `clean-machine-manual-evidence.json`,
+  `github-release-secrets-runbook.md`, and `updater-key-private-runbook.md`. Include
   `--github-release-evidence artifacts/release-evidence/github-release-preflight-current.json` so
   the tester sees whether publication prerequisites have passed. It is a handoff package, not
   release evidence by itself.

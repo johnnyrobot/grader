@@ -36,9 +36,10 @@ per-teacher model to train.
 review workflow work, including the neuroinclusive light-first interface and the tiered
 release-gate machinery. Public-proxy quality/fairness pass and Canvas score/comment round-trip is
 validated, and a current-source local app/DMG now signs, notarizes, staples, and passes macOS
-signature checks. Signed updater-manifest evidence now passes locally. Public beta is still blocked
-by GitHub release-publication setup, the live updater channel, and clean-machine updater N→N+1
-behavioral validation.
+signature checks. Signed updater-manifest regeneration is still blocked until the updater-key
+password is supplied in a private shell or Keychain. Public beta is still blocked by GitHub
+release-publication setup, the live updater channel, and clean-machine updater N→N+1 behavioral
+validation.
 
 | | |
 |---|---|

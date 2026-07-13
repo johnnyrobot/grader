@@ -30,6 +30,8 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from scripts.clean_machine_evidence import manual_evidence_runbook, manual_evidence_template
+from scripts.github_release_secrets import setup_runbook as github_release_secrets_runbook
+from scripts.updater_key_doctor import private_shell_runbook as updater_key_private_runbook
 
 
 DEFAULT_OUT = Path("artifacts/release-evidence/clean-machine-handoff")
@@ -125,16 +127,19 @@ Current readiness verdict: `{summary.get('readiness_verdict', 'unknown')}`
    to pass so the tag, app bundle, Rust crate/lockfile, frontend package/lockfile, Python project,
    engine launcher, and dev mock update fixture agree on the release version.
 3. Configure GitHub Actions release secrets in a private shell with
-   `scripts/github_release_secrets.py`. The workflow imports the Developer ID `.p12` into a
-   temporary runner keychain before signing.
+   `scripts/github_release_secrets.py`; see `github-release-secrets-runbook.md`. The workflow
+   imports the Developer ID `.p12` into a temporary runner keychain before signing. If the encrypted
+   updater-key password (`TAURI_SIGNING_PRIVATE_KEY_PASSWORD`) is stored in macOS Keychain, use the runbook's
+   `--updater-password-keychain-service ... --updater-password-keychain-account ...` path so the
+   password does not need to be pasted or exported.
 4. Run `scripts/github_release_preflight.py --candidate-tag v<N+1>` and require `status=PASS`
    before creating the tag or publishing assets. This verifies GitHub auth, the configured updater
    endpoint, release workflow, required Actions secrets, candidate version consistency, and
    tag/release availability without writing to GitHub.
 5. Publish a signed N+1 DMG and signed `latest.json` to the configured GitHub release channel:
    `https://github.com/johnnyrobot/grader/releases/latest/download/latest.json`.
-   The private release operator should set `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` only in the release
-   shell or CI secret store when generating the signed N+1 manifest.
+   Follow `updater-key-private-runbook.md` to verify the updater key/password and regenerate
+   signed updater evidence without printing or committing the password.
 6. Run `uv run python scripts/updater_channel_preflight.py --current-version <installed-N-version>`
    and require `status=PASS` before starting the clean-machine updater-path test.
 7. Launch N, wait for the update banner, use the in-app `Install update and restart` action, and
@@ -196,11 +201,15 @@ def build_package(
     }
 
     runbook = out_dir / "clean-machine-runbook.md"
+    github_runbook = out_dir / "github-release-secrets-runbook.md"
+    updater_runbook = out_dir / "updater-key-private-runbook.md"
     template = out_dir / "clean-machine-manual-evidence.json"
     readme = out_dir / "README.md"
     manifest_path = out_dir / "release-evidence-package.json"
 
     runbook.write_text(manual_evidence_runbook())
+    github_runbook.write_text(github_release_secrets_runbook())
+    updater_runbook.write_text(updater_key_private_runbook())
     template.write_text(json.dumps(manual_evidence_template(), indent=2, sort_keys=True) + "\n")
     readme.write_text(_readme(summary))
 
@@ -213,6 +222,8 @@ def build_package(
         "files": files,
         "generated_files": {
             "runbook": _file_metadata(runbook),
+            "github_release_secrets_runbook": _file_metadata(github_runbook),
+            "updater_key_private_runbook": _file_metadata(updater_runbook),
             "manual_template": _file_metadata(template),
             "readme": _file_metadata(readme),
         },

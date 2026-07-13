@@ -70,10 +70,15 @@ def test_build_package_copies_artifacts_and_writes_runbook_template(tmp_path):
     assert (out / "evidence" / "updater-channel-current.json").exists()
     assert (out / "evidence" / "updater-key.json").exists()
     assert "first_run_models" in (out / "clean-machine-runbook.md").read_text()
+    assert "github_release_secrets.py" in (out / "github-release-secrets-runbook.md").read_text()
+    assert "updater_key_doctor.py" in (out / "updater-key-private-runbook.md").read_text()
+    assert "--updater-password-keychain-service" in (out / "github-release-secrets-runbook.md").read_text()
     template = json.loads((out / "clean-machine-manual-evidence.json").read_text())
     assert template["computer_use_instructor_sweep"]["assertions"]
     readme = (out / "README.md").read_text()
     assert "TAURI_SIGNING_PRIVATE_KEY_PASSWORD" in readme
+    assert "github-release-secrets-runbook.md" in readme
+    assert "updater-key-private-runbook.md" in readme
     assert "release_version_guard.py" in readme
     assert "github_release_preflight.py" in readme
     assert "updater_channel_preflight.py" in readme
