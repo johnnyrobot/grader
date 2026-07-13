@@ -11,6 +11,7 @@ scripts/
 ├── make_models.sh              # bake context-capped Ollama variants (CRITICAL for 16 GB tier)
 ├── build_public_proxy.py       # build gitignored Mohler ASAG public-proxy evidence
 ├── frontend_evidence.py        # collect component/build/E2E/visual-sweep release artifact
+├── updater_evidence.py         # validate updater config/latest.json/signature/artifact
 ├── clean_machine_evidence.py   # collect signed/notarized clean-machine release evidence
 └── seed_canvas_sandbox.py      # Canvas round-trip seeder/verifier (dry-run by default)
 ```
@@ -22,6 +23,7 @@ scripts/
 | Fix OOM on 16 GB machines | `make_models.sh` | Caps `num_ctx=16384`, sets `temperature=0` |
 | Build public-proxy evidence | `build_public_proxy.py` | Writes Mohler ASAG artifacts under `artifacts/public_proxy/`; optional local grading |
 | Collect frontend release evidence | `frontend_evidence.py` | Runs component tests, production build, managed Playwright E2E, and reads visual-sweep metadata |
+| Validate updater evidence | `updater_evidence.py` | Requires updater config, signed latest.json, and optional artifact filename/hash checks |
 | Clean-machine release evidence | `clean_machine_evidence.py` | Writes `artifacts/release-evidence/clean-machine.json`; PASS requires signing plus first-run/crash/keyboard/updater checks |
 | Seed Canvas sandbox | `seed_canvas_sandbox.py` | `--apply --students 6` to create + exercise |
 | Tear down sandbox | `seed_canvas_sandbox.py` | `--teardown --course-id 106 --apply` |
@@ -36,6 +38,8 @@ scripts/
   comparisons.
 - **`frontend_evidence.py`**: starts and stops its own Vite dev server for Playwright. If it fails
   on port 5173, check for a stale dev server before rerunning.
+- **`updater_evidence.py`**: blocks public beta when `latest.json` is missing or any platform
+  signature is empty. It does not replace the clean-machine N→N+1 update test.
 - **`seed_canvas_sandbox.py`**: dry-run by default. `--apply` to write. Refuses courses without `ZZ-GRADER-TEST` marker.
 - **`clean_machine_evidence.py`**: cannot prove a clean-machine pass by itself. Run it on the
   clean Mac with the signed app/DMG and pass manual flags only after performing those checks.

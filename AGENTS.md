@@ -37,6 +37,7 @@ grader/
 │   ├── start_engine.sh          # desktop engine launcher
 │   ├── sign_and_notarize.sh     # macOS release signing pipeline
 │   ├── frontend_evidence.py     # frontend component/build/E2E/visual-sweep artifact
+│   ├── updater_evidence.py      # updater manifest/signature/artifact evidence
 │   └── generate_appcast.py      # Tauri updater manifest generator
 ├── docs/                        # handoff, product/spec, FERPA, rollout, phases P0-P5, research
 ├── .github/workflows/           # ship gates and tag-triggered release workflow
@@ -60,6 +61,7 @@ Nested guidance exists in `engine/AGENTS.md`, `engine/grader/AGENTS.md`,
 | Frontend verification | `app/src/**/*.test.tsx`, `app/e2e/neuroinclusive-ui.spec.ts` | 12 component tests plus four mocked Playwright E2E tests |
 | Desktop ↔ engine boundary | `app/src/api.ts`, `engine/api.py` | Dynamic loopback HTTP port + per-launch bearer token; dev fallback remains `127.0.0.1:8756` |
 | Engine process lifecycle | `app/src-tauri/src/engine.rs`, `lib.rs`, `scripts/start_engine.sh` | Starts/stops uvicorn with the Tauri app |
+| Updater release evidence | `scripts/generate_appcast.py`, `scripts/updater_evidence.py`, `app/src-tauri/tauri.conf.json` | Requires signed `latest.json` and signed artifact |
 | Canvas round-trip | `engine/grader/canvas.py`, Canvas routes in `engine/api.py` | Live sandbox helper is `scripts/seed_canvas_sandbox.py` |
 | Document/handwriting | `engine/grader/parse.py`, `handwriting.py` | Vision transcribes; the text model grades |
 | Citation verification | `engine/grader/citations.py`, `engine/verify_citations.py` | Network-dependent result artifact; rerun before quoting accuracy |
@@ -217,16 +219,17 @@ uv run python scripts/release_readiness.py --profile public_beta --out artifacts
   performance gate passes at 38.3s per 1,500-word essay. Public-proxy quality/fairness release mode
   rejects the tiny committed mechanics fixtures. The local anchored 40-item Mohler ASAG public-proxy
   artifact passes quality at QWK 0.845 and passes fairness across all five perturbation families.
-  Fresh local signing/notarization is currently blocked: `codesign` returns
-  `errSecInternalComponent` and notarytool profile `grader` is unavailable. Teacher-local
-  validation still requires authorized instructor data, and clean-machine behavioral checks still
-  need release validation.
-- **Coverage:** Python collects 95 cases (83 pass, 12 skip). Frontend has 12 passing component
+  Updater evidence is currently blocked until signed `latest.json` references the signed release
+  artifact. Fresh local signing/notarization is currently blocked: `codesign` returns
+  `errSecInternalComponent` and notarytool profile `grader` is unavailable. Teacher-local validation
+  still requires authorized instructor data, and clean-machine behavioral checks still need release
+  validation.
+- **Coverage:** Python collects 98 cases (86 pass, 12 skip). Frontend has 12 passing component
   tests plus four passing Playwright E2E tests.
 - **Public beta verdict:** not ready for unattended public testing with real student work. Limit
   current use to a developer-assisted alpha with synthetic or institution-approved test data.
-- **Highest-value next action:** restore signing/notarization credentials, then collect
-  clean-machine first-run model setup, crash recovery, keyboard-only review, and updater-path
-  evidence before broadening beta claims.
+- **Highest-value next action:** restore signing/notarization credentials, generate signed updater
+  evidence, then collect clean-machine first-run model setup, crash recovery, keyboard-only review,
+  and updater-path evidence before broadening beta claims.
 - The existing modification under `.omo/run-continuation/` is unrelated operational state; do not
   overwrite or commit it unless explicitly requested.

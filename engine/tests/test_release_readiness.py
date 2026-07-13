@@ -26,6 +26,7 @@ def test_decide_verdict_supervised_public_beta_when_required_gates_pass():
         "performance": {"status": "PASS"},
         "frontend": {"status": "PASS"},
         "rust": {"status": "PASS"},
+        "updater": {"status": "PASS"},
         "signing": {"status": "PASS"},
         "clean_machine": {"status": "PASS"},
     }
@@ -42,6 +43,7 @@ def test_decide_verdict_allows_accepted_experimental_citations():
         "performance": {"status": "PASS"},
         "frontend": {"status": "PASS"},
         "rust": {"status": "PASS"},
+        "updater": {"status": "PASS"},
         "signing": {"status": "PASS"},
         "clean_machine": {"status": "PASS"},
     }
@@ -193,6 +195,7 @@ def test_summarize_blockers_includes_fail_skip_and_blocked_reasons():
         "fairness": {"status": "FAIL", "output": "\n✗ FAIRNESS\n  incomplete perturbed_scores\n"},
         "canvas": {"status": "DRY_RUN", "summary": "pass --apply for live writes"},
         "citations": {"status": "SKIP", "reason": "missing artifact"},
+        "updater": {"status": "BLOCKED_UPDATER_EVIDENCE", "failures": ["missing updater manifest latest.json"]},
         "clean_machine": {
             "status": "BLOCKED_CLEAN_MACHINE_EVIDENCE",
             "missing_checks": ["first_run_models"],
@@ -206,5 +209,6 @@ def test_summarize_blockers_includes_fail_skip_and_blocked_reasons():
     assert "FAIRNESS" in by_gate["fairness"]["summary"]
     assert "incomplete perturbed_scores" in by_gate["fairness"]["summary"]
     assert by_gate["citations"]["summary"] == "missing artifact"
+    assert by_gate["updater"]["summary"] == "failures: missing updater manifest latest.json"
     assert by_gate["clean_machine"]["status"] == "BLOCKED_CLEAN_MACHINE_EVIDENCE"
     assert by_gate["clean_machine"]["summary"] == "missing checks: first_run_models"

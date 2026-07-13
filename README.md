@@ -48,6 +48,7 @@ clean-machine behavioral validation.
 | Document parsing + handwriting | 🟡 Built — Docling + Apple Vision + grader-vision |
 | Citation verification | 🟡 20/29 correct (69%); retraction check 3/3; accepted only as visibly experimental until accuracy reaches the enabled-mode gate |
 | CI gates | 🟢 Privacy PASS; perf PASS; public-proxy quality/fairness PASS; teacher-local still unvalidated |
+| Updater evidence | 🔴 Blocked until signed `latest.json` references the signed release artifact |
 | Signing + notarization | 🔴 Fresh local signing/notarization is blocked: `codesign` returns `errSecInternalComponent` and notarytool profile `grader` is unavailable |
 | Updates | 🟡 Tauri updater integrated, manifest generator built |
 | Beta rollout | ⬜ Blocked until release-readiness report returns `supervised_public_beta` |
@@ -63,7 +64,7 @@ beta with real student work.
 
 Confirmed in the current checkout:
 
-- Python tests: 83 passed, 12 intentionally skipped.
+- Python tests: 86 passed, 12 intentionally skipped.
 - Frontend tests: 12 passed; TypeScript/Vite production build and Rust `cargo check` pass.
 - The complete mocked desktop workflow passes in Playwright across onboarding, queue, review,
   settings, model management, and local-engine recovery. The visual sweep records 16 screens, 167
@@ -78,9 +79,9 @@ Confirmed in the current checkout:
   import → targeted grade → teacher override/approval → Canvas post → Progress completed →
   score/comment read-back.
 - `scripts/release_readiness.py` writes a consolidated JSON/Markdown verdict with blocker
-  summaries. With current local artifacts, the report is `blocked` on signing credentials and
-  clean-machine evidence: codesign/spctl, first-run models, crash recovery, keyboard-only review,
-  and updater path.
+  summaries. With current local artifacts, the report is `blocked` on updater evidence, signing
+  credentials, and clean-machine evidence: missing signed `latest.json`, codesign/spctl, first-run
+  models, crash recovery, keyboard-only review, and updater path.
 
 Public-beta blockers:
 
@@ -88,11 +89,12 @@ Public-beta blockers:
 2. Keep Canvas rubric-assessment posting disabled until local rubric criteria can be mapped to real
    Canvas criterion IDs; score/comment round-trip is validated, attachment write-back still needs
    separate evidence.
-3. Restore local release signing/notarization credentials, then validate the signed/notarized DMG
+3. Generate and validate a signed updater manifest for the signed release artifact.
+4. Restore local release signing/notarization credentials, then validate the signed/notarized DMG
    on a clean supported Mac, including first-run model setup, crash recovery, keyboard-only review,
    and updater behavior.
-4. Keep teacher-local validation separate until an instructor supplies authorized historical grading.
-5. Complete a supervised private pilot before opening enrollment publicly.
+5. Keep teacher-local validation separate until an instructor supplies authorized historical grading.
+6. Complete a supervised private pilot before opening enrollment publicly.
 
 ## Design commitments
 
@@ -140,9 +142,10 @@ uv run python engine/gates/quality.py --profile public_proxy --public-proxy-dir 
 uv run python engine/gates/bias.py --profile public_proxy --public-proxy-dir artifacts/public_proxy/mohler_asag
 uv run python engine/verify_citations.py --fixtures fixtures/citations/citation_fixtures.json --output artifacts/citation-results.json
 uv run python scripts/frontend_evidence.py --out artifacts/release-evidence/frontend.json
+uv run python scripts/updater_evidence.py --manifest latest.json --artifact /path/to/Grader.dmg --out artifacts/release-evidence/updater.json
 uv run python scripts/live_canvas_e2e.py --dry-run
 uv run python scripts/clean_machine_evidence.py --app /Applications/Grader.app --dmg /path/to/Grader.dmg --first-run-models --crash-recovery --keyboard-only-review --updater-path
-uv run python scripts/release_readiness.py --profile public_beta --public-proxy-dir artifacts/public_proxy/mohler_asag --citation-artifact artifacts/citation-results.json --frontend-artifact artifacts/release-evidence/frontend.json --clean-machine-artifact artifacts/release-evidence/clean-machine-local-current.json --out artifacts/release-readiness
+uv run python scripts/release_readiness.py --profile public_beta --public-proxy-dir artifacts/public_proxy/mohler_asag --citation-artifact artifacts/citation-results.json --frontend-artifact artifacts/release-evidence/frontend.json --updater-artifact artifacts/release-evidence/updater.json --clean-machine-artifact artifacts/release-evidence/clean-machine-local-current.json --out artifacts/release-readiness
 ```
 
 The committed `fixtures/public_proxy/` set is a tiny mechanics fixture. Real public-proxy datasets
@@ -167,7 +170,7 @@ The calibration run uses [Mohler ASAG](https://huggingface.co/datasets/nkazi/Moh
 report agreement against the *human ceiling* rather than against an arbitrary target. The current
 anchored 40-item Mohler public-proxy scoring run produced 40 scored rows and passes the quality
 gate at QWK 0.845 against a 0.623 adjusted floor, and the matching fairness perturbation run
-passes. The app is still not public-beta ready until signing/notarization credentials and
+passes. The app is still not public-beta ready until updater, signing/notarization credentials, and
 clean-machine release evidence pass.
 
 ## Docs

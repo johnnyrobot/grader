@@ -30,6 +30,7 @@ REQUIRED_GATES = (
     "performance",
     "frontend",
     "rust",
+    "updater",
     "signing",
     "clean_machine",
 )
@@ -53,6 +54,9 @@ def _gate_summary(gate: dict[str, Any]) -> str:
         value = gate.get(key)
         if value:
             return str(value)
+    failures = gate.get("failures")
+    if isinstance(failures, list) and failures:
+        return "failures: " + "; ".join(str(failure) for failure in failures[:5])
     output = str(gate.get("output", "")).strip()
     if output:
         lines = [line.strip() for line in output.splitlines() if line.strip()]
@@ -291,6 +295,7 @@ def collect_evidence(args: argparse.Namespace) -> dict[str, Any]:
     evidence["performance"] = _normalize_artifact(args.performance_artifact, "SKIP")
     evidence["frontend"] = _normalize_artifact(args.frontend_artifact, "SKIP")
     evidence["rust"] = _normalize_artifact(args.rust_artifact, "SKIP")
+    evidence["updater"] = _normalize_artifact(args.updater_artifact, "BLOCKED_UPDATER_EVIDENCE")
     evidence["signing"] = _signing_preflight()
     evidence["clean_machine"] = _normalize_clean_machine_artifact(args.clean_machine_artifact)
     evidence["verdict"] = decide_verdict(evidence)
@@ -344,6 +349,7 @@ def main() -> None:
     parser.add_argument("--performance-artifact", type=Path, default=None)
     parser.add_argument("--frontend-artifact", type=Path, default=None)
     parser.add_argument("--rust-artifact", type=Path, default=None)
+    parser.add_argument("--updater-artifact", type=Path, default=None)
     parser.add_argument("--clean-machine-artifact", type=Path, default=None)
     parser.add_argument("--out", type=Path, default=Path("artifacts/release-readiness"))
     args = parser.parse_args()

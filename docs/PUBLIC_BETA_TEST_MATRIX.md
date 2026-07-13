@@ -30,9 +30,10 @@ misrepresented as grading accuracy.
 | Performance | 1,500-word essay under 90 seconds on target memory floor | `engine/gates/perf.py --memory-floor 16` | PASS: 37.8 seconds in latest run | PASS artifact must be supplied to readiness report |
 | Desktop build | React build, unit tests, E2E workflow, Rust check pass | `scripts/frontend_evidence.py`, `cargo check` | PASS: 12 component tests, 4 E2E tests, build, and Rust check; frontend artifact records 16 visual-sweep screens and 167 controls | PASS artifact must be supplied to readiness report |
 | Accessibility | No serious/critical WCAG violations, 200% text scaling, keyboard-only loop | Playwright axe + visual inspection | PASS on synthetic fixture; visual sweep covers 16 screens and 167 visible controls | PASS mechanics; still requires clean-machine app check |
+| Updater evidence | Signed updater manifest references the signed artifact and current version | `scripts/generate_appcast.py`, then `scripts/updater_evidence.py` | BLOCKED: no signed `latest.json` release manifest is available in the current checkout | Required before clean-machine updater path |
 | Signing/notarization | Signed/notarized app or DMG passes codesign, stapler, spctl | release script + clean Mac | BLOCKED: fresh local signing fails with `errSecInternalComponent`, and notarytool profile `grader` is unavailable | PASS automated signing/notarization evidence; clean-machine behavior remains separate |
 | Clean-machine | First launch, model setup, crash recovery, keyboard review, updater N->N+1 | `scripts/clean_machine_evidence.py` JSON from a clean Mac/VM | BLOCKED: current local evidence is missing codesign/spctl plus first-run models, crash recovery, keyboard-only review, and updater path | Required for public beta |
-| Release report | Consolidated verdict is `supervised_public_beta` | `scripts/release_readiness.py` | BLOCKED: signing credentials and clean-machine evidence are incomplete | Final release gate |
+| Release report | Consolidated verdict is `supervised_public_beta` | `scripts/release_readiness.py` | BLOCKED: updater evidence, signing credentials, and clean-machine evidence are incomplete | Final release gate |
 
 ## Required Manual Visual Sweep
 
@@ -57,7 +58,7 @@ inspection after packaging.
 Not public beta ready. The current anchored real-data public-proxy quality and fairness runs pass on
 Mohler ASAG, Canvas app-level score/comment round-trip passes, and citations are acceptable only in
 visibly experimental beta mode. The remaining public-beta blockers are fresh signing/notarization
-credentials plus clean-machine behavioral evidence: first-run model setup, crash recovery,
-keyboard-only review, and updater N→N+1. Canvas rubric-assessment posting is intentionally disabled
-until real Canvas criterion IDs can be mapped, and attachment write-back still needs separate
-evidence.
+credentials, signed updater manifest evidence, plus clean-machine behavioral evidence: first-run
+model setup, crash recovery, keyboard-only review, and updater N→N+1. Canvas rubric-assessment
+posting is intentionally disabled until real Canvas criterion IDs can be mapped, and attachment
+write-back still needs separate evidence.
