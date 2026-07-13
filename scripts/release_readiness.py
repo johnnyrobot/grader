@@ -69,6 +69,7 @@ def _status_is_passing(status: str) -> bool:
 
 
 def _gate_summary(gate: dict[str, Any]) -> str:
+    updater_key_reason = gate.get("updater_key_reason")
     missing_checks = gate.get("missing_checks")
     if isinstance(missing_checks, list) and missing_checks:
         return "missing checks: " + ", ".join(str(check) for check in missing_checks)
@@ -94,7 +95,12 @@ def _gate_summary(gate: dict[str, Any]) -> str:
             return str(value)
     failures = gate.get("failures")
     if isinstance(failures, list) and failures:
-        return "failures: " + "; ".join(str(failure) for failure in failures[:5])
+        summary = "failures: " + "; ".join(str(failure) for failure in failures[:5])
+        if updater_key_reason:
+            summary += f"; updater key: {updater_key_reason}"
+        return summary
+    if updater_key_reason:
+        return f"updater key: {updater_key_reason}"
     output = str(gate.get("output", "")).strip()
     if output:
         lines = [line.strip() for line in output.splitlines() if line.strip()]
@@ -492,6 +498,37 @@ def _normalize_updater_artifact(path: Path | None, expected_version: str) -> dic
     )
 
 
+def _normalize_updater_key_artifact(path: Path | None) -> dict[str, Any]:
+    return _normalize_artifact(path, "SKIP")
+
+
+def _augment_updater_with_key_diagnostic(
+    updater: dict[str, Any],
+    updater_key: dict[str, Any],
+) -> dict[str, Any]:
+    """Attach updater-key preflight context to a blocked updater manifest gate."""
+    if _status_is_passing(str(updater.get("status", ""))):
+        return updater
+
+    key_status = str(updater_key.get("status", ""))
+    if key_status in {"", "PASS", "SKIP"}:
+        return updater
+
+    augmented = dict(updater)
+    reason = str(updater_key.get("reason") or "").strip()
+    augmented["updater_key_status"] = key_status
+    if reason:
+        augmented["updater_key_reason"] = reason
+    diagnostics = dict(augmented.get("diagnostics") or {})
+    diagnostics["updater_key"] = {
+        "status": key_status,
+        "reason": reason,
+        "missing_checks": updater_key.get("missing_checks", []),
+    }
+    augmented["diagnostics"] = diagnostics
+    return augmented
+
+
 def _normalize_clean_machine_artifact(path: Path | None, expected_version: str | None = None) -> dict[str, Any]:
     clean = _normalize_artifact(path, "BLOCKED_CLEAN_MACHINE_EVIDENCE")
     checks = clean.get("checks", {})
@@ -587,7 +624,11 @@ def collect_evidence(args: argparse.Namespace) -> dict[str, Any]:
     evidence["performance"] = _normalize_artifact(args.performance_artifact, "SKIP")
     evidence["frontend"] = _normalize_artifact(args.frontend_artifact, "SKIP")
     evidence["rust"] = _normalize_artifact(args.rust_artifact, "SKIP")
-    evidence["updater"] = _normalize_updater_artifact(args.updater_artifact, expected_version)
+    evidence["updater_key"] = _normalize_updater_key_artifact(args.updater_key_artifact)
+    evidence["updater"] = _augment_updater_with_key_diagnostic(
+        _normalize_updater_artifact(args.updater_artifact, expected_version),
+        evidence["updater_key"],
+    )
     evidence["signing"] = _signing_preflight()
     evidence["clean_machine"] = _normalize_clean_machine_artifact(
         args.clean_machine_artifact,
@@ -669,6 +710,12 @@ def main() -> None:
     parser.add_argument("--frontend-artifact", type=Path, default=None)
     parser.add_argument("--rust-artifact", type=Path, default=None)
     parser.add_argument("--updater-artifact", type=Path, default=None)
+    parser.add_argument(
+        "--updater-key-artifact",
+        type=Path,
+        default=Path("artifacts/release-evidence/updater-key.json"),
+        help="Optional updater signing-key preflight artifact from scripts/updater_key_doctor.py",
+    )
     parser.add_argument("--clean-machine-artifact", type=Path, default=None)
     parser.add_argument(
         "--expected-version",

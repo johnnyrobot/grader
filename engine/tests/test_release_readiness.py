@@ -6,10 +6,12 @@ sys.path.insert(0, str(Path(__file__).parents[2]))
 
 from scripts.release_readiness import (
     CLEAN_MACHINE_REQUIRED_CHECKS,
+    _augment_updater_with_key_diagnostic,
     _normalize_artifact,
     _normalize_citation_artifact,
     _normalize_clean_machine_artifact,
     _normalize_updater_artifact,
+    _normalize_updater_key_artifact,
     _signing_preflight,
     build_e2e_matrix,
     decide_verdict,
@@ -293,6 +295,54 @@ def test_normalize_updater_artifact_rejects_missing_version_fields(tmp_path):
     assert updater["status"] == "FAIL"
     assert "details.expected_version is missing" in updater["version_mismatches"]
     assert "details.manifest_version is missing" in updater["version_mismatches"]
+
+
+def test_normalize_updater_key_artifact_missing_is_non_blocking_skip(tmp_path):
+    artifact = tmp_path / "missing-updater-key.json"
+
+    updater_key = _normalize_updater_key_artifact(artifact)
+
+    assert updater_key["status"] == "SKIP"
+    assert updater_key["artifact"] == {"path": str(artifact), "exists": False}
+
+
+def test_updater_matrix_summary_includes_updater_key_blocker_reason():
+    updater = _augment_updater_with_key_diagnostic(
+        {
+            "status": "BLOCKED_UPDATER_EVIDENCE",
+            "failures": ["manifest platform darwin-aarch64 is missing signature"],
+        },
+        {
+            "status": "BLOCKED_UPDATER_KEY",
+            "reason": "TAURI_SIGNING_PRIVATE_KEY_PASSWORD is not set",
+            "missing_checks": ["password_env_present", "signing_probe"],
+        },
+    )
+    evidence = {
+        "quality": {"status": "PASS"},
+        "fairness": {"status": "PASS"},
+        "citations": {"status": "PASS_EXPERIMENTAL"},
+        "canvas": {"status": "PASS"},
+        "privacy": {"status": "PASS"},
+        "performance": {"status": "PASS"},
+        "frontend": {"status": "PASS"},
+        "rust": {"status": "PASS"},
+        "updater": updater,
+        "signing": {"status": "PASS"},
+        "clean_machine": {"status": "PASS"},
+    }
+
+    matrix = {row["id"]: row for row in build_e2e_matrix(evidence)}
+    blockers = {blocker["gate"]: blocker for blocker in summarize_blockers(evidence)}
+
+    assert "missing signature" in matrix["signed-updater-manifest"]["summary"]
+    assert "TAURI_SIGNING_PRIVATE_KEY_PASSWORD" in matrix["signed-updater-manifest"]["summary"]
+    assert blockers["updater"]["status"] == "BLOCKED_UPDATER_EVIDENCE"
+    assert "TAURI_SIGNING_PRIVATE_KEY_PASSWORD" in blockers["updater"]["summary"]
+    assert updater["diagnostics"]["updater_key"]["missing_checks"] == [
+        "password_env_present",
+        "signing_probe",
+    ]
 
 
 def test_normalize_clean_machine_artifact_requires_all_checks(tmp_path):
