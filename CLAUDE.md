@@ -106,9 +106,10 @@ work.
   app/DMG build signs, notarizes, staples, and passes macOS signature checks; signed updater
   manifest/release provenance passes; and the latest local signed-app Computer Use sweep targets
   `/Applications/Grader.app` as `com.grader.app` and passes with 73 accessibility/screenshot capture
-  pairs. Local keyboard-only review, crash recovery, and fresh-profile first-run model reconciliation
-  also pass. Next collect updater path evidence with structured manual evidence notes, screenshot/log
-  paths, and all check-specific assertions set true.
+  pairs. Local keyboard-only review, crash recovery, fresh-profile first-run model reconciliation, and
+  the native updater install/restart UI also pass static/build checks. Next collect updater path
+  evidence with structured manual evidence notes, screenshot/log paths, and all check-specific
+  assertions set true.
 
 Before public beta: keep citation checks visibly experimental unless accuracy improves and complete
 the updater path test. Canvas

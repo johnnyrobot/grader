@@ -251,10 +251,11 @@ package is a clean-Mac handoff bundle only; do not treat it as passing clean-mac
   `scripts/computer_use_sweep_evidence.py` still fails stale capture sets and clean-machine evidence
   requires a PASS sweep JSON. The encrypted updater key was rotated before public release, the public
   key/config now target `github.com/johnnyrobot/grader`, `scripts/updater_key_doctor.py` passes with
-  the local Keychain-backed password, and signed `latest.json` updater evidence now passes. The
-  release-readiness JSON/Markdown now includes an end-to-end public-beta matrix that maps
-  requirements to evidence. Teacher-local validation still requires authorized instructor data, and
-  the updater-path check still needs release validation.
+  the local Keychain-backed password, signed `latest.json` updater evidence now passes, and the queue
+  UI has a native Tauri install/restart update action. The release-readiness JSON/Markdown now
+  includes an end-to-end public-beta matrix that maps requirements to evidence. Teacher-local
+  validation still requires authorized instructor data, and the updater-path check still needs release
+  validation.
 - **Coverage:** Python collects 142 cases (130 pass, 12 skip). Frontend has 14 passing component
   tests plus four passing Playwright E2E tests.
 - **Public beta verdict:** not ready for unattended public testing with real student work. Limit

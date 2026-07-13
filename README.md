@@ -51,7 +51,7 @@ by clean-machine updater N→N+1 behavioral validation.
 | CI gates | 🟢 Privacy PASS; perf PASS; public-proxy quality/fairness PASS; teacher-local still unvalidated |
 | Updater evidence | 🟢 Signed `latest.json` references the current-source signed/notarized DMG and passes updater evidence |
 | Signing + notarization | 🟢 Current-source local app/DMG signed, notarized, stapled, and passed `codesign`/`stapler`/`spctl` checks |
-| Updates | 🟡 Tauri updater integrated, manifest generator built |
+| Updates | 🟡 Tauri updater integrated with signed manifest generation and in-app install/restart UI; real N→N+1 path still needs release-channel evidence |
 | Beta rollout | ⬜ Blocked until release-readiness report returns `supervised_public_beta` |
 
 See [`docs/HANDOFF.md`](docs/HANDOFF.md) for exact status and [`docs/phases/`](docs/phases/) for
@@ -99,9 +99,9 @@ Public-beta blockers:
    separate evidence.
 3. Validate the updater N→N+1 path on a clean supported Mac against the signed `latest.json` and
    signed/notarized DMG. The current local signed-app fresh-profile first-run, crash recovery,
-   Computer Use sweep, keyboard-only review path, and signed updater manifest pass against
-   `/Applications/Grader.app` installed as `com.grader.app`; rerun those checks if the release bundle
-   identity changes.
+   Computer Use sweep, keyboard-only review path, signed updater manifest, and native
+   install/restart UI pass static/build checks against `/Applications/Grader.app` installed as
+   `com.grader.app`; rerun those checks if the release bundle identity changes.
 4. Keep teacher-local validation separate until an instructor supplies authorized historical grading.
 5. Complete a supervised private pilot before opening enrollment publicly.
 
