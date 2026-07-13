@@ -154,5 +154,5 @@ fi
 echo ""
 echo "To distribute:"
 echo "  1. Upload the DMG to GitHub Releases"
-echo "  2. Update the Sparkle appcast (scripts/generate_appcast.py)"
+echo "  2. Generate signed Tauri latest.json (scripts/generate_appcast.py --signing-key ...)"
 echo "  3. Tag the release: git tag v0.1.0"

@@ -14,18 +14,26 @@ Usage:
   uv run python scripts/generate_appcast.py \
     --dmg app/src-tauri/target/release/bundle/dmg/Grader.dmg \
     --version 0.1.0 \
+    --signing-key /path/to/key.pem \
     --output latest.json
 
   # Generate from a signed .app (creates a zip)
   uv run python scripts/generate_appcast.py \
     --app app/src-tauri/target/release/bundle/macos/Grader.app \
     --version 0.1.0 \
+    --signing-key /path/to/key.pem \
     --output latest.json
 
   # With a signing key (generates signature)
   uv run python scripts/generate_appcast.py \
     --dmg Grader.dmg --version 0.1.0 \
     --signing-key /path/to/key.pem \
+    --output latest.json
+
+  # Unsigned local smoke fixture only; never use for release evidence
+  uv run python scripts/generate_appcast.py \
+    --dmg Grader.dmg --version 0.1.0 \
+    --allow-unsigned \
     --output latest.json
 
 Prerequisites:
@@ -41,6 +49,7 @@ import hashlib
 import json
 import subprocess
 import sys
+import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -57,12 +66,24 @@ def _sha256(path: Path) -> str:
     return h.hexdigest()
 
 
+def _zip_app(app_path: Path, output: Path) -> Path:
+    """Zip a signed .app bundle, preserving the Grader.app parent directory."""
+    if not app_path.is_dir() or app_path.suffix != ".app":
+        print(f"ERROR: --app expects a .app directory: {app_path}")
+        sys.exit(1)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for child in sorted(app_path.rglob("*")):
+            if child.is_file():
+                archive.write(child, child.relative_to(app_path.parent))
+    return output
+
+
 def _sign_file(path: Path, key_path: Path) -> str | None:
     """Sign a file using tauri CLI. Returns the signature string."""
     try:
         result = subprocess.run(
-            ["cargo", "tauri", "signer", "sign", "--key", str(key_path),
-             "--file", str(path)],
+            ["cargo", "tauri", "signer", "sign", "--private-key-path", str(key_path), str(path)],
             capture_output=True, text=True, check=True,
         )
         for line in result.stdout.splitlines():
@@ -85,6 +106,7 @@ def generate_manifest(
     output: Path,
     signing_key: Path | None = None,
     release_url: str | None = None,
+    allow_unsigned: bool = False,
 ) -> None:
     """Generate the Tauri updater manifest (latest.json)."""
 
@@ -95,9 +117,15 @@ def generate_manifest(
     size = _file_size(artifact_path)
     sha256 = _sha256(artifact_path)
 
-    signature = None
-    if signing_key:
-        signature = _sign_file(artifact_path, signing_key)
+    if not signing_key and not allow_unsigned:
+        print("ERROR: updater manifest signing key is required for release manifests")
+        print("  Pass --signing-key /path/to/key.pem or use --allow-unsigned for local smoke fixtures only.")
+        sys.exit(1)
+
+    signature = _sign_file(artifact_path, signing_key) if signing_key else None
+    if not signature and not allow_unsigned:
+        print("ERROR: updater manifest signing failed or returned an empty signature")
+        sys.exit(1)
 
     if release_url is None:
         release_url = f"https://github.com/laccd/grader/releases/download/v{version}/{artifact_path.name}"
@@ -129,7 +157,7 @@ def generate_manifest(
     if signature:
         print(f"  signature: {signature[:40]}...")
     else:
-        print("  signature: (none — set --signing-key to sign)")
+        print("  signature: (unsigned smoke fixture — not valid for release)")
     print(f"  url: {release_url}")
     print()
     print("Upload to GitHub Releases:")
@@ -150,16 +178,21 @@ def main() -> None:
                         help="Path to Tauri signing key (.pem)")
     parser.add_argument("--release-url", default=None,
                         help="Download URL (default: GitHub releases URL)")
+    parser.add_argument("--zip-output", type=Path, default=None,
+                        help="When --app is used, where to write the zipped .app artifact")
+    parser.add_argument("--allow-unsigned", action="store_true",
+                        help="Allow unsigned manifest generation for local smoke fixtures only")
 
     args = parser.parse_args()
 
     if args.dmg:
         artifact = args.dmg
     else:
-        artifact = args.app
-        if not artifact.exists():
-            print(f"ERROR: app not found: {artifact}")
+        app = args.app
+        if not app.exists():
+            print(f"ERROR: app not found: {app}")
             sys.exit(1)
+        artifact = _zip_app(app, args.zip_output or args.output.with_name(f"{app.stem}.zip"))
 
     generate_manifest(
         artifact_path=artifact,
@@ -167,6 +200,7 @@ def main() -> None:
         output=args.output,
         signing_key=args.signing_key,
         release_url=args.release_url,
+        allow_unsigned=args.allow_unsigned,
     )
 
 

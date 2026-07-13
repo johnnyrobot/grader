@@ -12,6 +12,7 @@ scripts/
 ├── build_public_proxy.py       # build gitignored Mohler ASAG public-proxy evidence
 ├── frontend_evidence.py        # collect component/build/E2E/visual-sweep release artifact
 ├── signing_doctor.py           # diagnose Developer ID private-key and notarytool readiness
+├── generate_appcast.py         # generate signed Tauri updater latest.json manifests
 ├── updater_evidence.py         # validate updater config/latest.json/signature/artifact
 ├── clean_machine_evidence.py   # collect signed/notarized clean-machine release evidence
 └── seed_canvas_sandbox.py      # Canvas round-trip seeder/verifier (dry-run by default)
@@ -25,6 +26,7 @@ scripts/
 | Build public-proxy evidence | `build_public_proxy.py` | Writes Mohler ASAG artifacts under `artifacts/public_proxy/`; optional local grading |
 | Collect frontend release evidence | `frontend_evidence.py` | Runs component tests, production build, managed Playwright E2E, and reads visual-sweep metadata |
 | Diagnose signing credentials | `signing_doctor.py` | Writes `artifacts/release-evidence/signing.json`; probes Developer ID private-key access and notarytool profile before signing |
+| Generate updater manifest | `generate_appcast.py` | Requires `--signing-key` for release manifests; use `--allow-unsigned` only for local smoke fixtures |
 | Validate updater evidence | `updater_evidence.py` | Requires updater config, signed latest.json, and optional artifact filename/hash checks |
 | Clean-machine release evidence | `clean_machine_evidence.py` | Writes `artifacts/release-evidence/clean-machine.json`; PASS requires signing plus structured manual evidence for first-run/crash/keyboard/updater checks |
 | Seed Canvas sandbox | `seed_canvas_sandbox.py` | `--apply --students 6` to create + exercise |
@@ -42,6 +44,10 @@ scripts/
   on port 5173, check for a stale dev server before rerunning.
 - **`updater_evidence.py`**: blocks public beta when `latest.json` is missing or any platform
   signature is empty. It does not replace the clean-machine N→N+1 update test.
+- **`generate_appcast.py`**: despite the historical name, this creates Tauri `latest.json`
+  manifests, not Sparkle XML. It fails closed without a Tauri updater signing key unless
+  `--allow-unsigned` is supplied for a non-release smoke fixture. `--app` zips the `.app` bundle
+  before signing the updater artifact.
 - **`signing_doctor.py`**: run before `sign_and_notarize.sh`. It fail-closes on missing Developer
   ID certificates, inaccessible private keys, invalid notarytool profiles, and missing hardened
   runtime/updater config. Use `--skip-notary` only for explicit sign-only testing.
