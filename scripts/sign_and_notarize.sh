@@ -85,6 +85,22 @@ if [[ "$DO_NOTARIZE" == "true" ]]; then
     echo ""
     echo "=== Notarizing ==="
 
+    echo "  Submitting app for notarization..."
+    # Notarize and staple the app itself even when distributing a DMG. The clean-machine
+    # launch path assesses the copied .app, not just the outer disk image.
+    ZIP_PATH="/tmp/Grader.zip"
+    rm -f "$ZIP_PATH"
+    ditto -c -k --keepParent "$APP_PATH" "$ZIP_PATH"
+
+    xcrun notarytool submit "$ZIP_PATH" --keychain-profile "$KEYCHAIN_PROFILE" --wait
+
+    echo "  Stapling app..."
+    xcrun stapler staple "$APP_PATH"
+    xcrun stapler validate "$APP_PATH"
+    spctl --assess --type execute "$APP_PATH"
+    rm -f "$ZIP_PATH"
+    echo "=== App notarized + stapled ==="
+
     if [[ "$DO_DMG" == "true" ]]; then
         DMG_PATH="$PROJECT_ROOT/app/src-tauri/target/release/bundle/dmg/Grader.dmg"
         DMG_DIR="$(dirname "$DMG_PATH")"
@@ -96,27 +112,19 @@ if [[ "$DO_NOTARIZE" == "true" ]]; then
         hdiutil create -volname "Grader" -srcfolder "$APP_PATH" -ov -format UDBZ "$TEMP_DMG"
         mv "$TEMP_DMG" "$DMG_PATH"
 
+        echo "  Signing DMG..."
+        codesign --force --sign "$SIGNING_IDENTITY" "$DMG_PATH"
+        codesign --verify "$DMG_PATH"
+
         echo "  Submitting DMG for notarization..."
         xcrun notarytool submit "$DMG_PATH" --keychain-profile "$KEYCHAIN_PROFILE" --wait
 
         echo "  Stapling DMG..."
         xcrun stapler staple "$DMG_PATH"
         xcrun stapler validate "$DMG_PATH"
+        spctl --assess --type open --context context:primary-signature "$DMG_PATH"
         echo "=== DMG notarized + stapled ==="
         echo "  $DMG_PATH"
-    else
-        echo "  Submitting app for notarization..."
-        # Zip the app for notarization
-        ZIP_PATH="/tmp/Grader.zip"
-        ditto -c -k --keepParent "$APP_PATH" "$ZIP_PATH"
-
-        xcrun notarytool submit "$ZIP_PATH" --keychain-profile "$KEYCHAIN_PROFILE" --wait
-
-        echo "  Stapling app..."
-        xcrun stapler staple "$APP_PATH"
-        xcrun stapler validate "$APP_PATH"
-        echo "=== App notarized + stapled ==="
-        rm -f "$ZIP_PATH"
     fi
 fi
 

@@ -33,9 +33,9 @@ per-teacher model to train.
 ## Status
 
 🚧 **Developer-assisted alpha; not ready for an unattended public beta.** The engine and desktop
-review workflow work, including the neuroinclusive light-first interface and the new tiered
-release-gate machinery, but public beta still requires real public-proxy quality/fairness evidence
-and signed/notarized clean-machine validation.
+review workflow work, including the neuroinclusive light-first interface and the tiered
+release-gate machinery. Public-proxy quality/fairness and local signed/notarized app/DMG checks now
+pass, but public beta still requires clean-machine behavioral validation.
 
 | | |
 |---|---|
@@ -46,8 +46,8 @@ and signed/notarized clean-machine validation.
 | Canvas integration | 🟢 Live app-level import → teacher override/approve → post → Progress complete → score/comment read-back passed in `ZZ-GRADER-TEST` |
 | Document parsing + handwriting | 🟡 Built — Docling + Apple Vision + grader-vision |
 | Citation verification | 🟡 20/29 correct (69%); retraction check 3/3; accepted only as visibly experimental until accuracy reaches the enabled-mode gate |
-| CI gates | 🟡 Privacy PASS; perf PASS; public-proxy quality/fairness profiles added; teacher-local still unvalidated |
-| Signing + notarization | ⬜ Pipeline exists; clean-machine signed DMG install is unverified |
+| CI gates | 🟢 Privacy PASS; perf PASS; public-proxy quality/fairness PASS; teacher-local still unvalidated |
+| Signing + notarization | 🟡 App + DMG notarization checks PASS locally; clean-machine first-run/crash/keyboard/updater checks still unverified |
 | Updates | 🟡 Tauri updater integrated, manifest generator built |
 | Beta rollout | ⬜ Blocked until release-readiness report returns `supervised_public_beta` |
 
@@ -70,26 +70,25 @@ Confirmed in the current checkout:
 - The privacy gate passes in isolation: 3/3 captured connections were allowlisted.
 - The performance gate passes: 37.8 seconds for a 1,500-word essay, with a projected 30-item
   batch of 1,134 seconds against a 2,700-second budget.
-- Public-proxy quality now passes on the local anchored Mohler ASAG public-proxy artifact:
-  40/40 scored rows, QWK 0.845 against a 0.623 human-ceiling-adjusted floor, with both source
-  checks passing. Fairness perturbation scoring is still required before this can unlock beta.
+- Public-proxy quality and fairness now pass on the local anchored Mohler ASAG public-proxy
+  artifact: 40/40 scored rows, QWK 0.845 against a 0.623 human-ceiling-adjusted floor, both source
+  checks passing, all five perturbation families passing, and 0 grading errors.
 - Guarded live Canvas app E2E passes on `canvas.johnnyrobot.ai` course `106`, assignment `2841`:
   import → targeted grade → teacher override/approval → Canvas post → Progress completed →
   score/comment read-back.
-- `scripts/release_readiness.py` now writes a consolidated JSON/Markdown verdict with blocker
-  summaries. With current local artifacts, the report is `blocked` on public-proxy fairness
-  completion and clean-machine signed/notarized evidence.
+- `scripts/release_readiness.py` writes a consolidated JSON/Markdown verdict with blocker
+  summaries. With current local artifacts, the report is `blocked` only on clean-machine behavioral
+  evidence: first-run models, crash recovery, keyboard-only review, and updater path.
 
 Public-beta blockers:
 
-1. Run the public-proxy quality/fairness gates on open human-scored data, then keep teacher-local
-   validation separate until an instructor supplies authorized historical grading.
-2. Keep citation checking visibly experimental for beta users unless accuracy reaches at least 90%.
-3. Keep Canvas rubric-assessment posting disabled until local rubric criteria can be mapped to real
+1. Keep citation checking visibly experimental for beta users unless accuracy reaches at least 90%.
+2. Keep Canvas rubric-assessment posting disabled until local rubric criteria can be mapped to real
    Canvas criterion IDs; score/comment round-trip is validated, attachment write-back still needs
    separate evidence.
-4. Validate a signed/notarized DMG on a clean supported Mac, including first-run model setup,
+3. Validate the signed/notarized DMG on a clean supported Mac, including first-run model setup,
    crash recovery, keyboard-only review, and updater behavior.
+4. Keep teacher-local validation separate until an instructor supplies authorized historical grading.
 5. Complete a supervised private pilot before opening enrollment publicly.
 
 ## Design commitments

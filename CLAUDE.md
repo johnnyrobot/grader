@@ -91,24 +91,23 @@ work.
   sweep with 153 visible controls recorded.
 - Privacy: PASS in isolation, 3/3 captured connections allowlisted.
 - Performance: PASS, 38.3 seconds for a 1,500-word essay.
-- Public-proxy quality/fairness: command profiles exist; release mode rejects tiny mechanics
-  fixtures. The local anchored 40-item Mohler ASAG run produced 40 scored rows and passes quality
-  at QWK 0.845 against a 0.623 human-ceiling-adjusted floor; fairness still requires perturbation
-  scoring.
+- Public-proxy quality/fairness: release mode rejects tiny mechanics fixtures. The local anchored
+  40-item Mohler ASAG run produced 40 scored rows, passes quality at QWK 0.845 against a 0.623
+  human-ceiling-adjusted floor, and passes fairness across all five perturbation families.
 - Teacher-local quality/fairness: unvalidated until authorized instructor data exists.
 - Citations: PASS_EXPERIMENTAL for beta mode, 20/29 correct (69%), 0 false positives, and 3/3
   retractions caught; enabled mode still requires >=90% accuracy.
 - Canvas: guarded live app-level E2E passes on `canvas.johnnyrobot.ai` course `106`, assignment
   `2841`: import, targeted grade, teacher override/approval, post, Progress completed, score/comment
   read-back.
-- Release readiness: local report currently returns `blocked` with blocker summaries for
-  public-proxy fairness completion and clean-machine signed/notarized evidence.
+- Release readiness: local report currently returns `blocked` only for clean-machine behavioral
+  evidence: first-run models, crash recovery, keyboard-only review, and updater path. Local
+  app/DMG signing, notarization, stapling, and Gatekeeper checks pass after the release-script fix.
 
-Before public beta: run real public-proxy quality/fairness evidence, keep citation checks visibly
-experimental unless accuracy improves, and complete a signed/notarized clean-machine install plus
-first-run and updater tests. Canvas rubric-assessment posting remains disabled until local rubric
-criteria can be mapped to real Canvas criterion IDs; attachment write-back still needs separate
-evidence.
+Before public beta: keep citation checks visibly experimental unless accuracy improves, and complete
+a signed/notarized clean-machine install plus first-run, crash-recovery, keyboard-only, and updater
+tests. Canvas rubric-assessment posting remains disabled until local rubric criteria can be mapped
+to real Canvas criterion IDs; attachment write-back still needs separate evidence.
 
 ## Working-Tree Caution
 

@@ -214,16 +214,16 @@ uv run python scripts/release_readiness.py --profile public_beta --out artifacts
   fails the >=90% phase goal, so beta readiness accepts it only as visibly experimental.
 - **P5 in progress:** privacy passes in isolation (3/3 captured connections allowlisted) and the
   performance gate passes at 38.3s per 1,500-word essay. Public-proxy quality/fairness release mode
-  now rejects the tiny committed mechanics fixtures. The local anchored 40-item Mohler ASAG
-  public-proxy artifact passes quality at QWK 0.845; fairness still requires perturbation scoring.
-  Teacher-local validation still requires authorized instructor data. Signing/notarization still
-  needs clean-machine release validation.
+  rejects the tiny committed mechanics fixtures. The local anchored 40-item Mohler ASAG public-proxy
+  artifact passes quality at QWK 0.845 and passes fairness across all five perturbation families.
+  Local app/DMG signing, notarization, stapling, and Gatekeeper checks pass after the release-script
+  fix. Teacher-local validation still requires authorized instructor data, and clean-machine
+  behavioral checks still need release validation.
 - **Coverage:** Python collects 93 cases (81 pass, 12 skip). Frontend has 11 passing component
   tests plus three passing Playwright E2E tests.
 - **Public beta verdict:** not ready for unattended public testing with real student work. Limit
   current use to a developer-assisted alpha with synthetic or institution-approved test data.
-- **Highest-value next action:** replace the tiny public-proxy mechanics fixtures with real open
-  human-scored datasets and collect clean-machine signed/notarized evidence before broadening beta
-  claims.
+- **Highest-value next action:** collect clean-machine first-run model setup, crash recovery,
+  keyboard-only review, and updater-path evidence before broadening beta claims.
 - The existing modification under `.omo/run-continuation/` is unrelated operational state; do not
   overwrite or commit it unless explicitly requested.
