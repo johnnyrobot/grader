@@ -32,26 +32,60 @@ per-teacher model to train.
 
 ## Status
 
-🚧 **Developer-assisted alpha; not ready for an unattended public beta.** Engine, desktop,
-Canvas, document, citation, and release-gate plumbing exist, but public beta requires passing
-public-proxy quality/fairness evidence, explicit citation labeling, a guarded live Canvas app
-round trip, signed/notarized clean-machine testing, and updater validation.
+🚧 **Developer-assisted alpha; not ready for an unattended public beta.** The engine and desktop
+review workflow work, including the neuroinclusive light-first interface and the new tiered
+release-gate machinery, but public beta still requires real public-proxy quality/fairness evidence,
+a guarded live Canvas app round trip, clean citation labeling, and signed/notarized clean-machine
+validation.
 
 | | |
 |---|---|
 | Engine (grading, calibration, triage) | 🟢 Working |
 | Calibration validation | 🟡 P1 built (anchors +0.135 QWK at k=6) |
-| Desktop app (Tauri + React) | 🟡 Built — sidecar, queue, split-view, model manager, settings |
+| Desktop app (Tauri + React) | 🟢 Built — light/dark preferences, onboarding, queue, review, settings, model manager |
+| UI verification | 🟢 11 component tests + full Playwright workflow; no serious/critical axe findings |
 | Canvas integration | 🟡 Built — import, post grades, offline queue; app-level live round trip still required |
 | Document parsing + handwriting | 🟡 Built — Docling + Apple Vision + grader-vision |
-| Citation verification | 🟡 Built — current fixture result is experimental until ≥90% and 3/3 retractions pass |
-| CI gates | 🟡 Privacy/perf built; public-proxy quality + fairness profiles added |
-| Signing + notarization | ⬜ Scripts built; signed/notarized clean-machine test still required |
+| Citation verification | 🔴 20/29 correct (69%); retraction check 0/3; labeled experimental until the gate passes |
+| CI gates | 🟡 Privacy PASS; perf PASS; public-proxy quality/fairness profiles added; teacher-local still unvalidated |
+| Signing + notarization | ⬜ Pipeline exists; clean-machine signed DMG install is unverified |
 | Updates | 🟡 Tauri updater integrated, manifest generator built |
 | Beta rollout | ⬜ Blocked until release-readiness report returns `supervised_public_beta` |
 
 See [`docs/HANDOFF.md`](docs/HANDOFF.md) for exact status and [`docs/phases/`](docs/phases/) for
 per-phase detail.
+
+## Public beta readiness
+
+**Verdict as of 2026-07-12: no.** Grader is suitable for a developer-assisted usability alpha
+using synthetic data or institution-approved test data. It is not ready for an unattended public
+beta with real student work.
+
+Confirmed in the current checkout:
+
+- Python tests: 41 passed, 12 intentionally skipped.
+- Frontend tests: 11 passed; TypeScript/Vite production build and Rust `cargo check` pass.
+- The complete mocked desktop workflow passes in Playwright across onboarding, queue, review,
+  settings, and model management, including 200% text scaling and automated accessibility scans.
+- The privacy gate passes in isolation: 3/3 captured connections were allowlisted.
+- The performance gate passes: 38.3 seconds for a 1,500-word essay, with a projected 30-item
+  batch of 1,149 seconds against a 2,700-second budget.
+- Public-proxy quality/fairness gate profiles now run against tiny committed mechanics fixtures.
+  These fixtures prove gate wiring only; they are not accuracy evidence.
+- `scripts/release_readiness.py` now writes a consolidated JSON/Markdown verdict. The current local
+  verdict is `blocked` without live Canvas, clean-machine, and complete citation evidence.
+
+Public-beta blockers:
+
+1. Run the public-proxy quality/fairness gates on open human-scored data, then keep teacher-local
+   validation separate until an instructor supplies authorized historical grading.
+2. Raise citation verification from 69% to at least 90% and fix retraction detection, or clearly
+   disable/label citation checking as experimental for the beta.
+3. Complete the app-level Canvas import -> grade -> approve -> post -> read-back path in the
+   guarded `ZZ-GRADER-TEST` course.
+4. Validate a signed/notarized DMG on a clean supported Mac, including first-run model setup,
+   crash recovery, keyboard-only review, and updater behavior.
+5. Complete a supervised private pilot before opening enrollment publicly.
 
 ## Design commitments
 
@@ -63,11 +97,13 @@ per-phase detail.
    informed it.
 4. **Formative first.** Research consistently finds people accept AI *feedback* but distrust AI
    *scores* — so you always own the number.
+5. **Adaptable presentation.** Light mode is the default; dark mode, spacious density, and reduced
+   motion are persisted preferences built from semantic design tokens.
 
 ## Stack
 
 Tauri + React shell · Python engine (FastAPI) · **Pydantic AI v2** · **Ollama** (→ MLX) ·
-**Qwen3-VL** (vision) + **Qwen3** (text) · **Docling** (parsing) · SQLite + local embeddings ·
+**MiniCPM-V 4.6** (transcription) + **Qwen3 8B** (grading) · **Docling** (parsing) · SQLite + local embeddings ·
 Canvas via [canvas-pp-cli](https://github.com/mvanhorn/printing-press-library)
 
 Every choice is justified with citations in [`RESEARCH.md`](RESEARCH.md).
@@ -76,10 +112,16 @@ Every choice is justified with citations in [`RESEARCH.md`](RESEARCH.md).
 
 ```bash
 uv sync                                              # deps
-ollama pull qwen3:8b && ollama pull qwen3-vl:4b      # models (16 GB tier)
+ollama pull qwen3:8b && ollama pull minicpm-v4.6:latest
+./scripts/make_models.sh                             # create capped grader tags
 
 uv run python engine/bench.py                        # which model/output-mode works
 uv run python engine/calibrate.py --n-test 20        # do teacher anchors actually help?
+
+cd app && npm test -- --run                          # React component tests
+cd app && npm run build                              # TypeScript + Vite production build
+cd app && npm run test:e2e                           # requires the Vite dev server on :5173
+cd app/src-tauri && cargo check                      # desktop Rust boundary
 ```
 
 ## Public beta gate commands

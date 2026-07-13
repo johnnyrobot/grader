@@ -1,16 +1,45 @@
 # CLAUDE.md
 
-Use this file as the short operational brief for Claude-style coding agents in this repository.
+This file is a concise entry point for Claude-based coding sessions. Read `AGENTS.md` first and
+follow the nearest nested `AGENTS.md` for files under `engine/`, `engine/grader/`, `scripts/`,
+`fixtures/citations/`, or `humanizer-main/`.
 
-## Boundaries
+## Product Boundary
 
-- Student work stays local. Never commit real student work, teacher-local golden sets, Canvas exports, credentials, model weights, DMGs, notarization artifacts, or clean-machine logs with secrets.
-- Use `uv run python` or `uv run pytest` for Python commands.
+Grader is a local-first macOS grading copilot for college instructors. The Python/FastAPI engine
+uses capped Ollama models to draft rubric-aligned grades; the Tauri 2/React app lets the teacher
+inspect, edit, override, and explicitly approve those drafts.
+
+Non-negotiable rules:
+
+- Student work must remain on-device. Never commit real student work, golden sets, handwriting
+  samples, databases, credentials, private files, model weights, DMGs, notarization artifacts, or
+  clean-machine logs with secrets.
+- No grade may post to Canvas without an approved grade in the data layer.
+- Original student files are immutable; annotations always go to a new output file.
+- Vision transcribes and the text model grades. Never let a VLM grade directly.
+- Use only `grader-text:8b` and `grader-vision:1.3b` in application grading paths.
+- Keep `humanizer-main/` separate; it is not part of the Grader product.
 - Canvas live writes are allowed only in courses whose names start with `ZZ-GRADER-TEST`.
-- A Canvas post requires an approved grade in the data layer.
-- Citation verification is experimental unless `engine/verify_citations.py` passes at >=90% accuracy, zero false positives, and 3/3 retractions caught.
 
-## Current Public Beta Standard
+## Current Desktop UI
+
+The complete light-first neuroinclusive redesign is implemented across onboarding, queue, grade
+review, settings, and model management.
+
+- Presentation state: `app/src/theme.tsx`
+- Semantic design tokens and component styling: `app/src/index.css`
+- Shared shell: `app/src/components/AppShell.tsx`
+- Screens: `app/src/screens/`
+- Component tests: `app/src/**/*.test.tsx`
+- Full mocked workflow: `app/e2e/neuroinclusive-ui.spec.ts`
+
+Light mode is the default. Dark mode, spacious density, and reduced motion are persisted user
+preferences. Keep status understandable without color, preserve visible focus and keyboard paths,
+and maintain 200% text reflow. Frontend API calls stay in `app/src/api.ts`; grading, documents,
+and Canvas behavior stay in Python.
+
+## Public Beta Standard
 
 The repo uses three evidence tiers:
 
@@ -19,15 +48,56 @@ The repo uses three evidence tiers:
 - `synthetic_fixture`: mechanics and regression only; never accuracy evidence.
 
 The app is not public-beta ready until `scripts/release_readiness.py` reports
-`supervised_public_beta`.
+`supervised_public_beta`. Citation verification is experimental unless
+`engine/verify_citations.py` passes at >=90% accuracy, zero false positives, and 3/3 retractions
+caught.
 
-## Useful Commands
+## Commands
 
 ```bash
-uv run pytest engine/tests/ -v
+uv sync
+uv run pytest engine/tests/ -q
+
+cd app && npm install
+cd app && npm test -- --run
+cd app && npm run build
+cd app/src-tauri && cargo check
+
+# E2E: run these in separate terminals
+cd app && npm run dev -- --host 127.0.0.1
+cd app && npm run test:e2e
+
 uv run python engine/gates/quality.py --profile public_proxy --public-proxy-dir fixtures/public_proxy
 uv run python engine/gates/bias.py --profile public_proxy --public-proxy-dir fixtures/public_proxy
+uv run python engine/gates/egress.py --capture-duration 15
+uv run python engine/gates/perf.py --memory-floor 16
 uv run python engine/verify_citations.py --fixtures fixtures/citations/citation_fixtures.json --output artifacts/citation-results.json
 uv run python scripts/live_canvas_e2e.py --dry-run
 uv run python scripts/release_readiness.py --profile public_beta --out artifacts/release-readiness
 ```
+
+## Current Evidence
+
+As of 2026-07-12, Grader is suitable only for a developer-assisted alpha using synthetic or
+institution-approved test data. It is not ready for an unattended public beta with real student
+work.
+
+- Python: 41 passed, 12 skipped.
+- Frontend: 11 component tests and one full-workflow Playwright test pass.
+- Privacy: PASS in isolation, 3/3 captured connections allowlisted.
+- Performance: PASS, 38.3 seconds for a 1,500-word essay.
+- Public-proxy quality/fairness: command profiles exist and pass on tiny mechanics fixtures only.
+- Teacher-local quality/fairness: unvalidated until authorized instructor data exists.
+- Citations: FAIL for enabled mode, 20/29 correct (69%) and 0/3 retractions caught; artifact mode
+  is experimental.
+- Release readiness: local report currently returns `blocked` without live Canvas, clean-machine,
+  and complete citation evidence.
+
+Before public beta: run real public-proxy quality/fairness evidence, fix or explicitly disable
+experimental citation checks, validate the app-level Canvas round trip, and complete a
+signed/notarized clean-machine install plus first-run and updater tests.
+
+## Working-Tree Caution
+
+The modification under `.omo/run-continuation/` remains unrelated operational state. Never commit,
+discard, or overwrite it unless the user explicitly requests it.
