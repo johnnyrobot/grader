@@ -168,11 +168,33 @@ def test_normalize_clean_machine_artifact_accepts_complete_pass(tmp_path):
     artifact.write_text(json.dumps({
         "status": "PASS",
         "checks": {name: True for name in CLEAN_MACHINE_REQUIRED_CHECKS},
+        "details": {
+            "manual_evidence": {
+                "first_run_models": {"ok": True},
+                "crash_recovery": {"ok": True},
+                "keyboard_only_review": {"ok": True},
+                "updater_path": {"ok": True},
+            }
+        },
     }))
 
     clean = _normalize_clean_machine_artifact(artifact)
 
     assert clean["status"] == "PASS"
+
+
+def test_normalize_clean_machine_artifact_rejects_missing_manual_evidence(tmp_path):
+    artifact = tmp_path / "clean-machine.json"
+    artifact.write_text(json.dumps({
+        "status": "PASS",
+        "checks": {name: True for name in CLEAN_MACHINE_REQUIRED_CHECKS},
+    }))
+
+    clean = _normalize_clean_machine_artifact(artifact)
+
+    assert clean["status"] == "FAIL"
+    assert clean["reason"] == "clean-machine PASS artifact is missing auditable manual evidence"
+    assert "crash_recovery" in clean["missing_manual_evidence"]
 
 
 def test_redact_secrets_masks_tokens():

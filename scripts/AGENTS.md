@@ -24,7 +24,7 @@ scripts/
 | Build public-proxy evidence | `build_public_proxy.py` | Writes Mohler ASAG artifacts under `artifacts/public_proxy/`; optional local grading |
 | Collect frontend release evidence | `frontend_evidence.py` | Runs component tests, production build, managed Playwright E2E, and reads visual-sweep metadata |
 | Validate updater evidence | `updater_evidence.py` | Requires updater config, signed latest.json, and optional artifact filename/hash checks |
-| Clean-machine release evidence | `clean_machine_evidence.py` | Writes `artifacts/release-evidence/clean-machine.json`; PASS requires signing plus first-run/crash/keyboard/updater checks |
+| Clean-machine release evidence | `clean_machine_evidence.py` | Writes `artifacts/release-evidence/clean-machine.json`; PASS requires signing plus structured manual evidence for first-run/crash/keyboard/updater checks |
 | Seed Canvas sandbox | `seed_canvas_sandbox.py` | `--apply --students 6` to create + exercise |
 | Tear down sandbox | `seed_canvas_sandbox.py` | `--teardown --course-id 106 --apply` |
 | Understand Canvas API quirks | `seed_canvas_sandbox.py` | All 4 gotchas encoded in code comments |
@@ -41,8 +41,10 @@ scripts/
 - **`updater_evidence.py`**: blocks public beta when `latest.json` is missing or any platform
   signature is empty. It does not replace the clean-machine N→N+1 update test.
 - **`seed_canvas_sandbox.py`**: dry-run by default. `--apply` to write. Refuses courses without `ZZ-GRADER-TEST` marker.
-- **`clean_machine_evidence.py`**: cannot prove a clean-machine pass by itself. Run it on the
-  clean Mac with the signed app/DMG and pass manual flags only after performing those checks.
+- **`clean_machine_evidence.py`**: cannot prove a clean-machine pass by itself. Generate the
+  evidence template with `--print-manual-template`, fill it on the clean Mac with notes plus
+  screenshot/log paths, then run with `--manual-evidence ... --evidence-root ...`. Manual flags
+  without evidence are legacy-only and should not be used for release claims.
 - Fake students use `ZZGraderTest` prefix + `.invalid` email domain (RFC 2606 — can never resolve)
 - Canvas credentials: env vars (`CANVAS_BASE_URL`, `CANVAS_API_TOKEN`) or canvas-pp-cli's `credentials.toml`
 

@@ -7,9 +7,12 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parents[2]))
 
 from scripts.clean_machine_evidence import (
+    MANUAL_CHECKS,
     REQUIRED_CHECKS,
     build_evidence,
     collect_checks,
+    manual_evidence_template,
+    validate_manual_evidence,
 )
 
 
@@ -47,3 +50,48 @@ def test_collect_checks_runs_app_and_dmg_commands(tmp_path):
     assert all(checks.values())
     assert details["codesign_verify"]["command"][:2] == ["codesign", "--verify"]
     assert details["stapler_validate"]["command"][:3] == ["xcrun", "stapler", "validate"]
+
+
+def test_validate_manual_evidence_requires_notes_and_files(tmp_path):
+    screenshot = tmp_path / "crash-recovery.png"
+    screenshot.write_text("fake image bytes")
+    evidence = {
+        "crash_recovery": {
+            "passed": True,
+            "notes": "Killed the engine and used Restart local engine.",
+            "evidence_files": ["crash-recovery.png"],
+        }
+    }
+
+    passed, details = validate_manual_evidence(evidence, evidence_root=tmp_path)
+
+    assert "crash_recovery" in passed
+    assert details["crash_recovery"]["ok"] is True
+    assert "first_run_models" not in passed
+    assert details["first_run_models"]["ok"] is False
+
+
+def test_validate_manual_evidence_rejects_missing_files(tmp_path):
+    evidence = {
+        name: {
+            "passed": True,
+            "notes": f"{name} checked",
+            "evidence_files": [f"{name}.png"],
+        }
+        for name in MANUAL_CHECKS
+    }
+
+    passed, details = validate_manual_evidence(evidence, evidence_root=tmp_path)
+
+    assert passed == []
+    assert details["first_run_models"]["missing_files"]
+
+
+def test_manual_evidence_template_covers_every_manual_check():
+    template = manual_evidence_template()
+
+    assert set(template) == set(MANUAL_CHECKS)
+    for name, row in template.items():
+        assert row["passed"] is False
+        assert row["notes"] == ""
+        assert row["evidence_files"]

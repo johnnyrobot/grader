@@ -22,7 +22,7 @@ import platform
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Callable, Iterable
+from typing import Any, Callable, Iterable, Mapping
 
 
 REQUIRED_CHECKS = (
@@ -54,6 +54,94 @@ def _run_check(command: list[str], *, runner: Runner = subprocess.run) -> dict[s
         "returncode": proc.returncode,
         "ok": proc.returncode == 0,
         "output": output[:2000],
+    }
+
+
+def load_manual_evidence(path: Path | None) -> dict[str, Any]:
+    if path is None:
+        return {}
+    if not path.exists():
+        return {"_load_error": f"manual evidence file does not exist: {path}"}
+    return json.loads(path.read_text())
+
+
+def validate_manual_evidence(
+    evidence: Mapping[str, Any],
+    *,
+    evidence_root: Path | None = None,
+    require_files: bool = True,
+) -> tuple[list[str], dict[str, object]]:
+    """Return manual checks with auditable evidence.
+
+    Each manual check must be shaped like:
+
+      {
+        "passed": true,
+        "notes": "what was verified",
+        "evidence_files": ["relative/or/absolute/path.png"]
+      }
+
+    ``evidence_files`` must be present and non-empty by default. Existing files
+    are verified when paths are available locally.
+    """
+    passed: list[str] = []
+    details: dict[str, object] = {}
+    if evidence.get("_load_error"):
+        details["_load_error"] = evidence["_load_error"]
+        return passed, details
+
+    for name in MANUAL_CHECKS:
+        raw = evidence.get(name)
+        if not isinstance(raw, Mapping):
+            details[name] = {"ok": False, "reason": "missing manual evidence entry"}
+            continue
+
+        notes = str(raw.get("notes") or "").strip()
+        evidence_files = raw.get("evidence_files") or []
+        if isinstance(evidence_files, str):
+            evidence_files = [evidence_files]
+        evidence_files = [str(path) for path in evidence_files if str(path).strip()]
+
+        missing_files: list[str] = []
+        for file_name in evidence_files:
+            candidate = Path(file_name)
+            if not candidate.is_absolute() and evidence_root is not None:
+                candidate = evidence_root / candidate
+            if evidence_root is not None and not candidate.exists():
+                missing_files.append(str(candidate))
+
+        ok = (
+            raw.get("passed") is True
+            and bool(notes)
+            and (not require_files or bool(evidence_files))
+            and not missing_files
+        )
+        details[name] = {
+            "ok": ok,
+            "passed": raw.get("passed") is True,
+            "notes": notes,
+            "evidence_files": evidence_files,
+            "missing_files": missing_files,
+        }
+        if ok:
+            passed.append(name)
+
+    return passed, details
+
+
+def manual_evidence_template() -> dict[str, object]:
+    return {
+        name: {
+            "passed": False,
+            "performed_at": datetime.now(timezone.utc).isoformat(),
+            "tester": "",
+            "notes": "",
+            "evidence_files": [
+                f"{name}.png",
+                f"{name}.log",
+            ],
+        }
+        for name in MANUAL_CHECKS
     }
 
 
@@ -100,6 +188,7 @@ def build_evidence(
     *,
     checks: dict[str, bool],
     details: dict[str, object] | None = None,
+    manual_evidence: dict[str, object] | None = None,
     app_path: Path | None = None,
     dmg_path: Path | None = None,
     notes: str = "",
@@ -118,6 +207,7 @@ def build_evidence(
         "checks": {name: bool(checks.get(name)) for name in REQUIRED_CHECKS},
         "missing_checks": missing,
         "details": details or {},
+        "manual_evidence": manual_evidence or {},
         "notes": notes,
     }
 
@@ -133,12 +223,32 @@ def main() -> None:
     parser.add_argument("--dmg", type=Path, default=None, help="Path to signed/notarized DMG")
     parser.add_argument("--out", type=Path, default=Path("artifacts/release-evidence/clean-machine.json"))
     parser.add_argument("--notes", default="")
+    parser.add_argument("--manual-evidence", type=Path, default=None,
+                        help="JSON evidence for first-run/crash/keyboard/updater manual checks")
+    parser.add_argument("--evidence-root", type=Path, default=None,
+                        help="Resolve relative manual evidence files against this directory")
+    parser.add_argument("--print-manual-template", action="store_true",
+                        help="Print a clean-machine manual evidence JSON template and exit")
+    parser.add_argument("--allow-manual-flags-without-evidence", action="store_true",
+                        help="Legacy mode: count manual --first-run/--crash/etc flags without evidence files")
     parser.add_argument("--first-run-models", action="store_true")
     parser.add_argument("--crash-recovery", action="store_true")
     parser.add_argument("--keyboard-only-review", action="store_true")
     parser.add_argument("--updater-path", action="store_true")
     args = parser.parse_args()
 
+    if args.print_manual_template:
+        print(json.dumps(manual_evidence_template(), indent=2, sort_keys=True))
+        return
+
+    manual_evidence = load_manual_evidence(args.manual_evidence)
+    evidence_root = args.evidence_root
+    if evidence_root is None and args.manual_evidence is not None:
+        evidence_root = args.manual_evidence.parent
+    evidence_passes, evidence_details = validate_manual_evidence(
+        manual_evidence,
+        evidence_root=evidence_root,
+    )
     manual = [
         name
         for name, enabled in (
@@ -149,10 +259,15 @@ def main() -> None:
         )
         if enabled
     ]
+    if not args.allow_manual_flags_without_evidence:
+        manual = []
+    manual.extend(evidence_passes)
     checks, details = collect_checks(app_path=args.app, dmg_path=args.dmg, manual_passes=manual)
+    details["manual_evidence"] = evidence_details
     evidence = build_evidence(
         checks=checks,
         details=details,
+        manual_evidence=manual_evidence,
         app_path=args.app,
         dmg_path=args.dmg,
         notes=args.notes,

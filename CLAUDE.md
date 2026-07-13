@@ -86,7 +86,7 @@ As of 2026-07-13, Grader is suitable only for a developer-assisted alpha using s
 institution-approved test data. It is not ready for an unattended public beta with real student
 work.
 
-- Python: 86 passed, 12 skipped.
+- Python: 90 passed, 12 skipped.
 - Frontend: 12 component tests and four Playwright E2E tests pass, including a 16-screen visual
   sweep with 167 visible controls recorded.
 - Privacy: PASS in isolation, 3/3 captured connections allowlisted.
@@ -105,7 +105,7 @@ work.
   references the signed release artifact. Fresh local signing/notarization is blocked because
   `codesign` returns `errSecInternalComponent` and notarytool profile `grader` is unavailable;
   clean-machine first-run models, crash recovery, keyboard-only review, and updater path also
-  remain unverified.
+  remain unverified and now require structured manual evidence notes plus screenshot/log paths.
 
 Before public beta: keep citation checks visibly experimental unless accuracy improves, restore
 signing/notarization credentials, generate signed updater evidence, and complete a signed/notarized

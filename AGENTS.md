@@ -224,7 +224,7 @@ uv run python scripts/release_readiness.py --profile public_beta --out artifacts
   `errSecInternalComponent` and notarytool profile `grader` is unavailable. Teacher-local validation
   still requires authorized instructor data, and clean-machine behavioral checks still need release
   validation.
-- **Coverage:** Python collects 98 cases (86 pass, 12 skip). Frontend has 12 passing component
+- **Coverage:** Python collects 102 cases (90 pass, 12 skip). Frontend has 12 passing component
   tests plus four passing Playwright E2E tests.
 - **Public beta verdict:** not ready for unattended public testing with real student work. Limit
   current use to a developer-assisted alpha with synthetic or institution-approved test data.

@@ -64,7 +64,7 @@ beta with real student work.
 
 Confirmed in the current checkout:
 
-- Python tests: 86 passed, 12 intentionally skipped.
+- Python tests: 90 passed, 12 intentionally skipped.
 - Frontend tests: 12 passed; TypeScript/Vite production build and Rust `cargo check` pass.
 - The complete mocked desktop workflow passes in Playwright across onboarding, queue, review,
   settings, model management, and local-engine recovery. The visual sweep records 16 screens, 167
@@ -144,7 +144,8 @@ uv run python engine/verify_citations.py --fixtures fixtures/citations/citation_
 uv run python scripts/frontend_evidence.py --out artifacts/release-evidence/frontend.json
 uv run python scripts/updater_evidence.py --manifest latest.json --artifact /path/to/Grader.dmg --out artifacts/release-evidence/updater.json
 uv run python scripts/live_canvas_e2e.py --dry-run
-uv run python scripts/clean_machine_evidence.py --app /Applications/Grader.app --dmg /path/to/Grader.dmg --first-run-models --crash-recovery --keyboard-only-review --updater-path
+uv run python scripts/clean_machine_evidence.py --print-manual-template > clean-machine-manual-evidence.json
+uv run python scripts/clean_machine_evidence.py --app /Applications/Grader.app --dmg /path/to/Grader.dmg --manual-evidence clean-machine-manual-evidence.json --evidence-root /path/to/screenshots-and-logs
 uv run python scripts/release_readiness.py --profile public_beta --public-proxy-dir artifacts/public_proxy/mohler_asag --citation-artifact artifacts/citation-results.json --frontend-artifact artifacts/release-evidence/frontend.json --updater-artifact artifacts/release-evidence/updater.json --clean-machine-artifact artifacts/release-evidence/clean-machine-local-current.json --out artifacts/release-readiness
 ```
 

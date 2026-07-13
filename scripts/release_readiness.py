@@ -45,11 +45,21 @@ CLEAN_MACHINE_REQUIRED_CHECKS = (
     "updater_path",
 )
 
+CLEAN_MACHINE_MANUAL_CHECKS = (
+    "first_run_models",
+    "crash_recovery",
+    "keyboard_only_review",
+    "updater_path",
+)
+
 
 def _gate_summary(gate: dict[str, Any]) -> str:
     missing_checks = gate.get("missing_checks")
     if isinstance(missing_checks, list) and missing_checks:
         return "missing checks: " + ", ".join(str(check) for check in missing_checks)
+    missing_manual = gate.get("missing_manual_evidence")
+    if isinstance(missing_manual, list) and missing_manual:
+        return "missing manual evidence: " + ", ".join(str(check) for check in missing_manual)
     for key in ("summary", "reason"):
         value = gate.get(key)
         if value:
@@ -140,10 +150,21 @@ def _normalize_clean_machine_artifact(path: Path | None) -> dict[str, Any]:
         return clean
     checks = clean.get("checks", {})
     missing = [name for name in CLEAN_MACHINE_REQUIRED_CHECKS if checks.get(name) is not True]
+    details = clean.get("details", {})
+    manual_details = details.get("manual_evidence", {}) if isinstance(details, dict) else {}
+    weak_manual = [
+        name
+        for name in CLEAN_MACHINE_MANUAL_CHECKS
+        if not isinstance(manual_details.get(name), dict) or manual_details[name].get("ok") is not True
+    ]
     if missing:
         clean["status"] = "FAIL"
         clean["reason"] = "clean-machine PASS artifact is missing required passing checks"
         clean["missing_checks"] = missing
+    elif weak_manual:
+        clean["status"] = "FAIL"
+        clean["reason"] = "clean-machine PASS artifact is missing auditable manual evidence"
+        clean["missing_manual_evidence"] = weak_manual
     return clean
 
 
