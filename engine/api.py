@@ -616,7 +616,7 @@ def update_settings(req: dict) -> dict:
     return {"success": True, "settings": {k: current[k] for k in DEFAULT_SETTINGS if k != "canvas_token"}}
 
 
-@app.get("/api/updates/check", dependencies=[Depends(_auth)])
+@app.get("/api/audit", dependencies=[Depends(_auth)])
 def get_audit(entity: str | None = None, limit: int = 50) -> list[dict]:
     db = _db()
     if entity:
@@ -977,7 +977,7 @@ def check_updates() -> dict:
     import httpx
     try:
         r = httpx.get(
-            "https://github.com/laccd/grader/releases/latest/download/latest.json",
+            "https://github.com/johnnyrobot/grader/releases/latest/download/latest.json",
             timeout=10,
         )
         if r.status_code != 200:

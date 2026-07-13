@@ -197,3 +197,42 @@ def test_grade_batch_can_limit_to_requested_submission_ids(tmp_path, monkeypatch
     assert result["total"] == 1
     assert captured["args"][2] == ["sub_keep"]
     assert captured["started"] is True
+
+
+def test_updates_check_route_is_not_shadowed_by_audit_route(monkeypatch, api_module):
+    api = api_module
+    routes = [
+        route
+        for route in api.app.routes
+        if getattr(route, "path", None) in {"/api/updates/check", "/api/audit"}
+    ]
+    by_path = {route.path: route for route in routes}
+
+    assert by_path["/api/updates/check"].endpoint.__name__ == "check_updates"
+    assert by_path["/api/audit"].endpoint.__name__ == "get_audit"
+
+    class Response:
+        status_code = 200
+
+        def json(self):
+            return {
+                "version": "0.1.1",
+                "notes": "Patch",
+                "pub_date": "2026-07-13T00:00:00Z",
+            }
+
+    captured = {}
+
+    def fake_get(url, timeout):
+        captured["url"] = url
+        captured["timeout"] = timeout
+        return Response()
+
+    monkeypatch.setattr("httpx.get", fake_get)
+    monkeypatch.setenv("GRADER_APP_VERSION", "0.1.0")
+
+    result = api.check_updates()
+
+    assert captured["url"] == "https://github.com/johnnyrobot/grader/releases/latest/download/latest.json"
+    assert result["update_available"] is True
+    assert result["latest_version"] == "0.1.1"
