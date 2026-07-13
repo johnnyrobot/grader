@@ -45,6 +45,9 @@ CLEAN_MACHINE_REQUIRED_CHECKS = (
 
 
 def _gate_summary(gate: dict[str, Any]) -> str:
+    missing_checks = gate.get("missing_checks")
+    if isinstance(missing_checks, list) and missing_checks:
+        return "missing checks: " + ", ".join(str(check) for check in missing_checks)
     for key in ("summary", "reason"):
         value = gate.get(key)
         if value:

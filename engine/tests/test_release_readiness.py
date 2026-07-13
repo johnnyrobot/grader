@@ -138,7 +138,10 @@ def test_summarize_blockers_includes_fail_skip_and_blocked_reasons():
         "fairness": {"status": "FAIL", "output": "\n✗ FAIRNESS\n  incomplete perturbed_scores\n"},
         "canvas": {"status": "DRY_RUN", "summary": "pass --apply for live writes"},
         "citations": {"status": "SKIP", "reason": "missing artifact"},
-        "clean_machine": {"status": "BLOCKED_CLEAN_MACHINE_EVIDENCE"},
+        "clean_machine": {
+            "status": "BLOCKED_CLEAN_MACHINE_EVIDENCE",
+            "missing_checks": ["first_run_models"],
+        },
     })
 
     by_gate = {blocker["gate"]: blocker for blocker in blockers}
@@ -149,3 +152,4 @@ def test_summarize_blockers_includes_fail_skip_and_blocked_reasons():
     assert "incomplete perturbed_scores" in by_gate["fairness"]["summary"]
     assert by_gate["citations"]["summary"] == "missing artifact"
     assert by_gate["clean_machine"]["status"] == "BLOCKED_CLEAN_MACHINE_EVIDENCE"
+    assert by_gate["clean_machine"]["summary"] == "missing checks: first_run_models"
