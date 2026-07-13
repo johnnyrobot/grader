@@ -8,6 +8,7 @@ Infrastructure scripts: model baking and Canvas sandbox seeding. Both have safet
 scripts/
 ├── make_models.sh              # bake context-capped Ollama variants (CRITICAL for 16 GB tier)
 ├── build_public_proxy.py       # build gitignored Mohler ASAG public-proxy evidence
+├── clean_machine_evidence.py   # collect signed/notarized clean-machine release evidence
 └── seed_canvas_sandbox.py      # Canvas round-trip seeder/verifier (dry-run by default)
 ```
 
@@ -17,6 +18,7 @@ scripts/
 |------|----------|-------|
 | Fix OOM on 16 GB machines | `make_models.sh` | Caps `num_ctx=16384`, sets `temperature=0` |
 | Build public-proxy evidence | `build_public_proxy.py` | Writes Mohler ASAG artifacts under `artifacts/public_proxy/`; optional local grading |
+| Clean-machine release evidence | `clean_machine_evidence.py` | Writes `artifacts/release-evidence/clean-machine.json`; PASS requires signing plus first-run/crash/keyboard/updater checks |
 | Seed Canvas sandbox | `seed_canvas_sandbox.py` | `--apply --students 6` to create + exercise |
 | Tear down sandbox | `seed_canvas_sandbox.py` | `--teardown --course-id 106 --apply` |
 | Understand Canvas API quirks | `seed_canvas_sandbox.py` | All 4 gotchas encoded in code comments |
@@ -29,6 +31,8 @@ scripts/
   scoring runs and `--anchor-exemplars-per-source ... --anchor-k ...` only for diagnostic anchored
   comparisons.
 - **`seed_canvas_sandbox.py`**: dry-run by default. `--apply` to write. Refuses courses without `ZZ-GRADER-TEST` marker.
+- **`clean_machine_evidence.py`**: cannot prove a clean-machine pass by itself. Run it on the
+  clean Mac with the signed app/DMG and pass manual flags only after performing those checks.
 - Fake students use `ZZGraderTest` prefix + `.invalid` email domain (RFC 2606 — can never resolve)
 - Canvas credentials: env vars (`CANVAS_BASE_URL`, `CANVAS_API_TOKEN`) or canvas-pp-cli's `credentials.toml`
 

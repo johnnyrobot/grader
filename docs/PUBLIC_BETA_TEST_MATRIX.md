@@ -31,7 +31,7 @@ misrepresented as grading accuracy.
 | Desktop build | React build, unit tests, E2E workflow, Rust check pass | `npm test`, `npm run build`, Playwright, `cargo check` | PASS: 11 component tests, 3 E2E tests, build, and Rust check | PASS artifact must be supplied to readiness report |
 | Accessibility | No serious/critical WCAG violations, 200% text scaling, keyboard-only loop | Playwright axe + visual inspection | PASS on synthetic fixture; visual sweep covers 15 screens and 153 visible controls | PASS mechanics; still requires clean-machine app check |
 | Signing/notarization | Signed/notarized app or DMG passes codesign, stapler, spctl | release script + clean Mac | Signing preflight pass; no clean artifact | PASS only with notarized artifact evidence |
-| Clean-machine | First launch, model setup, crash recovery, keyboard review, updater N->N+1 | manual/VM evidence JSON | Missing | Required for public beta |
+| Clean-machine | First launch, model setup, crash recovery, keyboard review, updater N->N+1 | `scripts/clean_machine_evidence.py` JSON from a clean Mac/VM | Missing | Required for public beta |
 | Release report | Consolidated verdict is `supervised_public_beta` | `scripts/release_readiness.py` | BLOCKED: Canvas and public-proxy quality now PASS; current report lists public-proxy fairness completion and clean-machine evidence as blockers | Final release gate |
 
 ## Required Manual Visual Sweep
