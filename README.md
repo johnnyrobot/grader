@@ -35,11 +35,12 @@ per-teacher model to train.
 🚧 **Developer-assisted alpha; not ready for an unattended public beta.** The engine and desktop
 review workflow work, including the neuroinclusive light-first interface and the tiered
 release-gate machinery. Public-proxy quality/fairness pass and Canvas score/comment round-trip is
-validated, and a current-source local app/DMG now signs, notarizes, staples, and passes macOS
-signature checks. Signed updater-manifest regeneration is still blocked until the updater-key
-password is supplied in a private shell or Keychain. Public beta is still blocked by GitHub
-release-publication setup, the live updater channel, and clean-machine updater N→N+1 behavioral
-validation.
+validated. Local app/DMG signing and notarization have passed on this machine, but the latest
+release-readiness report still blocks release provenance because artifacts must be rebuilt after
+release-tool commits and `latest.json` is still stale. Signed updater-manifest regeneration is
+blocked until the updater-key password is supplied in a private shell or Keychain. Public beta is
+still blocked by GitHub release-publication setup, the live updater channel, and clean-machine
+updater N→N+1 behavioral validation.
 
 | | |
 |---|---|
@@ -52,8 +53,8 @@ validation.
 | Citation verification | 🟡 20/29 correct (69%); retraction check 3/3; accepted only as visibly experimental until accuracy reaches the enabled-mode gate |
 | CI gates | 🟢 Privacy PASS; perf PASS; public-proxy quality/fairness PASS; teacher-local still unvalidated |
 | GitHub release preflight | 🔴 Missing required Actions secrets for signed/notarized updater releases |
-| Updater evidence | 🟡 0.1.1 app/DMG are signed/notarized; signed `latest.json` regeneration is blocked until the updater-key password is provided in a private shell or Keychain |
-| Signing + notarization | 🟢 Current-source local app/DMG signed, notarized, stapled, and passed `codesign`/`stapler`/`spctl` checks |
+| Updater evidence | 🟡 Signed `latest.json` regeneration is blocked until the updater-key password is provided in a private shell or Keychain; current `latest.json` is stale/0.1.0 |
+| Signing + notarization | 🟡 Local app/DMG signing and notarization pass on this machine; rebuild/re-sign after release-tool commits before final clean-machine evidence |
 | Updates | 🟡 Tauri updater integrated with signed manifest generation and in-app install/restart UI; real N→N+1 path still needs release-channel evidence |
 | Beta rollout | ⬜ Blocked until release-readiness report returns `supervised_public_beta` |
 
@@ -68,7 +69,7 @@ beta with real student work.
 
 Confirmed in the current checkout:
 
-- Python tests: 179 passed, 12 intentionally skipped.
+- Python tests: 186 passed, 12 intentionally skipped.
 - Frontend tests: 15 passed; TypeScript/Vite production build and Rust `cargo check` pass.
 - The complete mocked desktop workflow passes in Playwright across onboarding, queue, review,
   settings, model management, and local-engine recovery. The visual sweep now fail-closes unless it
