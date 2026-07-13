@@ -510,14 +510,17 @@ def test_build_next_actions_maps_release_blockers_to_secret_safe_commands():
         "github_release": {"status": "BLOCKED_GITHUB_RELEASE_PREFLIGHT"},
         "updater": {"status": "BLOCKED_UPDATER_EVIDENCE"},
         "updater_channel": {"status": "BLOCKED_UPDATER_CHANNEL"},
+        "signing": {"status": "BLOCKED_SIGNING_CREDENTIALS"},
         "clean_machine": {"status": "BLOCKED_CLEAN_MACHINE_EVIDENCE"},
     })
 
     by_gate = {action["gate"]: action for action in actions}
-    assert set(by_gate) == {"github_release", "updater", "updater_channel", "clean_machine"}
+    assert set(by_gate) == {"github_release", "updater", "updater_channel", "signing", "clean_machine"}
     assert any("--candidate-tag v0.1.1" in command for command in by_gate["github_release"]["commands"])
     assert any("--password-keychain-service TAURI_SIGNING_PRIVATE_KEY_PASSWORD" in command for command in by_gate["updater"]["commands"])
     assert any("updater_channel_preflight.py" in command for command in by_gate["updater_channel"]["commands"])
+    assert any("signing_doctor.py --print-repair-runbook" in command for command in by_gate["signing"]["commands"])
+    assert "errSecInternalComponent" in " ".join(by_gate["signing"]["notes"])
     assert any("release_evidence_package.py" in command for command in by_gate["clean_machine"]["commands"])
     assert "manual app replacement" in " ".join(by_gate["clean_machine"]["notes"])
 

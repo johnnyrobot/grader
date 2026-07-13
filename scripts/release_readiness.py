@@ -493,6 +493,25 @@ def build_next_actions(evidence: dict[str, Any]) -> list[dict[str, Any]]:
             ],
         })
 
+    if blocked("signing"):
+        actions.append({
+            "gate": "signing",
+            "title": "Repair local Developer ID signing and notarization credentials.",
+            "commands": [
+                "uv run python scripts/signing_doctor.py --print-repair-runbook > signing-repair-runbook.md",
+                (
+                    "uv run python scripts/signing_doctor.py "
+                    "--out artifacts/release-evidence/signing-current.json --no-fail"
+                ),
+                "./scripts/sign_and_notarize.sh --dmg",
+            ],
+            "notes": [
+                "Do this in a private local shell; do not paste Apple passwords or keychain passwords into chat.",
+                "Repair private-key ACLs if the doctor reports errSecInternalComponent.",
+                "Restore the notarytool profile before attempting notarization/stapling.",
+            ],
+        })
+
     if blocked("clean_machine"):
         actions.append({
             "gate": "clean_machine",
