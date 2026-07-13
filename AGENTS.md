@@ -206,7 +206,8 @@ uv run python scripts/github_release_secrets.py --print-runbook > github-release
 uv run python scripts/github_release_secrets.py --out artifacts/release-evidence/github-release-secrets-current.json  # dry-run inventory; use --apply only in a private release shell
 uv run python scripts/bump_release_version.py --target-version 0.1.1 --allow-same --out artifacts/release-evidence/version-bump-plan.json  # dry-run/idempotency check; use --apply only in future release-prep commits
 uv run python scripts/github_release_preflight.py --candidate-tag v0.1.1 --out artifacts/release-evidence/github-release-preflight-current.json --no-fail
-export TAURI_SIGNING_PRIVATE_KEY_PASSWORD='<updater-key-password>'  # required for encrypted updater keys
+uv run python scripts/updater_key_doctor.py --print-private-runbook > updater-key-private-runbook.md
+export TAURI_SIGNING_PRIVATE_KEY_PASSWORD='<updater-key-password>'  # private shell only; or use the Keychain commands from the runbook
 uv run python scripts/updater_key_doctor.py --signing-key /path/to/tauri-updater-key.pem --out artifacts/release-evidence/updater-key-current.json
 uv run python scripts/generate_appcast.py --dmg /path/to/Grader.dmg --version 0.1.1 --signing-key /path/to/tauri-updater-key.pem --output latest.json
 uv run python scripts/updater_evidence.py --manifest latest.json --artifact /path/to/Grader.dmg --out artifacts/release-evidence/updater-current.json  # fails if artifacts predate current git commit
@@ -262,13 +263,14 @@ package is a clean-Mac handoff bundle only; do not treat it as passing clean-mac
   onboarding, engine readiness, queue reachability, and installed-model reconciliation.
   `scripts/computer_use_sweep_evidence.py` still fails stale capture sets and clean-machine evidence
   requires a PASS sweep JSON. The encrypted updater key was rotated before public release, the public
-  key/config now target `github.com/johnnyrobot/grader`, `scripts/updater_key_doctor.py` passes with
-  the local Keychain-backed password, signed `latest.json` updater evidence now passes, and the queue
-  UI has a native Tauri install/restart update action. The release-readiness JSON/Markdown now
+  key/config now target `github.com/johnnyrobot/grader`, but the current shell lacks the encrypted
+  updater key password, so signed `latest.json` regeneration and updater evidence are blocked until
+  the private-shell or Keychain password path is used. The queue UI has a native Tauri
+  install/restart update action. The release-readiness JSON/Markdown now
   includes an end-to-end public-beta matrix that maps requirements to evidence. Teacher-local
   validation still requires authorized instructor data, the GitHub release preflight is blocked on
   missing Actions secrets, and the updater-path check still needs release validation.
-- **Coverage:** Python collects 187 cases (175 pass, 12 skip). Frontend has 15 passing component
+- **Coverage:** Python collects 191 cases (179 pass, 12 skip). Frontend has 15 passing component
   tests plus four passing Playwright E2E tests.
 - **Public beta verdict:** not ready for unattended public testing with real student work. Limit
   current use to a developer-assisted alpha with synthetic or institution-approved test data.

@@ -51,7 +51,7 @@ behavioral validation.
 | Citation verification | 🟡 20/29 correct (69%); retraction check 3/3; accepted only as visibly experimental until accuracy reaches the enabled-mode gate |
 | CI gates | 🟢 Privacy PASS; perf PASS; public-proxy quality/fairness PASS; teacher-local still unvalidated |
 | GitHub release preflight | 🔴 Missing required Actions secrets for signed/notarized updater releases |
-| Updater evidence | 🟢 Signed `latest.json` references the current-source signed/notarized DMG and passes updater evidence |
+| Updater evidence | 🟡 0.1.1 app/DMG are signed/notarized; signed `latest.json` regeneration is blocked until the updater-key password is provided in a private shell or Keychain |
 | Signing + notarization | 🟢 Current-source local app/DMG signed, notarized, stapled, and passed `codesign`/`stapler`/`spctl` checks |
 | Updates | 🟡 Tauri updater integrated with signed manifest generation and in-app install/restart UI; real N→N+1 path still needs release-channel evidence |
 | Beta rollout | ⬜ Blocked until release-readiness report returns `supervised_public_beta` |
@@ -67,7 +67,7 @@ beta with real student work.
 
 Confirmed in the current checkout:
 
-- Python tests: 175 passed, 12 intentionally skipped.
+- Python tests: 179 passed, 12 intentionally skipped.
 - Frontend tests: 15 passed; TypeScript/Vite production build and Rust `cargo check` pass.
 - The complete mocked desktop workflow passes in Playwright across onboarding, queue, review,
   settings, model management, and local-engine recovery. The visual sweep now fail-closes unless it
@@ -168,7 +168,8 @@ uv run python scripts/github_release_secrets.py --print-runbook > github-release
 uv run python scripts/github_release_secrets.py --out artifacts/release-evidence/github-release-secrets-current.json  # dry-run inventory; use --apply only in a private release shell
 uv run python scripts/bump_release_version.py --target-version 0.1.1 --allow-same --out artifacts/release-evidence/version-bump-plan.json  # dry-run/idempotency check; use --apply only when preparing a future release commit
 uv run python scripts/github_release_preflight.py --candidate-tag v0.1.1 --out artifacts/release-evidence/github-release-preflight-current.json --no-fail
-export TAURI_SIGNING_PRIVATE_KEY_PASSWORD='<updater-key-password>'  # required for encrypted updater keys
+uv run python scripts/updater_key_doctor.py --print-private-runbook > updater-key-private-runbook.md
+export TAURI_SIGNING_PRIVATE_KEY_PASSWORD='<updater-key-password>'  # private shell only; or use the Keychain commands from the runbook
 uv run python scripts/updater_key_doctor.py --signing-key /path/to/tauri-updater-key.pem --out artifacts/release-evidence/updater-key-current.json
 uv run python scripts/generate_appcast.py --dmg /path/to/Grader.dmg --version 0.1.1 --signing-key /path/to/tauri-updater-key.pem --output latest.json
 uv run python scripts/updater_evidence.py --manifest latest.json --artifact /path/to/Grader.dmg --out artifacts/release-evidence/updater-current.json  # fails if local artifacts predate the current git commit
@@ -217,7 +218,9 @@ Developer ID private key and notarytool profile before mutating a release bundle
 `uv run python scripts/signing_doctor.py --print-repair-runbook`; do not paste Apple credentials or
 keychain passwords into chat or commit them. `scripts/generate_appcast.py` now fails closed unless a
 Tauri updater signing key is provided; set `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` for encrypted updater
-keys in non-interactive release runs. `--allow-unsigned` is only for local smoke fixtures.
+keys in a private shell, or store it in macOS Keychain and pass
+`--password-keychain-service TAURI_SIGNING_PRIVATE_KEY_PASSWORD --password-keychain-account grader-updater`.
+`--allow-unsigned` is only for local smoke fixtures.
 `scripts/release_readiness.py --expected-version ...` records artifact path/mtime/SHA-256 metadata
 and fails PASS updater or clean-machine artifacts that do not match the evaluated app version.
 `scripts/release_version_guard.py` fails release tags whose app/package/runtime-update metadata still

@@ -50,6 +50,7 @@ cd /Users/laccd/code/grader
 uv run python scripts/updater_channel_preflight.py --current-version 0.1.0 --out artifacts/release-evidence/updater-channel-current.json
 uv run python scripts/github_release_secrets.py --print-runbook > github-release-secrets-runbook.md
 uv run python scripts/bump_release_version.py --target-version 0.1.1 --allow-same --out artifacts/release-evidence/version-bump-plan.json
+uv run python scripts/updater_key_doctor.py --print-private-runbook > updater-key-private-runbook.md
 uv run python scripts/github_release_preflight.py --candidate-tag v0.1.1 --out artifacts/release-evidence/github-release-preflight-current.json --no-fail
 ```
 
@@ -58,7 +59,8 @@ Developer ID `.p12`, Apple notarization credentials, and Tauri updater key.
 `scripts/bump_release_version.py --allow-same` should now pass as an idempotency check for the
 prepared 0.1.1 metadata. The GitHub release preflight should return
 `BLOCKED_GITHUB_RELEASE_PREFLIGHT` until the required Actions secrets are configured, and the
-updater-channel preflight should return
+updater key private runbook gives both env-var and macOS Keychain paths for regenerating signed
+0.1.1 `latest.json` without exposing the updater password. The updater-channel preflight should return
 `BLOCKED_UPDATER_CHANNEL` until a signed N+1 GitHub release publishes `latest.json` and the
 reachable signed `Grader.dmg` asset. After both pass, run the clean-machine in-app `Install update
 and restart` path and record `updater_path` evidence. Do **not** claim public beta readiness until

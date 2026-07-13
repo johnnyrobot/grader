@@ -4,7 +4,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parents[2]))
 
-from scripts.updater_key_doctor import collect_updater_key_diagnostics, redact_secrets
+from scripts.updater_key_doctor import collect_updater_key_diagnostics, private_shell_runbook, redact_secrets
 
 
 class Proc:
@@ -60,6 +60,31 @@ def test_collect_updater_key_diagnostics_passes_successful_probe(tmp_path):
     assert seen[0][:5] == ["cargo", "tauri", "signer", "sign", "--private-key-path"]
 
 
+def test_collect_updater_key_diagnostics_can_load_password_from_keychain(tmp_path):
+    key = tmp_path / "tauri-key.pem"
+    key.write_text("fake encrypted key")
+    seen_envs: list[dict[str, str]] = []
+
+    def fake_run(command, **kwargs):
+        if command[:3] == ["security", "find-generic-password", "-w"]:
+            return Proc(0, stdout="secret-from-keychain\n")
+        seen_envs.append(kwargs["env"])
+        return Proc(0, stdout="Signature: signed-update\n")
+
+    result = collect_updater_key_diagnostics(
+        signing_key=key,
+        runner=fake_run,
+        env={},
+        password_keychain_service="TAURI_SIGNING_PRIVATE_KEY_PASSWORD",
+        password_keychain_account="grader-updater",
+    )
+
+    assert result["status"] == "PASS"
+    assert result["details"]["password_source"] == "keychain"
+    assert result["details"]["password_keychain"]["ok"] is True
+    assert seen_envs[0]["TAURI_SIGNING_PRIVATE_KEY_PASSWORD"] == "secret-from-keychain"
+
+
 def test_collect_updater_key_diagnostics_accepts_public_signature_output(tmp_path):
     key = tmp_path / "tauri-key.pem"
     key.write_text("fake encrypted key")
@@ -87,3 +112,11 @@ def test_result_is_json_serializable_for_artifact(tmp_path):
     result = collect_updater_key_diagnostics(signing_key=key, runner=lambda *_args, **_kwargs: Proc(0, stdout="Signature: ok\n"))
 
     json.dumps(result)
+
+
+def test_private_shell_runbook_is_secret_free():
+    runbook = private_shell_runbook()
+
+    assert "updater-key-password" in runbook
+    assert "security add-generic-password" in runbook
+    assert "secret-from-keychain" not in runbook

@@ -40,8 +40,8 @@ scripts/
 | Set GitHub release secrets | `github_release_secrets.py` | Dry-run inventory and explicit `--apply` path for Developer ID certificate, Apple notarization, and Tauri updater secrets; never prints secret values |
 | Preflight GitHub release publication | `github_release_preflight.py` | Read-only check for GitHub repo access, updater endpoint, release workflow, required Actions secrets, and optional N+1 tag/release availability |
 | Diagnose signing credentials | `signing_doctor.py` | Writes `artifacts/release-evidence/signing.json`; probes Developer ID private-key access and notarytool profile before signing; `--print-repair-runbook` emits secret-free local recovery steps |
-| Diagnose updater key | `updater_key_doctor.py` | Writes `artifacts/release-evidence/updater-key-current.json`; signs a tiny temp file to verify the Tauri updater key and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` |
-| Generate updater manifest | `generate_appcast.py` | Requires `--signing-key` for release manifests; use `--allow-unsigned` only for local smoke fixtures |
+| Diagnose updater key | `updater_key_doctor.py` | Writes `artifacts/release-evidence/updater-key-current.json`; signs a tiny temp file to verify the Tauri updater key and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`, either from a private env var or a named macOS Keychain item |
+| Generate updater manifest | `generate_appcast.py` | Requires `--signing-key` for release manifests; can read encrypted-key password from a private env var or named macOS Keychain item; use `--allow-unsigned` only for local smoke fixtures |
 | Validate updater evidence | `updater_evidence.py` | Requires updater config, signed latest.json, artifact filename/hash/source-freshness checks, and local artifact signature/notarization checks |
 | Preflight updater channel | `updater_channel_preflight.py` | Fails fast when the configured GitHub `latest.json` is absent, unsigned, points at the wrong artifact/channel, is not newer than installed N, or advertises unreachable release assets |
 | Validate signed-app Computer Use sweep | `computer_use_sweep_evidence.py` | Produces PASS/FAIL JSON from `.ax.txt` + `.png` captures and fails stale approved/unsaved review states |
@@ -99,12 +99,15 @@ scripts/
 - **`generate_appcast.py`**: despite the historical name, this creates Tauri `latest.json`
   manifests, not Sparkle XML. It fails closed without a Tauri updater signing key unless
   `--allow-unsigned` is supplied for a non-release smoke fixture. Encrypted updater keys also need
-  `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` in non-interactive release runs. `--app` zips the `.app`
+  `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` in non-interactive release runs, or
+  `--password-keychain-service TAURI_SIGNING_PRIVATE_KEY_PASSWORD --password-keychain-account grader-updater`
+  after the private release operator stores the password in macOS Keychain. `--app` zips the `.app`
   bundle before signing the updater artifact.
 - **`updater_key_doctor.py`**: run before `generate_appcast.py` when the updater manifest is the
   blocker. It signs a temporary file and writes a secret-free JSON artifact; it does not print or
-  store the private key or password. A PASS means the key/password can sign updater artifacts, not
-  that the release manifest or clean-machine updater path has passed.
+  store the private key or password. Use `--print-private-runbook` for env-var and Keychain setup
+  commands that keep the password out of chat and repo files. A PASS means the key/password can sign
+  updater artifacts, not that the release manifest or clean-machine updater path has passed.
 - **`updater_channel_preflight.py`**: run immediately after publishing the signed N+1 release
   manifest and before asking a clean-machine tester to exercise the updater path:
   `uv run python scripts/updater_channel_preflight.py --current-version <installed-N-version>`.

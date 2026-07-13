@@ -42,6 +42,40 @@ def redact_secrets(value: str) -> str:
     return SECRET_RE.sub(lambda match: f"{match.group(1)}=<redacted>", value)
 
 
+def _load_password_from_keychain(
+    *,
+    service: str,
+    account: str | None = None,
+    runner: Runner = subprocess.run,
+) -> tuple[str | None, dict[str, Any]]:
+    command = ["security", "find-generic-password", "-w", "-s", service]
+    if account:
+        command.extend(["-a", account])
+    try:
+        proc = runner(
+            command,
+            text=True,
+            capture_output=True,
+            check=False,
+            timeout=10,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return None, {
+            "service": service,
+            "account": account,
+            "ok": False,
+            "output": redact_secrets(str(exc)),
+        }
+    password = (proc.stdout or "").rstrip("\n")
+    return (password or None), {
+        "service": service,
+        "account": account,
+        "ok": proc.returncode == 0 and bool(password),
+        "returncode": proc.returncode,
+        "stderr": redact_secrets((proc.stderr or "").strip()),
+    }
+
+
 def _run_signer(
     *,
     signing_key: Path,
@@ -88,9 +122,24 @@ def collect_updater_key_diagnostics(
     signing_key: Path = Path("tauri-updater-key.pem"),
     runner: Runner = subprocess.run,
     env: dict[str, str] | None = None,
+    password_keychain_service: str | None = None,
+    password_keychain_account: str | None = None,
 ) -> dict[str, Any]:
     if env is None:
         env = dict(os.environ)
+    env = dict(env)
+    password_env_present = bool(env.get("TAURI_SIGNING_PRIVATE_KEY_PASSWORD"))
+    password_source = "env" if password_env_present else "missing"
+    keychain_details: dict[str, Any] | None = None
+    if not password_env_present and password_keychain_service:
+        password, keychain_details = _load_password_from_keychain(
+            service=password_keychain_service,
+            account=password_keychain_account,
+            runner=runner,
+        )
+        if password:
+            env["TAURI_SIGNING_PRIVATE_KEY_PASSWORD"] = password
+            password_source = "keychain"
     password_present = bool(env.get("TAURI_SIGNING_PRIVATE_KEY_PASSWORD"))
     checks: dict[str, bool] = {
         "signing_key_present": signing_key.exists(),
@@ -105,7 +154,10 @@ def collect_updater_key_diagnostics(
         },
         "password_env_present": password_present,
         "password_env_name": "TAURI_SIGNING_PRIVATE_KEY_PASSWORD",
+        "password_source": password_source,
     }
+    if keychain_details is not None:
+        details["password_keychain"] = keychain_details
 
     output = ""
     command: list[str] = []
@@ -133,7 +185,7 @@ def collect_updater_key_diagnostics(
         if not checks["signing_key_present"]:
             reason = f"updater signing key not found at {signing_key}"
         elif not password_present and "password" in output.lower():
-            reason = "updater private key appears encrypted and TAURI_SIGNING_PRIVATE_KEY_PASSWORD is not set"
+            reason = "updater private key appears encrypted and no password was available from TAURI_SIGNING_PRIVATE_KEY_PASSWORD or Keychain"
         elif "password" in output.lower():
             reason = "updater private key password was rejected or unavailable"
         else:
@@ -149,21 +201,79 @@ def collect_updater_key_diagnostics(
     if reason:
         result["reason"] = reason
         result["remediation"] = [
-            "Set TAURI_SIGNING_PRIVATE_KEY_PASSWORD in the private release shell or CI secret store.",
+            "Set TAURI_SIGNING_PRIVATE_KEY_PASSWORD in the private release shell or CI secret store, or store it in macOS Keychain and pass --password-keychain-service.",
             "Rerun: uv run python scripts/updater_key_doctor.py --signing-key /path/to/tauri-updater-key.pem",
             "After PASS, regenerate latest.json with scripts/generate_appcast.py and rerun scripts/updater_evidence.py.",
         ]
     return result
 
 
+def private_shell_runbook() -> str:
+    return """# Tauri updater-key private-shell runbook
+
+Do this only in a private local release shell. Do not paste the updater key password into chat,
+commit it, or write it to a repo file.
+
+## Option A: one-shell environment variable
+
+```bash
+export TAURI_SIGNING_PRIVATE_KEY_PASSWORD='<updater-key-password>'
+uv run python scripts/updater_key_doctor.py --signing-key tauri-updater-key.pem --out artifacts/release-evidence/updater-key-current.json
+uv run python scripts/generate_appcast.py --dmg app/src-tauri/target/release/bundle/dmg/Grader.dmg --version 0.1.1 --signing-key tauri-updater-key.pem --output latest.json
+uv run python scripts/updater_evidence.py --manifest latest.json --artifact app/src-tauri/target/release/bundle/dmg/Grader.dmg --version 0.1.1 --out artifacts/release-evidence/updater-current.json
+unset TAURI_SIGNING_PRIVATE_KEY_PASSWORD
+```
+
+## Option B: macOS Keychain item
+
+```bash
+security add-generic-password -U \\
+  -a grader-updater \\
+  -s TAURI_SIGNING_PRIVATE_KEY_PASSWORD \\
+  -w '<updater-key-password>'
+
+uv run python scripts/updater_key_doctor.py \\
+  --signing-key tauri-updater-key.pem \\
+  --password-keychain-service TAURI_SIGNING_PRIVATE_KEY_PASSWORD \\
+  --password-keychain-account grader-updater \\
+  --out artifacts/release-evidence/updater-key-current.json
+
+uv run python scripts/generate_appcast.py \\
+  --dmg app/src-tauri/target/release/bundle/dmg/Grader.dmg \\
+  --version 0.1.1 \\
+  --signing-key tauri-updater-key.pem \\
+  --password-keychain-service TAURI_SIGNING_PRIVATE_KEY_PASSWORD \\
+  --password-keychain-account grader-updater \\
+  --output latest.json
+
+uv run python scripts/updater_evidence.py \\
+  --manifest latest.json \\
+  --artifact app/src-tauri/target/release/bundle/dmg/Grader.dmg \\
+  --version 0.1.1 \\
+  --out artifacts/release-evidence/updater-current.json
+```
+"""
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Diagnose Tauri updater signing-key readiness")
     parser.add_argument("--signing-key", type=Path, default=Path("tauri-updater-key.pem"))
     parser.add_argument("--out", type=Path, default=Path("artifacts/release-evidence/updater-key.json"))
+    parser.add_argument("--password-keychain-service", default=None, help="Read updater key password from this macOS Keychain service without printing it")
+    parser.add_argument("--password-keychain-account", default=None, help="Optional macOS Keychain account for --password-keychain-service")
+    parser.add_argument("--print-private-runbook", action="store_true", help="Print a secret-free private-shell runbook")
     parser.add_argument("--no-fail", action="store_true", help="Write diagnostics but exit 0 even when blocked")
     args = parser.parse_args()
 
-    result = collect_updater_key_diagnostics(signing_key=args.signing_key)
+    if args.print_private_runbook:
+        print(private_shell_runbook())
+        return
+
+    result = collect_updater_key_diagnostics(
+        signing_key=args.signing_key,
+        password_keychain_service=args.password_keychain_service,
+        password_keychain_account=args.password_keychain_account,
+    )
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n")
     print(json.dumps(result, indent=2, sort_keys=True))

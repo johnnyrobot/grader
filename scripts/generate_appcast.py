@@ -47,6 +47,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import re
 import subprocess
 import sys
@@ -70,6 +71,18 @@ def _sha256(path: Path) -> str:
     return h.hexdigest()
 
 
+def _load_password_from_keychain(service: str, account: str | None = None) -> str | None:
+    command = ["security", "find-generic-password", "-w", "-s", service]
+    if account:
+        command.extend(["-a", account])
+    try:
+        result = subprocess.run(command, capture_output=True, text=True, check=False, timeout=10)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    password = (result.stdout or "").rstrip("\n")
+    return password or None
+
+
 def _zip_app(app_path: Path, output: Path) -> Path:
     """Zip a signed .app bundle, preserving the Grader.app parent directory."""
     if not app_path.is_dir() or app_path.suffix != ".app":
@@ -83,12 +96,12 @@ def _zip_app(app_path: Path, output: Path) -> Path:
     return output
 
 
-def _sign_file(path: Path, key_path: Path) -> str | None:
+def _sign_file(path: Path, key_path: Path, env: dict[str, str] | None = None) -> str | None:
     """Sign a file using tauri CLI. Returns the signature string."""
     try:
         result = subprocess.run(
             ["cargo", "tauri", "signer", "sign", "--private-key-path", str(key_path), str(path)],
-            capture_output=True, text=True, check=True,
+            capture_output=True, text=True, check=True, env=env,
         )
         match = SIGNATURE_RE.search(result.stdout)
         if match:
@@ -116,6 +129,7 @@ def generate_manifest(
     signing_key: Path | None = None,
     release_url: str | None = None,
     allow_unsigned: bool = False,
+    signing_env: dict[str, str] | None = None,
 ) -> None:
     """Generate the Tauri updater manifest (latest.json)."""
 
@@ -131,7 +145,7 @@ def generate_manifest(
         print("  Pass --signing-key /path/to/key.pem or use --allow-unsigned for local smoke fixtures only.")
         sys.exit(1)
 
-    signature = _sign_file(artifact_path, signing_key) if signing_key else None
+    signature = _sign_file(artifact_path, signing_key, env=signing_env) if signing_key else None
     if not signature and not allow_unsigned:
         print("ERROR: updater manifest signing failed or returned an empty signature")
         sys.exit(1)
@@ -187,6 +201,10 @@ def main() -> None:
                         help="Path to Tauri signing key (.pem)")
     parser.add_argument("--release-url", default=None,
                         help="Download URL (default: GitHub releases URL)")
+    parser.add_argument("--password-keychain-service", default=None,
+                        help="Read updater key password from this macOS Keychain service without printing it")
+    parser.add_argument("--password-keychain-account", default=None,
+                        help="Optional macOS Keychain account for --password-keychain-service")
     parser.add_argument("--zip-output", type=Path, default=None,
                         help="When --app is used, where to write the zipped .app artifact")
     parser.add_argument("--allow-unsigned", action="store_true",
@@ -203,6 +221,20 @@ def main() -> None:
             sys.exit(1)
         artifact = _zip_app(app, args.zip_output or args.output.with_name(f"{app.stem}.zip"))
 
+    signing_env = None
+    if args.password_keychain_service and not os.environ.get("TAURI_SIGNING_PRIVATE_KEY_PASSWORD"):
+        password = _load_password_from_keychain(
+            args.password_keychain_service,
+            args.password_keychain_account,
+        )
+        if password:
+            signing_env = dict(os.environ)
+            signing_env["TAURI_SIGNING_PRIVATE_KEY_PASSWORD"] = password
+        else:
+            print("ERROR: updater key password was not found in macOS Keychain")
+            print("  Store it first with security add-generic-password, or set TAURI_SIGNING_PRIVATE_KEY_PASSWORD in a private release shell.")
+            sys.exit(1)
+
     generate_manifest(
         artifact_path=artifact,
         version=args.version,
@@ -210,6 +242,7 @@ def main() -> None:
         signing_key=args.signing_key,
         release_url=args.release_url,
         allow_unsigned=args.allow_unsigned,
+        signing_env=signing_env,
     )
 
 
