@@ -116,6 +116,34 @@ def test_collect_secret_values_reads_updater_password_from_keychain(tmp_path):
     assert result["available"]["TAURI_SIGNING_PRIVATE_KEY_PASSWORD"]["source"] == (
         "keychain:TAURI_SIGNING_PRIVATE_KEY_PASSWORD:grader-updater"
     )
+    assert result["diagnostics"]["updater_password_keychain"]["ok"] is True
+    assert "updater-pass-from-keychain" not in str(result["diagnostics"])
+
+
+def test_collect_records_failed_keychain_lookup_without_secret_values(tmp_path):
+    key = tmp_path / "tauri.pem"
+    key.write_text("private updater key")
+
+    def fake_run(command, **_kwargs):
+        return _proc(command, 44, "", "The specified item could not be found in the keychain.\n")
+
+    result = collect(
+        env={},
+        tauri_signing_key=key,
+        updater_password_keychain_service="TAURI_SIGNING_PRIVATE_KEY_PASSWORD",
+        updater_password_keychain_account="grader-updater",
+        runner=fake_run,
+    )
+
+    diagnostic = result["diagnostics"]["updater_password_keychain"]
+    assert result["status"] == "BLOCKED_GITHUB_RELEASE_SECRETS"
+    assert "TAURI_SIGNING_PRIVATE_KEY_PASSWORD" in result["missing"]
+    assert diagnostic["ok"] is False
+    assert diagnostic["returncode"] == 44
+    assert diagnostic["service"] == "TAURI_SIGNING_PRIVATE_KEY_PASSWORD"
+    assert diagnostic["account"] == "grader-updater"
+    assert "could not be found" in diagnostic["stderr"]
+    assert "private updater key" not in str(result)
 
 
 def test_apply_uses_stdin_not_command_arguments(tmp_path):

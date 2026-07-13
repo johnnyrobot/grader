@@ -114,8 +114,31 @@ def collect_secret_values(
     updater_password_keychain_account: str | None = None,
     runner: Runner = subprocess.run,
 ) -> list[SecretValue]:
+    values, _diagnostics = _collect_secret_values_and_diagnostics(
+        env=env,
+        certificate_p12=certificate_p12,
+        tauri_signing_key=tauri_signing_key,
+        signing_identity=signing_identity,
+        updater_password_keychain_service=updater_password_keychain_service,
+        updater_password_keychain_account=updater_password_keychain_account,
+        runner=runner,
+    )
+    return values
+
+
+def _collect_secret_values_and_diagnostics(
+    *,
+    env: dict[str, str] | None = None,
+    certificate_p12: Path | None = None,
+    tauri_signing_key: Path | None = None,
+    signing_identity: str | None = None,
+    updater_password_keychain_service: str | None = None,
+    updater_password_keychain_account: str | None = None,
+    runner: Runner = subprocess.run,
+) -> tuple[list[SecretValue], dict[str, Any]]:
     env = dict(os.environ if env is None else env)
     values: list[SecretValue] = []
+    diagnostics: dict[str, Any] = {}
 
     cert_value, cert_source = _first_env(env, "APPLE_CERTIFICATE_P12_BASE64")
     if cert_value is None and certificate_p12 is not None:
@@ -156,6 +179,8 @@ def collect_secret_values(
             account=updater_password_keychain_account,
             runner=runner,
         )
+        if keychain_details is not None:
+            diagnostics["updater_password_keychain"] = keychain_details
         if updater_password:
             updater_password_source = (
                 "keychain:"
@@ -168,7 +193,7 @@ def collect_secret_values(
     for required in REQUIRED_ACTIONS_SECRETS:
         if required not in known:
             values.append(SecretValue(required, None, ""))
-    return values
+    return values, diagnostics
 
 
 def _summary(values: list[SecretValue]) -> tuple[dict[str, Any], list[str]]:
@@ -217,7 +242,7 @@ def collect(
     apply: bool = False,
     runner: Runner = subprocess.run,
 ) -> dict[str, Any]:
-    values = collect_secret_values(
+    values, diagnostics = _collect_secret_values_and_diagnostics(
         env=env,
         certificate_p12=certificate_p12,
         tauri_signing_key=tauri_signing_key,
@@ -252,6 +277,7 @@ def collect(
         "missing": missing,
         "failures": failures,
         "applied_secrets": applied,
+        "diagnostics": diagnostics,
         "notes": [
             "Secret values are not included in this artifact.",
             "APPLE_CERTIFICATE_P12_BASE64 is the base64-encoded Developer ID Application .p12.",

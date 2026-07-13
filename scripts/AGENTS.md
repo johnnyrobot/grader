@@ -93,7 +93,9 @@ scripts/
   can read `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` from a named macOS Keychain item with
   `--updater-password-keychain-service TAURI_SIGNING_PRIVATE_KEY_PASSWORD --updater-password-keychain-account grader-updater`
   so the updater-key password does not need to be exported or pasted. Never paste those values into
-  chat or commit generated runbooks containing filled values.
+  chat or commit generated runbooks containing filled values. When Keychain lookup is requested, the
+  generated JSON includes secret-free diagnostics such as service/account/return code so a wrong or
+  missing Keychain item is visible without printing the password.
 - **`updater_evidence.py`**: blocks public beta when `latest.json` is missing, any platform
   signature is empty, the manifest does not reference the supplied artifact, the supplied
   manifest/artifact predates the current git commit, or the local artifact fails
