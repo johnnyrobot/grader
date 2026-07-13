@@ -76,14 +76,15 @@ export function SplitView({ item, onBack }: Props) {
   }, [item.id, scores, feedback]);
 
   const handleKey = useCallback((event: KeyboardEvent) => {
+    if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+      event.preventDefault();
+      changed ? handleOverride() : handleApprove();
+      return;
+    }
     if (feedbackFocused) return;
     if (event.key.toLowerCase() === "a") {
       event.preventDefault();
       handleApprove();
-    }
-    if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
-      event.preventDefault();
-      changed ? handleOverride() : handleApprove();
     }
     if (event.key === "Escape") {
       event.preventDefault();
