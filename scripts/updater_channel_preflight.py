@@ -1,0 +1,173 @@
+#!/usr/bin/env python3
+"""Preflight the live updater channel before the N-to-N+1 clean-machine test.
+
+This script does not install an update and does not replace the required
+clean-machine updater-path evidence. It catches the common release-channel
+failures before a tester starts the app:
+
+  - configured updater endpoint is missing or unreachable
+  - latest.json is unsigned or malformed
+  - advertised version is not newer than the installed/current version
+  - platform URLs do not point at a release asset
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
+
+import httpx
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+REQUIRED_PLATFORMS = ("darwin-aarch64", "darwin-x86_64")
+
+
+def _load_config(path: Path) -> dict[str, Any]:
+    return json.loads(path.read_text())
+
+
+def _version_parts(value: str) -> list[int]:
+    parts: list[int] = []
+    for token in value.split("."):
+        numeric = "".join(ch for ch in token if ch.isdigit())
+        parts.append(int(numeric or "0"))
+    return parts
+
+
+def _version_gt(candidate: str, current: str) -> bool:
+    a = _version_parts(candidate)
+    b = _version_parts(current)
+    while len(a) < len(b):
+        a.append(0)
+    while len(b) < len(a):
+        b.append(0)
+    return a > b
+
+
+def _artifact_name_from_url(url: str) -> str:
+    return url.rstrip("/").rsplit("/", 1)[-1]
+
+
+def collect(
+    *,
+    config_path: Path = Path("app/src-tauri/tauri.conf.json"),
+    current_version: str | None = None,
+    manifest_url: str | None = None,
+    expected_artifact_name: str = "Grader.dmg",
+    timeout: float = 20,
+) -> dict[str, Any]:
+    config = _load_config(config_path)
+    configured_version = str(config.get("version") or "")
+    current = current_version or configured_version
+    updater = config.get("plugins", {}).get("updater", {})
+    endpoints = updater.get("endpoints") or []
+    url = manifest_url or (endpoints[0] if endpoints else "")
+
+    failures: list[str] = []
+    details: dict[str, Any] = {
+        "config_path": str(config_path),
+        "config_version": configured_version,
+        "current_version": current,
+        "configured_endpoints": endpoints,
+        "manifest_url": url,
+        "expected_artifact_name": expected_artifact_name,
+    }
+
+    if not url:
+        failures.append("updater manifest URL is not configured")
+        manifest: dict[str, Any] = {}
+    else:
+        try:
+            response = httpx.get(url, timeout=timeout, follow_redirects=True)
+            details["http_status"] = response.status_code
+            details["final_url"] = str(response.url)
+            if response.status_code != 200:
+                failures.append(f"manifest returned HTTP {response.status_code}")
+                manifest = {}
+            else:
+                manifest = response.json()
+        except Exception as exc:
+            failures.append(f"could not fetch updater manifest: {exc}")
+            manifest = {}
+
+    latest = str(manifest.get("version") or "")
+    details["manifest_version"] = latest
+    details["pub_date"] = manifest.get("pub_date")
+    if not latest:
+        failures.append("manifest version is missing")
+    elif not _version_gt(latest, current):
+        failures.append(f"manifest version {latest!r} is not newer than current version {current!r}")
+
+    platforms = manifest.get("platforms") if isinstance(manifest, dict) else None
+    if not isinstance(platforms, dict):
+        failures.append("manifest platforms object is missing")
+        platforms = {}
+    platform_details: dict[str, Any] = {}
+    for platform in REQUIRED_PLATFORMS:
+        entry = platforms.get(platform)
+        if not isinstance(entry, dict):
+            failures.append(f"manifest platform {platform} is missing")
+            continue
+        signature = str(entry.get("signature") or "")
+        artifact_url = str(entry.get("url") or "")
+        artifact_name = _artifact_name_from_url(artifact_url) if artifact_url else ""
+        platform_details[platform] = {
+            "url": artifact_url,
+            "artifact_name": artifact_name,
+            "signature_present": bool(signature),
+        }
+        if not signature:
+            failures.append(f"manifest platform {platform} is missing signature")
+        if not artifact_url:
+            failures.append(f"manifest platform {platform} is missing artifact URL")
+        elif expected_artifact_name and artifact_name != expected_artifact_name:
+            failures.append(
+                f"manifest platform {platform} artifact {artifact_name!r} does not match expected {expected_artifact_name!r}"
+            )
+        if "github.com/johnnyrobot/grader/releases/download/" not in artifact_url:
+            failures.append(f"manifest platform {platform} URL is not in the johnnyrobot/grader release channel")
+    details["platforms"] = platform_details
+
+    status = "PASS" if not failures else "BLOCKED_UPDATER_CHANNEL"
+    return {
+        "status": status,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "failures": failures,
+        "details": details,
+    }
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Preflight the live Tauri updater channel")
+    parser.add_argument("--config", type=Path, default=Path("app/src-tauri/tauri.conf.json"))
+    parser.add_argument("--current-version", default=None)
+    parser.add_argument("--manifest-url", default=None)
+    parser.add_argument("--expected-artifact-name", default="Grader.dmg")
+    parser.add_argument("--timeout", type=float, default=20)
+    parser.add_argument("--out", type=Path, default=Path("artifacts/release-evidence/updater-channel-current.json"))
+    parser.add_argument("--no-fail", action="store_true", help="Write diagnostics but exit 0 when blocked")
+    args = parser.parse_args()
+
+    result = collect(
+        config_path=args.config,
+        current_version=args.current_version,
+        manifest_url=args.manifest_url,
+        expected_artifact_name=args.expected_artifact_name,
+        timeout=args.timeout,
+    )
+    args.out.parent.mkdir(parents=True, exist_ok=True)
+    args.out.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n")
+    print(f"status={result['status']}")
+    print(f"json={args.out}")
+    if result["failures"]:
+        print("failures=" + "; ".join(result["failures"]))
+    if result["status"] != "PASS" and not args.no_fail:
+        raise SystemExit(1)
+
+
+if __name__ == "__main__":
+    main()

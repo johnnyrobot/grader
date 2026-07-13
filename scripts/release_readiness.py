@@ -292,6 +292,18 @@ def build_e2e_matrix(evidence: dict[str, Any]) -> list[dict[str, str | bool]]:
             summary=_gate_summary(evidence.get("updater", {})),
         ),
         _matrix_row(
+            id="updater-release-channel-preflight",
+            area="updates",
+            requirement="Live release channel advertises a newer signed Grader.dmg before clean-machine N to N+1 testing starts.",
+            gate="updater_channel",
+            status=_gate_status(evidence, "updater_channel"),
+            evidence=_artifact_path(
+                evidence.get("updater_channel", {}),
+                "artifacts/release-evidence/updater-channel-current.json",
+            ),
+            summary=_gate_summary(evidence.get("updater_channel", {})),
+        ),
+        _matrix_row(
             id="developer-id-notarization",
             area="distribution",
             requirement="Developer ID signing, hardened runtime, notarization, and staple preflight pass.",
@@ -502,6 +514,22 @@ def _normalize_updater_key_artifact(path: Path | None) -> dict[str, Any]:
     return _normalize_artifact(path, "SKIP")
 
 
+def _normalize_updater_channel_artifact(path: Path | None, expected_version: str) -> dict[str, Any]:
+    channel = _normalize_artifact(path, "SKIP")
+    if channel.get("status") != "PASS":
+        return channel
+    details = channel.get("details", {})
+    if not isinstance(details, dict):
+        details = {}
+    return _fail_for_version_mismatch(
+        channel,
+        expected_version=expected_version,
+        pairs=[
+            ("details.current_version", details.get("current_version")),
+        ],
+    )
+
+
 def _augment_updater_with_key_diagnostic(
     updater: dict[str, Any],
     updater_key: dict[str, Any],
@@ -629,6 +657,10 @@ def collect_evidence(args: argparse.Namespace) -> dict[str, Any]:
         _normalize_updater_artifact(args.updater_artifact, expected_version),
         evidence["updater_key"],
     )
+    evidence["updater_channel"] = _normalize_updater_channel_artifact(
+        args.updater_channel_artifact,
+        expected_version,
+    )
     evidence["signing"] = _signing_preflight()
     evidence["clean_machine"] = _normalize_clean_machine_artifact(
         args.clean_machine_artifact,
@@ -710,6 +742,12 @@ def main() -> None:
     parser.add_argument("--frontend-artifact", type=Path, default=None)
     parser.add_argument("--rust-artifact", type=Path, default=None)
     parser.add_argument("--updater-artifact", type=Path, default=None)
+    parser.add_argument(
+        "--updater-channel-artifact",
+        type=Path,
+        default=None,
+        help="Optional live release-channel preflight artifact from scripts/updater_channel_preflight.py",
+    )
     parser.add_argument(
         "--updater-key-artifact",
         type=Path,

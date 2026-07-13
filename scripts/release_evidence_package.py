@@ -124,14 +124,16 @@ Current readiness verdict: `{summary.get('readiness_verdict', 'unknown')}`
    `https://github.com/johnnyrobot/grader/releases/latest/download/latest.json`.
    The private release operator should set `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` only in the release
    shell or CI secret store when generating the signed N+1 manifest.
-3. Launch N, wait for the update banner, use the in-app `Install update and restart` action, and
+3. Run `uv run python scripts/updater_channel_preflight.py --current-version <installed-N-version>`
+   and require `status=PASS` before starting the clean-machine updater-path test.
+4. Launch N, wait for the update banner, use the in-app `Install update and restart` action, and
    confirm the relaunched app is N+1. Do not manually replace the app for this check.
-4. Fill `clean-machine-manual-evidence.json` while following `clean-machine-runbook.md`.
-5. Run `scripts/computer_use_sweep_evidence.py` against the signed-app Computer Use capture folder and
+5. Fill `clean-machine-manual-evidence.json` while following `clean-machine-runbook.md`.
+6. Run `scripts/computer_use_sweep_evidence.py` against the signed-app Computer Use capture folder and
    place the PASS JSON in the evidence root as `computer_use_instructor_sweep.json`.
-6. Run `scripts/clean_machine_evidence.py` with the filled manual evidence, release DMG, signed
+7. Run `scripts/clean_machine_evidence.py` with the filled manual evidence, release DMG, signed
    updater manifest, and expected app version.
-7. Rerun `scripts/release_readiness.py` and require verdict `supervised_public_beta` before public
+8. Rerun `scripts/release_readiness.py` and require verdict `supervised_public_beta` before public
    beta claims.
 
 Do not add student work, Canvas tokens, Apple credentials, updater private keys, or private-key

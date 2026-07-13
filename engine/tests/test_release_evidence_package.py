@@ -58,6 +58,7 @@ def test_build_package_copies_artifacts_and_writes_runbook_template(tmp_path):
     assert template["computer_use_instructor_sweep"]["assertions"]
     readme = (out / "README.md").read_text()
     assert "TAURI_SIGNING_PRIVATE_KEY_PASSWORD" in readme
+    assert "updater_channel_preflight.py" in readme
     manifest_payload = json.loads((out / "release-evidence-package.json").read_text())
     assert manifest_payload["files"]["dmg"]["sha256"] == package["files"]["dmg"]["sha256"]
 
