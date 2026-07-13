@@ -62,7 +62,7 @@ beta with real student work.
 
 Confirmed in the current checkout:
 
-- Python tests: 67 passed, 12 intentionally skipped.
+- Python tests: 68 passed, 12 intentionally skipped.
 - Frontend tests: 11 passed; TypeScript/Vite production build and Rust `cargo check` pass.
 - The complete mocked desktop workflow passes in Playwright across onboarding, queue, review,
   settings, and model management. The visual sweep records 15 screens, 153 visible controls,
@@ -70,14 +70,15 @@ Confirmed in the current checkout:
 - The privacy gate passes in isolation: 3/3 captured connections were allowlisted.
 - The performance gate passes: 37.8 seconds for a 1,500-word essay, with a projected 30-item
   batch of 1,134 seconds against a 2,700-second budget.
-- Public-proxy quality/fairness gate profiles now reject tiny committed mechanics fixtures in
-  release mode. Those fixtures prove gate wiring only; they are not accuracy evidence.
+- Public-proxy quality now passes on the local anchored Mohler ASAG public-proxy artifact:
+  40/40 scored rows, QWK 0.845 against a 0.623 human-ceiling-adjusted floor, with both source
+  checks passing. Fairness perturbation scoring is still required before this can unlock beta.
 - Guarded live Canvas app E2E passes on `canvas.johnnyrobot.ai` course `106`, assignment `2841`:
   import → targeted grade → teacher override/approval → Canvas post → Progress completed →
   score/comment read-back.
 - `scripts/release_readiness.py` now writes a consolidated JSON/Markdown verdict. The current local
-  verdict is `blocked` because public-proxy quality/fairness need real open data and clean-machine
-  signed/notarized evidence is missing.
+  verdict remains `blocked` because public-proxy fairness and clean-machine signed/notarized
+  evidence are still missing.
 
 Public-beta blockers:
 
@@ -131,8 +132,8 @@ cd app/src-tauri && cargo check                      # desktop Rust boundary
 ## Public beta gate commands
 
 ```bash
-uv run python scripts/build_public_proxy.py mohler-asag --out artifacts/public_proxy/mohler_asag --grade
-uv run python scripts/build_public_proxy.py mohler-asag --out artifacts/public_proxy/mohler_asag --grade --grade-perturbations
+uv run python scripts/build_public_proxy.py mohler-asag --out artifacts/public_proxy/mohler_asag --grade --anchor-exemplars-per-source 40 --anchor-k 6
+uv run python scripts/build_public_proxy.py mohler-asag --out artifacts/public_proxy/mohler_asag --grade --grade-perturbations --anchor-exemplars-per-source 40 --anchor-k 6
 uv run python engine/gates/quality.py --profile public_proxy --public-proxy-dir artifacts/public_proxy/mohler_asag
 uv run python engine/gates/bias.py --profile public_proxy --public-proxy-dir artifacts/public_proxy/mohler_asag
 uv run python engine/verify_citations.py --fixtures fixtures/citations/citation_fixtures.json --output artifacts/citation-results.json
@@ -150,7 +151,7 @@ uv run python engine/gates/quality.py --profile public_proxy --public-proxy-dir 
 uv run python engine/gates/bias.py --profile public_proxy --public-proxy-dir fixtures/public_proxy --allow-mechanics-fixture
 ```
 
-For diagnostic comparisons, the Mohler builder can also run limited or anchor-conditioned scoring
+For diagnostic comparisons, the Mohler builder can also run limited anchor-conditioned scoring
 passes, for example:
 
 ```bash
@@ -159,9 +160,10 @@ uv run python scripts/build_public_proxy.py mohler-asag --out artifacts/public_p
 
 The calibration run uses [Mohler ASAG](https://huggingface.co/datasets/nkazi/MohlerASAG)
 (CC BY 4.0) — 2,273 short answers, each scored by **two independent human graders**, so we can
-report agreement against the *human ceiling* rather than against an arbitrary target.
-The current 40-item Mohler public-proxy scoring run produced 38 scored rows and failed the quality
-gate at QWK 0.272, so it is honest evidence that the app is not public-beta ready yet.
+report agreement against the *human ceiling* rather than against an arbitrary target. The current
+anchored 40-item Mohler public-proxy scoring run produced 40 scored rows and passes the quality
+gate at QWK 0.845 against a 0.623 adjusted floor. The app is still not public-beta ready until
+fairness perturbation scoring and clean-machine release evidence also pass.
 
 ## Docs
 

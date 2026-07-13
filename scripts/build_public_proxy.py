@@ -94,8 +94,14 @@ def select_mohler_rows(
 
     clean = df.dropna(subset=list(needed_columns)).copy()
     clean = clean[clean["student_answer"].astype(str).str.replace("<STOP>", "", regex=False).str.len() > 10]
-    counts = clean.groupby("question").size().sort_values(ascending=False)
-    questions = [question for question, count in counts.items() if count >= items_per_source]
+    ranked_questions: list[tuple[int, int, int, str]] = []
+    for question, rows in clean.groupby("question"):
+        if len(rows) < items_per_source:
+            continue
+        bands = {round(float(score)) for score in rows["score_avg"]}
+        ranked_questions.append((len(bands), min(bands), len(rows), question))
+    ranked_questions.sort(key=lambda item: (-item[0], item[1], -item[2], item[3]))
+    questions = [question for _, _, _, question in ranked_questions]
     if len(questions) < sources:
         raise ValueError(
             f"only {len(questions)} Mohler questions have >= {items_per_source} usable rows; need {sources}"
@@ -104,9 +110,10 @@ def select_mohler_rows(
     selected: list[SelectedMohlerRow] = []
     for source_index, question in enumerate(questions[:sources], start=1):
         source_id = f"mohler_q{source_index:02d}"
-        rows = clean[clean["question"] == question].sample(
+        rows = _score_balanced_sample(
+            clean[clean["question"] == question],
             n=items_per_source,
-            random_state=seed + source_index,
+            seed=seed + source_index,
         )
         selected.extend(SelectedMohlerRow(source_id=source_id, row=row) for _, row in rows.iterrows())
     return selected

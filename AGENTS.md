@@ -181,8 +181,8 @@ python scripts/seed_canvas_sandbox.py --teardown --course-id 106 --apply
 python fixtures/citations/generate_fixtures.py
 
 # Public beta readiness gates
-uv run python scripts/build_public_proxy.py mohler-asag --out artifacts/public_proxy/mohler_asag --grade
-uv run python scripts/build_public_proxy.py mohler-asag --out artifacts/public_proxy/mohler_asag --grade --grade-perturbations
+uv run python scripts/build_public_proxy.py mohler-asag --out artifacts/public_proxy/mohler_asag --grade --anchor-exemplars-per-source 40 --anchor-k 6
+uv run python scripts/build_public_proxy.py mohler-asag --out artifacts/public_proxy/mohler_asag --grade --grade-perturbations --anchor-exemplars-per-source 40 --anchor-k 6
 uv run python engine/gates/quality.py --profile public_proxy --public-proxy-dir artifacts/public_proxy/mohler_asag
 uv run python engine/gates/bias.py --profile public_proxy --public-proxy-dir artifacts/public_proxy/mohler_asag
 uv run python engine/gates/quality.py --profile public_proxy --public-proxy-dir fixtures/public_proxy --allow-mechanics-fixture  # smoke only
@@ -197,7 +197,8 @@ uv run python scripts/release_readiness.py --profile public_beta --out artifacts
 - **P0 complete:** `qwen3:8b` + Pydantic AI tool output is schema-reliable; MiniCPM-V replaced
   Qwen3-VL for transcription.
 - **P1 complete:** five calibration experiments ran. At k=6, anchors improved QWK by about
-  +0.127/+0.135, but absolute public-data QWK remains far below the 0.70 release floor.
+  +0.127/+0.135. The local anchored Mohler ASAG public-proxy artifact now passes quality
+  at QWK 0.845 against a 0.623 human-ceiling-adjusted floor.
 - **P2 in progress:** the complete light-first neuroinclusive UI is implemented across onboarding,
   queue, review, settings, and model management. Eleven component tests and three mocked Playwright
   E2E tests pass, including a 15-screen visual sweep with 153 visible controls, automated
@@ -213,11 +214,11 @@ uv run python scripts/release_readiness.py --profile public_beta --out artifacts
   fails the >=90% phase goal, so beta readiness accepts it only as visibly experimental.
 - **P5 in progress:** privacy passes in isolation (3/3 captured connections allowlisted) and the
   performance gate passes at 38.3s per 1,500-word essay. Public-proxy quality/fairness release mode
-  now rejects the tiny committed mechanics fixtures. A local 40-item Mohler ASAG public-proxy run
-  produced 38 scored rows and failed quality at QWK 0.272; fairness still requires perturbation
-  scoring. Teacher-local validation still requires authorized instructor data. Signing/notarization
-  still needs clean-machine release validation.
-- **Coverage:** Python collects 79 cases (67 pass, 12 skip). Frontend has 11 passing component
+  now rejects the tiny committed mechanics fixtures. The local anchored 40-item Mohler ASAG
+  public-proxy artifact passes quality at QWK 0.845; fairness still requires perturbation scoring.
+  Teacher-local validation still requires authorized instructor data. Signing/notarization still
+  needs clean-machine release validation.
+- **Coverage:** Python collects 80 cases (68 pass, 12 skip). Frontend has 11 passing component
   tests plus three passing Playwright E2E tests.
 - **Public beta verdict:** not ready for unattended public testing with real student work. Limit
   current use to a developer-assisted alpha with synthetic or institution-approved test data.

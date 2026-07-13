@@ -33,11 +33,43 @@ def _fake_mohler(rows_per_question: int = 4) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def test_select_mohler_rows_balances_sources():
-    selected = select_mohler_rows(_fake_mohler(), sources=2, items_per_source=3, seed=7)
+def test_select_mohler_rows_prefers_score_diversity_over_size():
+    rows = []
+    for answer_index in range(10):
+        rows.append({
+            "id": f"HIGH.A{answer_index:02d}",
+            "question": "Large high-score-only question?",
+            "instructor_answer": "Reference high",
+            "student_answer": f"High scoring answer {answer_index} with enough content",
+            "score_grader_1": 5.0,
+            "score_grader_2": 5.0,
+            "score_avg": 5.0,
+        })
+    for answer_index, score in enumerate([0, 1, 2, 3, 4, 5]):
+        rows.append({
+            "id": f"DIVERSE.A{answer_index:02d}",
+            "question": "Smaller diverse question?",
+            "instructor_answer": "Reference diverse",
+            "student_answer": f"Diverse answer {answer_index} with enough content",
+            "score_grader_1": float(score),
+            "score_grader_2": float(score),
+            "score_avg": float(score),
+        })
+    selected = select_mohler_rows(pd.DataFrame(rows), sources=1, items_per_source=6, seed=7)
 
-    assert len(selected) == 6
+    assert {row.row["question"] for row in selected} == {"Smaller diverse question?"}
+
+
+def test_select_mohler_rows_balances_sources():
+    selected = select_mohler_rows(_fake_mohler(rows_per_question=8), sources=2, items_per_source=6, seed=7)
+
+    assert len(selected) == 12
     assert {row.source_id for row in selected} == {"mohler_q01", "mohler_q02"}
+    by_source = {
+        source: sorted({round(float(row.row["score_avg"])) for row in selected if row.source_id == source})
+        for source in {"mohler_q01", "mohler_q02"}
+    }
+    assert by_source == {"mohler_q01": [0, 1, 2, 3, 4, 5], "mohler_q02": [0, 1, 2, 3, 4, 5]}
 
 
 def test_row_to_example_has_public_proxy_contract():

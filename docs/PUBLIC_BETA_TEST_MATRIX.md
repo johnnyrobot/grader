@@ -21,8 +21,8 @@ misrepresented as grading accuracy.
 | Review | Instructor can approve unchanged AI draft, edit scores/feedback, save override, use keyboard shortcuts, and return | Playwright + keyboard-only check + visual sweep | PASS on synthetic fixture; visual evidence generated under `artifacts/release-evidence/visual-sweep/` | PASS mechanics; not a grading-quality gate |
 | Settings | General, appearance, model defaults, and rubrics tabs can be opened, edited, saved, reset, and loaded | Playwright + visual sweep | PASS on synthetic fixture; all settings tabs captured in the visual sweep | PASS mechanics; not a grading-quality gate |
 | Model manager | Runtime status, refresh, install buttons, installed/needed states, and inventory display work | Playwright + visual sweep | PASS on synthetic fixture; install controls captured after WCAG contrast fix | PASS mechanics; not a grading-quality gate |
-| Public-proxy quality | QWK >= 0.70 or adjusted human-ceiling floor, source floor, mean-error bounds, no leakage | `scripts/build_public_proxy.py mohler-asag --grade`, then `engine/gates/quality.py --profile public_proxy --public-proxy-dir artifacts/public_proxy/mohler_asag` | FAIL on local 40-item Mohler run: 38 scored rows, QWK 0.272 vs adjusted floor 0.592, source `mohler_q01` below floor | PASS only with real open human-scored artifacts |
-| Public-proxy fairness | Style perturbation deltas within thresholds | `scripts/build_public_proxy.py mohler-asag --grade --grade-perturbations`, then `engine/gates/bias.py --profile public_proxy --public-proxy-dir artifacts/public_proxy/mohler_asag` | FAIL until perturbation scores are generated; tiny fixture remains smoke-only with `--allow-mechanics-fixture` | PASS only with real public-proxy artifacts |
+| Public-proxy quality | QWK >= 0.70 or adjusted human-ceiling floor, source floor, mean-error bounds, no leakage | `scripts/build_public_proxy.py mohler-asag --grade --anchor-exemplars-per-source 40 --anchor-k 6`, then `engine/gates/quality.py --profile public_proxy --public-proxy-dir artifacts/public_proxy/mohler_asag` | PASS on local anchored 40-item Mohler ASAG artifact: 40/40 scored rows, QWK 0.845 vs adjusted floor 0.623, both source checks pass, mean error +0.10 | PASS for supervised public-proxy quality; still separate from teacher-local claims |
+| Public-proxy fairness | Style perturbation deltas within thresholds | `scripts/build_public_proxy.py mohler-asag --grade --grade-perturbations --anchor-exemplars-per-source 40 --anchor-k 6`, then `engine/gates/bias.py --profile public_proxy --public-proxy-dir artifacts/public_proxy/mohler_asag` | FAIL until perturbation scores are generated; tiny fixture remains smoke-only with `--allow-mechanics-fixture` | PASS only with real public-proxy perturbation artifacts |
 | Teacher-local quality | Instructor-specific QWK and override behavior | `fixtures/golden_set/` local authorized data | Missing | Not required for generic public proxy claim; required for teacher-specific claim |
 | Citations | >=90% fixture accuracy, zero false positives, 3/3 retractions | `engine/verify_citations.py --output ...` | PASS_EXPERIMENTAL: 20/29 accuracy, 0 false positives, 3/3 retractions; UI labels citation checks experimental | PASS enabled mode or visibly experimental with zero false positives and all retractions caught |
 | Canvas app round trip | Import -> teacher override/approval -> post -> Progress completed -> read-back exact score and teacher feedback comment | `scripts/live_canvas_e2e.py --apply` against `ZZ-GRADER-TEST` | PASS: live guarded run on `canvas.johnnyrobot.ai`, course `106`, assignment `2841`, Canvas user `8`; score `4` and one teacher comment read back | PASS for score/comment beta scope; rubric assessment remains disabled until Canvas criterion-ID mapping exists, and attachment write-back still needs separate evidence |
@@ -32,7 +32,7 @@ misrepresented as grading accuracy.
 | Accessibility | No serious/critical WCAG violations, 200% text scaling, keyboard-only loop | Playwright axe + visual inspection | PASS on synthetic fixture; visual sweep covers 15 screens and 153 visible controls | PASS mechanics; still requires clean-machine app check |
 | Signing/notarization | Signed/notarized app or DMG passes codesign, stapler, spctl | release script + clean Mac | Signing preflight pass; no clean artifact | PASS only with notarized artifact evidence |
 | Clean-machine | First launch, model setup, crash recovery, keyboard review, updater N->N+1 | manual/VM evidence JSON | Missing | Required for public beta |
-| Release report | Consolidated verdict is `supervised_public_beta` | `scripts/release_readiness.py` | BLOCKED: Canvas now PASS; public-proxy quality/fairness and clean-machine evidence missing | Final release gate |
+| Release report | Consolidated verdict is `supervised_public_beta` | `scripts/release_readiness.py` | BLOCKED: Canvas and public-proxy quality now PASS; public-proxy fairness and clean-machine evidence missing | Final release gate |
 
 ## Required Manual Visual Sweep
 
@@ -53,8 +53,8 @@ inspection after packaging.
 
 ## Current Verdict
 
-Not public beta ready. The current real-data public-proxy quality run fails on Mohler ASAG, and
-fairness still needs perturbation scoring. Clean-machine signed/notarized evidence is also
-incomplete. Canvas app-level score/comment round-trip now passes, but Canvas rubric-assessment
-posting is intentionally disabled until real Canvas criterion IDs can be mapped, and attachment
-write-back still needs separate evidence.
+Not public beta ready. The current anchored real-data public-proxy quality run now passes on
+Mohler ASAG, but fairness still needs perturbation scoring. Clean-machine signed/notarized
+evidence is also incomplete. Canvas app-level score/comment round-trip now passes, but Canvas
+rubric-assessment posting is intentionally disabled until real Canvas criterion IDs can be mapped,
+and attachment write-back still needs separate evidence.
