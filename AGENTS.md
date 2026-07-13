@@ -60,7 +60,7 @@ Nested guidance exists in `engine/AGENTS.md`, `engine/grader/AGENTS.md`,
 | Grading behavior | `engine/grader/agent.py`, `schema.py`, `triage.py` | `grade()` is the non-raising entry point |
 | Calibration/anchors | `engine/grader/exemplars.py`, `calibration.py`, `overrides.py` | P1 result artifacts live in `engine/results_pointer_*.json` |
 | Desktop UX | `app/src/App.tsx`, `app/src/screens/`, `app/src/index.css` | Light-first semantic theme; queue and split view are the central workflow |
-| Frontend verification | `app/src/**/*.test.tsx`, `app/e2e/neuroinclusive-ui.spec.ts` | 13 component tests plus four mocked Playwright E2E tests |
+| Frontend verification | `app/src/**/*.test.tsx`, `app/e2e/neuroinclusive-ui.spec.ts` | 14 component tests plus four mocked Playwright E2E tests |
 | Desktop ↔ engine boundary | `app/src/api.ts`, `engine/api.py` | Dynamic loopback HTTP port + per-launch bearer token; dev fallback remains `127.0.0.1:8756` |
 | Engine process lifecycle | `app/src-tauri/src/engine.rs`, `lib.rs`, `scripts/start_engine.sh` | Starts/stops uvicorn with the Tauri app |
 | Updater release evidence | `scripts/generate_appcast.py`, `scripts/updater_evidence.py`, `app/src-tauri/tauri.conf.json` | Requires signed `latest.json` and signed artifact |
@@ -221,7 +221,7 @@ package is a clean-Mac handoff bundle only; do not treat it as passing clean-mac
   +0.127/+0.135. The local anchored Mohler ASAG public-proxy artifact now passes quality
   at QWK 0.845 against a 0.623 human-ceiling-adjusted floor.
 - **P2 in progress:** the complete light-first neuroinclusive UI is implemented across onboarding,
-  queue, review, settings, and model management. Twelve component tests and four mocked Playwright
+  queue, review, settings, and model management. Fourteen component tests and four mocked Playwright
   E2E tests pass. `scripts/frontend_evidence.py` now fail-closes unless the visual sweep records
   all 16 required screens, screenshots, 47 required instructor controls, 167 visible controls,
   automated accessibility checks, local-engine recovery alert coverage, and 200% text scaling. Still

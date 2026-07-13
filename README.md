@@ -44,7 +44,7 @@ behavioral validation.
 | Engine (grading, calibration, triage) | 🟢 Working |
 | Calibration validation | 🟡 P1 built (anchors +0.135 QWK at k=6) |
 | Desktop app (Tauri + React) | 🟢 Built — light/dark preferences, onboarding, queue, review, settings, model manager |
-| UI verification | 🟢 13 component tests + 4 Playwright E2E tests; no serious/critical axe findings |
+| UI verification | 🟢 14 component tests + 4 Playwright E2E tests; no serious/critical axe findings |
 | Canvas integration | 🟢 Live app-level import → teacher override/approve → post → Progress complete → score/comment read-back passed in `ZZ-GRADER-TEST` |
 | Document parsing + handwriting | 🟡 Built — Docling + Apple Vision + grader-vision |
 | Citation verification | 🟡 20/29 correct (69%); retraction check 3/3; accepted only as visibly experimental until accuracy reaches the enabled-mode gate |
