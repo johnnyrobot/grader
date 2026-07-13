@@ -88,8 +88,9 @@ Confirmed in the current checkout:
   evidence. With current local artifacts, the report is `blocked`: the latest local app/DMG signs,
   notarizes, staples, and passes macOS signature checks; signed updater manifest/release provenance
   passes; and local signed-app evidence covers fresh-profile first-run model reconciliation, crash
-  recovery, keyboard-only review, and the Computer Use instructor sweep. The only remaining
-  clean-machine blocker is the updater N→N+1 path.
+  recovery, keyboard-only review, and the Computer Use instructor sweep. The remaining release
+  blockers are the missing live GitHub updater channel (`latest.json` currently 404s) and the
+  clean-machine in-app updater N→N+1 path.
 
 Public-beta blockers:
 
@@ -97,7 +98,9 @@ Public-beta blockers:
 2. Keep Canvas rubric-assessment posting disabled until local rubric criteria can be mapped to real
    Canvas criterion IDs; score/comment round-trip is validated, attachment write-back still needs
    separate evidence.
-3. Validate the updater N→N+1 path on a clean supported Mac against the signed `latest.json` and
+3. Publish a signed N+1 GitHub updater channel whose `latest.json` advertises reachable signed
+   `Grader.dmg` release assets, then validate the updater N→N+1 path on a clean supported Mac
+   against that signed `latest.json` and
    signed/notarized DMG. The current local signed-app fresh-profile first-run, crash recovery,
    Computer Use sweep, keyboard-only review path, signed updater manifest, and native
    install/restart UI pass static/build checks against `/Applications/Grader.app` installed as

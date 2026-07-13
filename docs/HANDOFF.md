@@ -31,29 +31,29 @@ three you gave 4s"), and it ships zero per-teacher model artifacts. LoRA fine-tu
 
 ---
 
-## 1. Where things actually stand (2026-07-11)
+## 1. Where things actually stand (2026-07-13)
 
 | Phase | Status |
 |---|---|
 | **Pre-work** | ✅ Complete — research, PRD, spec, data plan, citation fixtures, Canvas sandbox |
 | **P0** Engine spike | 🟢 **Core risk retired, and it reversed a model choice.** `qwen3:8b` in Pydantic AI **Tool-Output mode: 100% schema success, 0 retries**, correct rank-ordering, 27–66s, **zero variance at temp 0**. **But Qwen3-VL is dead for vision** — see the ⚠️ below. |
 | **P1** Calibration core | 🟢 **Complete.** 5 experiments run. Anchors lift QWK +0.127/+0.135 at k=6 (the sweet spot). Context capping has zero quality impact. k≥8 HURTS (too many anchors from a small pool). Override loop, rubric ingestion, refinement, health panel, cold-start rule all built. P5 ship gate blocked on teacher's own graded work. |
-| **P2** App shell + UX | 🟡 **In progress.** FastAPI engine (18 routes), Tauri scaffold, Queue + SplitView + ModelManager screens, SQLite WAL persistence + audit log all built. tsc + vite + cargo check all pass. Sidecar wiring and signing remain. |
-| **P3** Canvas round-trip | 🟡 **In progress.** `canvas.py` + API endpoints (import, post, flush queue) built. Approval enforced. |
-| **P4** Documents & citations | 🟡 **In progress.** parse.py, handwriting.py, writeback.py, citations.py built. 69% citation accuracy, 0 false positives, 3/3 retractions caught. |
-| **P5** Hardening & release | 🟡 **In progress.** 4 CI gates (quality, bias, egress, perf). Egress + perf PASS, quality + bias SKIP (need golden set). Golden set collector, signing/notarize scripts, Tauri updater integration, release CI workflow, beta rollout docs all built. FERPA, rubric guide, CONTRIBUTING, LICENSE, issue templates done. Remaining: real golden set (100 items), Apple Developer cert, beta tester recruitment. |
+| **P2** App shell + UX | 🟢 **Implemented and evidence-backed.** Neuroinclusive light-first UI covers onboarding, queue, review, settings, and model manager. Frontend evidence passes with 14 component tests, 4 Playwright E2E tests, 16 visual-sweep screens, 47 required controls, and 167 visible controls. |
+| **P3** Canvas round-trip | 🟢 **Score/comment beta scope passes.** Guarded live app E2E on `canvas.johnnyrobot.ai` course `106`, assignment `2841`, Canvas user `9`: import → teacher override/approval → post → Progress completed → score/comment read-back. Rubric-assessment posting remains disabled until local criteria map to real Canvas criterion IDs; attachment write-back still needs separate release evidence. |
+| **P4** Documents & citations | 🟡 **Built; citations are experimental.** parse.py, handwriting.py, writeback.py, citations.py built. Citation fixture rerun is 20/29 (69%), 0 false positives, 3/3 retractions caught; acceptable only when visibly labeled experimental until enabled-mode accuracy reaches >=90%. |
+| **P5** Hardening & release | 🟡 **Blocked by updater release-channel + clean-machine updater path.** Public-proxy quality/fairness pass on the anchored Mohler ASAG artifact; privacy, performance, frontend, Rust, release-version, updater-manifest, signing/notarization all pass locally. Current `scripts/release_readiness.py` verdict is `blocked` with two blockers: `updater_channel=BLOCKED_UPDATER_CHANNEL` because GitHub `latest.json` returns HTTP 404, and `clean_machine=BLOCKED_CLEAN_MACHINE_EVIDENCE` missing `updater_path`. |
 
 ### The very next command
 
 ```bash
 cd /Users/laccd/code/grader
-uv run python engine/calibrate.py --n-test 20 --n-exemplars 60
+uv run python scripts/updater_channel_preflight.py --current-version 0.1.0 --out artifacts/release-evidence/updater-channel-current.json
 ```
 
-This runs the P1 experiment on real human-graded data (Mohler ASAG, 2,273 short answers, each
-scored by **two independent humans**). ✅ **Already run** — see `docs/phases/P1.md` for results.
-The next high-value action is **P2** (Tauri shell + UX) or re-running calibration on a
-question with a correct reference answer to get a higher absolute QWK.
+Today this should return `BLOCKED_UPDATER_CHANNEL` until a signed N+1 GitHub release publishes
+`latest.json` and the reachable signed `Grader.dmg` asset. After it passes, run the clean-machine
+in-app `Install update and restart` path and record `updater_path` evidence. Do **not** claim public
+beta readiness until `scripts/release_readiness.py` reports `supervised_public_beta`.
 
 ---
 
@@ -150,8 +150,9 @@ its **full default context window**. Qwen3-VL's default is **262,144 tokens**, s
 4B model with ~3.3 GB of Q4 weights — was observed using **41 GB** (the KV cache is ~38 GB of that).
 On a 16 GB machine it would simply fail to load.
 Grading needs ~5,500 tokens (essay + rubric + 6 anchors + output). **Run `scripts/make_models.sh`**
-to bake capped variants (`num_ctx=16384`, `temp=0`) — `grader-text:8b`, `grader-vl:4b`, `grader-vl:8b`
-— and **always grade against those**, never the raw base tags. Capped, the 4B lands at ~6 GB.
+to bake capped variants (`num_ctx=16384`, `temp=0`) — currently `grader-text:8b` and
+`grader-vision:1.3b` — and **always grade against those**, never the raw base tags. Capped, the
+vision model stays in the single-digit GB range.
 Verify with `ollama ps` after a grade: single-digit GB = correct; tens of GB = wrong model.
 
 **The dev machine is not the target.** This M2 Max has 64 GB. The PRD floor is **16 GB**. The
@@ -188,7 +189,8 @@ Instance `canvas.johnnyrobot.ai`, credentials already on disk (canvas-pp-cli's
 | Thing | ID |
 |---|---|
 | Course | **106** `ZZ-GRADER-TEST-SANDBOX (safe to delete)` |
-| Assignment | **2836** (20 pts, `online_upload` + `online_text_entry`) |
+| Seeder assignment | **2836** (20 pts, `online_upload` + `online_text_entry`) |
+| App E2E assignment | **2841** (used by `artifacts/release-evidence/canvas-live.json`) |
 | Rubric | **189** (4 analytic criteria × 0–5) |
 | Test Student | **8** |
 | Fake cohort | **9–14** (`ZZGraderTest Student 01-06`, `.invalid` emails) |
@@ -196,9 +198,15 @@ Instance `canvas.johnnyrobot.ai`, credentials already on disk (canvas-pp-cli's
 Re-seed (idempotent): `python scripts/seed_canvas_sandbox.py --apply --students 6`
 Tear down: `python scripts/seed_canvas_sandbox.py --teardown --course-id 106 --apply --delete-users`
 
-Verified end-to-end: submit w/ attachment → grade + rubric assessment + comment + comment-file →
-read back → authenticated attachment download. Bulk-graded 6 students; gradebook spread
-100/60/20/0/100/60.
+Seeder verified end-to-end: submit w/ attachment → grade + rubric assessment + comment +
+comment-file → read back → authenticated attachment download. Bulk-graded 6 students; gradebook
+spread 100/60/20/0/100/60.
+
+Current app-level public-beta Canvas evidence is narrower and cleaner: `scripts/live_canvas_e2e.py`
+passed on course `106`, assignment `2841`, Canvas user `9`, with teacher override/approval,
+post, Progress `completed`, score `2`, and one teacher feedback comment read back. Treat Canvas
+rubric-assessment posting and attachment write-back as separate remaining evidence, not as covered
+by that score/comment beta scope.
 
 ---
 
@@ -211,22 +219,22 @@ commands · gotchas · done-when checklist.**
 |---|---|---|---|
 | [`phases/P0.md`](phases/P0.md) | Engine spike | ✅ complete | `uv run python engine/bench.py` |
 | [`phases/P1.md`](phases/P1.md) | **Calibration core** | 🟢 complete | `uv run python engine/calibrate.py --n-test 20 --n-exemplars 60` (5 experiments run; k=6 is the sweet spot) |
-| [`phases/P2.md`](phases/P2.md) | App shell + UX | 🟡 in progress | `cd app && npm run dev` (frontend) · `uv run uvicorn engine.api:app --port 8756` (engine) |
-| [`phases/P3.md`](phases/P3.md) | Canvas round-trip | 🟡 in progress | `POST /api/canvas/import` → grade → `POST /api/canvas/post` |
+| [`phases/P2.md`](phases/P2.md) | App shell + UX | 🟢 implemented; release evidence passes | `uv run python scripts/frontend_evidence.py --out artifacts/release-evidence/frontend.json` |
+| [`phases/P3.md`](phases/P3.md) | Canvas round-trip | 🟢 score/comment beta scope passes | `uv run python scripts/live_canvas_e2e.py --dry-run` |
 | [`phases/P4.md`](phases/P4.md) | Documents & citations | 🟡 in progress | `POST /api/parse` · `POST /api/citations/verify` · `POST /api/writeback/annotate` |
-| [`phases/P5.md`](phases/P5.md) | Hardening & release | ⬜ | the three CI gates (quality / bias / egress) |
+| [`phases/P5.md`](phases/P5.md) | Hardening & release | 🟡 blocked only on updater channel + clean-machine updater path | `uv run python scripts/release_readiness.py --profile public_beta --expected-version 0.1.0 --out artifacts/release-readiness` |
 
 ## 6. How to resume in a new session
 
 1. Read this file, then `RESEARCH.md` §1 (the stack table) — that's the whole architecture in
    two tables.
-2. Read the phase doc for wherever you are (`docs/phases/P1.md` right now).
-3. Run the next command in §1 above.
+2. Read the phase doc for wherever you are (`docs/phases/P5.md` right now).
+3. Run the next command in §1 above, then regenerate `scripts/release_readiness.py` evidence.
 4. **Don't re-research.** Everything in `docs/research/` was adversarially verified by a
    107-agent run; the claims carry vote counts and source URLs. If you find yourself about to
    search the web for "best local VLM," read `docs/research/01-verified-findings.md` instead.
 
 **Decisions already made — do not relitigate without new evidence:**
 higher-ed audience · free & open-source (Apache 2.0) · Tauri shell · Ollama v1 → MLX v2 ·
-Qwen3-VL + Qwen3 · Docling · Pydantic AI v2 · retrieval-first calibration · queue → split-view UX ·
+MiniCPM-V transcription + Qwen3 text grading · Docling · Pydantic AI v2 · retrieval-first calibration · queue → split-view UX ·
 16 GB floor · all four v1 must-haves (Canvas, citations, handwriting, annotated write-back).

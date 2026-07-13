@@ -12,6 +12,8 @@
 - Real Canvas courses
 - Weekly feedback cycle
 - Goal: prove the calibration bet + surface edge cases
+- Entry gate: `scripts/release_readiness.py` must report `supervised_public_beta`; current builds
+  remain held while updater-channel and clean-machine updater-path evidence are blocked.
 
 ### Public v1.0
 - GitHub release, signed + notarized DMG
@@ -26,6 +28,9 @@
 - [ ] Models pulled: `grader-text:8b`, `nomic-embed-text`
 - [ ] `./scripts/make_models.sh` run (context-capped variants)
 - [ ] Grader.app launches without Gatekeeper warning
+- [ ] Release channel preflight passes:
+      `uv run python scripts/updater_channel_preflight.py --current-version <installed-version>`
+- [ ] Clean-machine updater path evidence exists for in-app N→N+1 update and restart
 - [ ] First-run wizard completes (token set, rubric pasted)
 - [ ] One test submission graded end-to-end
 - [ ] Teacher approves a grade → confirms it saved
@@ -93,9 +98,11 @@ Each tester fills this out weekly during the beta:
 - [list]
 
 ### How to update
-1. Download the new DMG from: [link]
-2. Replace Grader.app in /Applications
-3. Your data (rubrics, grades, exemplars) is preserved in ~/Library/Application Support/Grader/
+1. Open Grader.
+2. When the update banner appears, choose **Install update and restart**.
+3. Confirm the relaunched app shows the new version.
+4. If the in-app updater is unavailable, stop the rollout and collect updater evidence before
+   instructing testers to replace the app manually.
 
 ### Calibration status
 - QWK against golden set: X.XXX (target: ≥0.70)

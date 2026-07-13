@@ -33,10 +33,10 @@ misrepresented as grading accuracy.
 | Computer Use instructor sweep | Signed app is inspected as an instructor using Computer Use, with screenshots/accessibility-tree notes for every visible screen and safe control path | `scripts/computer_use_sweep_evidence.py`, then `scripts/clean_machine_evidence.py` manual evidence | PASS locally: the latest local app/DMG was signed, notarized, stapled, installed to `/Applications/Grader.app`, and targeted by Computer Use as `com.grader.app`; `artifacts/release-evidence/computer-use-signed-app/computer-use-signed-local-evidence.json` validates 73 capture pairs with all required markers and no stale approval contradictions. | PASS for signed-app local evidence; still include in clean-machine handoff and rerun if the release bundle identity changes |
 | Release version consistency | Git tag/updater version matches Tauri config, Rust crate, frontend package, and Python project | `scripts/release_version_guard.py --tag v<version>` and GitHub release workflow | NEW: fail-closed guard added before release asset publishing | Required before signed updater/release-channel evidence |
 | Updater evidence | Signed updater manifest references the signed artifact and current version, passes macOS signature/notarization checks, and is fresh relative to the current source commit | `scripts/generate_appcast.py --signing-key ...`, then `scripts/updater_evidence.py` | PASS locally: the rotated updater key signs `latest.json`, the manifest targets `github.com/johnnyrobot/grader`, `scripts/updater_evidence.py` passes against the current-source signed/notarized DMG, and the queue UI exposes a native install/restart action when Tauri reports an update | Required before clean-machine updater path |
-| Updater channel preflight | The live release channel advertises a signed N+1 `Grader.dmg` from `github.com/johnnyrobot/grader` before clean-machine testing starts | `scripts/updater_channel_preflight.py --current-version <installed-N-version>` after publishing N+1 | NEW: fail-fast script added; current channel must pass before the updater-path clean-machine run can be scheduled | Required before clean-machine updater path; not a substitute for in-app N→N+1 evidence |
+| Updater channel preflight | The live release channel advertises a signed N+1 `Grader.dmg` from `github.com/johnnyrobot/grader` before clean-machine testing starts | `scripts/updater_channel_preflight.py --current-version <installed-N-version>` after publishing N+1 | BLOCKED: current GitHub `latest.json` returns HTTP 404; the preflight also probes advertised release-asset URLs once a manifest exists | Required before clean-machine updater path; not a substitute for in-app N→N+1 evidence |
 | Signing/notarization | Signed/notarized app or DMG passes codesign, stapler, spctl | `scripts/signing_doctor.py`, release script, clean Mac | PASS locally for the latest app/DMG: signed, notarized, stapled, and passed `codesign`/`stapler`/`spctl`; `sign_and_notarize.sh` runs the doctor before mutating the app bundle | Clean-machine behavior remains separate |
 | Clean-machine | First launch, model setup, crash recovery, keyboard review, Computer Use instructor sweep, updater N->N+1 | `scripts/clean_machine_evidence.py --print-manual-runbook`, then JSON from a clean Mac/VM with structured manual evidence notes, files, and release artifact hashes | BLOCKED: codesign/stapler/spctl checks pass and local signed-app manual evidence now covers fresh-profile first run, crash recovery, keyboard-only review, Computer Use instructor sweep, and release provenance; updater path is still missing | Required for public beta |
-| Release report | Consolidated verdict is `supervised_public_beta` | `scripts/release_readiness.py` | BLOCKED: the current report has one blocker, `clean_machine`, with missing `updater_path` | Final release gate |
+| Release report | Consolidated verdict is `supervised_public_beta` | `scripts/release_readiness.py` | BLOCKED: the current report has two blockers, `updater_channel` and `clean_machine` missing `updater_path` | Final release gate |
 
 ## Required Manual Visual Sweep
 
@@ -70,10 +70,12 @@ Not public beta ready. The current anchored real-data public-proxy quality and f
 Mohler ASAG, Canvas app-level score/comment round-trip passes, and citations are acceptable only in
 visibly experimental beta mode. The latest local app/DMG is signed/notarized and passes macOS
 signature checks, signed updater evidence passes, and release provenance passes. Local signed-app
-Computer Use and keyboard-only review evidence now pass. The remaining public-beta blocker is
-clean-machine behavioral evidence for updater N→N+1 through the native install/restart action; run
+Computer Use and keyboard-only review evidence now pass. The remaining public-beta blockers are the
+missing live GitHub updater channel and clean-machine behavioral evidence for updater N→N+1 through
+the native install/restart action; run
 `scripts/updater_channel_preflight.py --current-version <installed-N-version>` after publishing N+1
-so missing or malformed GitHub release-channel state is caught before the clean-Mac test begins.
+so missing or malformed GitHub release-channel state and missing release assets are caught before the
+clean-Mac test begins.
 Generate `clean-machine-runbook.md` with
 `scripts/clean_machine_evidence.py --print-manual-runbook` before
 clean-Mac testing. `scripts/release_evidence_package.py` can assemble the signed DMG/latest.json,
