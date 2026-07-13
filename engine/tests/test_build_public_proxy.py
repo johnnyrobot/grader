@@ -8,7 +8,9 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).parents[2]))
 
+import scripts.build_public_proxy as builder
 from scripts.build_public_proxy import (
+    populate_model_scores,
     row_to_example,
     select_mohler_anchor_rows,
     select_mohler_rows,
@@ -137,3 +139,28 @@ def test_write_public_proxy_records_anchor_settings(tmp_path):
     manifest = json.loads(manifest_path.read_text())
     assert manifest["anchor_k"] == 2
     assert manifest["anchor_exemplars_per_source"] == {"mohler_q01": 4, "mohler_q02": 4}
+
+
+def test_populate_model_scores_resumes_partial_perturbations(monkeypatch):
+    from gates.bias import PERTURBATIONS
+
+    example = row_to_example(select_mohler_rows(_fake_mohler(), sources=1, items_per_source=1, seed=7)[0])
+    first_name = next(iter(PERTURBATIONS))
+    example["ai_scores"] = {"correctness": 2.0}
+    example["perturbed_scores"] = {first_name: {"correctness": 2.0}}
+    calls: list[str] = []
+
+    def fake_grade_text(_example, text, _model, *, anchors=""):
+        calls.append(text)
+        return {"correctness": 2.0}
+
+    monkeypatch.setattr(builder, "_grade_text", fake_grade_text)
+
+    populate_model_scores(
+        [example],
+        model="grader-text:8b",
+        grade_perturbations=True,
+    )
+
+    assert set(example["perturbed_scores"]) == set(PERTURBATIONS)
+    assert len(calls) == len(PERTURBATIONS) - 1

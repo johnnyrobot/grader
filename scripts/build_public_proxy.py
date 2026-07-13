@@ -281,9 +281,13 @@ def populate_model_scores(
 ) -> None:
     from gates.bias import PERTURBATIONS, perturb
 
+    expected_perturbations = set(PERTURBATIONS) if grade_perturbations else set()
     graded_this_run = 0
     for index, example in enumerate(examples, start=1):
-        if example.get("ai_scores") and (not grade_perturbations or example.get("perturbed_scores")):
+        if example.get("ai_scores") and (
+            not grade_perturbations
+            or _has_complete_perturbations(example, expected_perturbations)
+        ):
             continue
         if limit is not None and graded_this_run >= limit:
             break
@@ -296,11 +300,15 @@ def populate_model_scores(
         try:
             if not example.get("ai_scores"):
                 example["ai_scores"] = _grade_text(example, example["student_text"], model, anchors=anchors)
-            if grade_perturbations and not example.get("perturbed_scores"):
-                example["perturbed_scores"] = {}
+            if grade_perturbations:
+                perturbed_scores = example.setdefault("perturbed_scores", {})
                 for name in PERTURBATIONS:
+                    if name in perturbed_scores:
+                        continue
                     text = perturb(example["student_text"], name)
-                    example["perturbed_scores"][name] = _grade_text(example, text, model, anchors=anchors)
+                    perturbed_scores[name] = _grade_text(example, text, model, anchors=anchors)
+                    if checkpoint_path is not None:
+                        _write_examples(checkpoint_path, examples)
             example.pop("grade_error", None)
         except Exception as error:
             example["grade_error"] = str(error)[:500]
@@ -310,6 +318,11 @@ def populate_model_scores(
         finally:
             if checkpoint_path is not None:
                 _write_examples(checkpoint_path, examples)
+
+
+def _has_complete_perturbations(example: dict[str, Any], expected_perturbations: set[str]) -> bool:
+    perturbed_scores = example.get("perturbed_scores")
+    return isinstance(perturbed_scores, dict) and set(perturbed_scores) == expected_perturbations
 
 
 def write_public_proxy(
