@@ -101,6 +101,8 @@ def test_canvas_post_uses_canvas_user_id_from_imported_submission(tmp_path, monk
     assert captured["assignment_id"] == 20
     assert list(captured["grade_data"].keys()) == ["98765"]
     assert captured["grade_data"]["98765"]["posted_grade"] == 7
+    assert captured["grade_data"]["98765"]["text_comment"] == "feedback"
+    assert "rubric_assessment" not in captured["grade_data"]["98765"]
 
 
 def test_canvas_post_skips_grade_without_canvas_user_id(tmp_path, monkeypatch, api_module):
@@ -141,3 +143,57 @@ def test_canvas_post_skips_grade_without_canvas_user_id(tmp_path, monkeypatch, a
     with pytest.raises(Exception) as exc_info:
         api.canvas_post(api.CanvasPostReq(course_id=10, assignment_id=20, grade_ids=["grade_local"]))
     assert "no approved grades to post" in str(exc_info.value)
+
+
+def test_canvas_import_returns_local_submission_ids(tmp_path, monkeypatch, api_module):
+    api = api_module
+    monkeypatch.setattr(api, "DB_PATH", tmp_path / "grader_engine.db")
+    monkeypatch.setattr("grader.canvas.list_ungraded", lambda course_id, assignment_id: [
+        {"user_id": 98765, "body": "student text", "attachments": []}
+    ])
+    monkeypatch.setattr("grader.canvas.download_submission_attachments", lambda submission, dest_dir: [])
+
+    result = api.canvas_import(
+        api.CanvasImportReq(course_id=10, assignment_id=20, download_attachments=True)
+    )
+
+    assert result["imported"] == 1
+    assert result["submissions"] == [{"id": result["submissions"][0]["id"], "canvas_user_id": "98765"}]
+    assert result["submissions"][0]["id"].startswith("sub_")
+
+
+def test_grade_batch_can_limit_to_requested_submission_ids(tmp_path, monkeypatch, api_module):
+    api = api_module
+    monkeypatch.setattr(api, "DB_PATH", tmp_path / "grader_engine.db")
+    monkeypatch.setattr(api._rubric_store, "list", lambda: [{"title": "Rubric"}])
+    monkeypatch.setattr(api._rubric_store, "get", lambda title: object())
+
+    captured = {}
+
+    class FakeThread:
+        def __init__(self, *, target, args, daemon):
+            captured["args"] = args
+            captured["daemon"] = daemon
+
+        def start(self):
+            captured["started"] = True
+
+    monkeypatch.setattr(api.threading, "Thread", FakeThread)
+
+    db = api._db()
+    for sub_id in ("sub_keep", "sub_skip"):
+        db.execute(
+            "INSERT INTO submissions (id, assignment_id, student_ref, text, state, created_at) "
+            "VALUES (?,?,?,?,?,?)",
+            (sub_id, "canvas_10_20", sub_id, "student text", "imported", api._now()),
+        )
+    db.commit()
+    db.close()
+
+    result = api.grade_batch(
+        api.GradeBatch(assignment_id="canvas_10_20", submission_ids=["sub_keep"])
+    )
+
+    assert result["total"] == 1
+    assert captured["args"][2] == ["sub_keep"]
+    assert captured["started"] is True

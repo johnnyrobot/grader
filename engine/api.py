@@ -269,6 +269,7 @@ class GradeBatch(BaseModel):
     assignment_id: str
     model: str = "grader-text:8b"
     materials: str = ""
+    submission_ids: list[str] | None = None
 
 
 class OverrideRequest(BaseModel):
@@ -344,10 +345,18 @@ def grade_batch(req: GradeBatch) -> dict:
         raise HTTPException(400, "rubric not found")
 
     db = _db()
-    rows = db.execute(
-        "SELECT id FROM submissions WHERE assignment_id = ? AND state = 'imported'",
-        (req.assignment_id,),
-    ).fetchall()
+    if req.submission_ids:
+        placeholders = ",".join("?" for _ in req.submission_ids)
+        rows = db.execute(
+            f"SELECT id FROM submissions WHERE assignment_id = ? AND state = 'imported' "
+            f"AND id IN ({placeholders})",
+            (req.assignment_id, *req.submission_ids),
+        ).fetchall()
+    else:
+        rows = db.execute(
+            "SELECT id FROM submissions WHERE assignment_id = ? AND state = 'imported'",
+            (req.assignment_id,),
+        ).fetchall()
     db.close()
     sub_ids = [r["id"] for r in rows]
     if not sub_ids:
@@ -678,6 +687,7 @@ def canvas_import(req: CanvasImportReq) -> dict:
 
     db = _db()
     imported = 0
+    imported_submissions: list[dict] = []
     failures: list[dict] = []
 
     for sub in submissions:
@@ -713,12 +723,13 @@ def canvas_import(req: CanvasImportReq) -> dict:
             (sub_id, assignment_key, str(user_id), submission_text, "imported", _now()),
         )
         imported += 1
+        imported_submissions.append({"id": sub_id, "canvas_user_id": str(user_id)})
 
     db.commit()
     db.close()
     _audit(f"canvas_{req.course_id}_{req.assignment_id}", "canvas", "import",
            {"imported": imported, "failures": len(failures)})
-    return {"imported": imported, "failures": failures}
+    return {"imported": imported, "submissions": imported_submissions, "failures": failures}
 
 
 @app.post("/api/canvas/post", dependencies=[Depends(_auth)])
@@ -759,10 +770,11 @@ def canvas_post(req: CanvasPostReq) -> dict:
 
         grade_data[str(row["canvas_user_id"])] = {
             "posted_grade": total,
-            "rubric_assessment": {
-                cid: {"points": score, "comments": ""}
-                for cid, score in scores.items()
-            },
+            # Do not send local rubric criterion slugs as Canvas rubric IDs.
+            # Canvas bulk updates accept rubric_assessment only for assignments
+            # with real Canvas criterion identifiers; invalid local keys can
+            # leave the async Progress object stuck even when the score writes.
+            "text_comment": row["teacher_feedback"] or row["ai_feedback"] or "Posted by Grader after teacher approval.",
         }
 
     db.close()

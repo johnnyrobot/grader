@@ -78,11 +78,11 @@ uv run python scripts/release_readiness.py --profile public_beta --out artifacts
 
 ## Current Evidence
 
-As of 2026-07-12, Grader is suitable only for a developer-assisted alpha using synthetic or
+As of 2026-07-13, Grader is suitable only for a developer-assisted alpha using synthetic or
 institution-approved test data. It is not ready for an unattended public beta with real student
 work.
 
-- Python: 49 passed, 12 skipped.
+- Python: 59 passed, 12 skipped.
 - Frontend: 11 component tests and two full-workflow Playwright tests pass.
 - Privacy: PASS in isolation, 3/3 captured connections allowlisted.
 - Performance: PASS, 38.3 seconds for a 1,500-word essay.
@@ -90,11 +90,17 @@ work.
 - Teacher-local quality/fairness: unvalidated until authorized instructor data exists.
 - Citations: PASS_EXPERIMENTAL for beta mode, 20/29 correct (69%), 0 false positives, and 3/3
   retractions caught; enabled mode still requires >=90% accuracy.
-- Release readiness: local report currently returns `blocked` without live Canvas and clean-machine
-  evidence.
+- Canvas: guarded live app-level E2E passes on `canvas.johnnyrobot.ai` course `106`, assignment
+  `2841`: import, targeted grade, teacher override/approval, post, Progress completed, score/comment
+  read-back.
+- Release readiness: local report currently returns `blocked` because clean-machine signed/notarized
+  evidence is missing.
 
-Before public beta: run real public-proxy quality/fairness evidence, validate the app-level Canvas
-round trip, and complete a signed/notarized clean-machine install plus first-run and updater tests.
+Before public beta: run real public-proxy quality/fairness evidence, keep citation checks visibly
+experimental unless accuracy improves, and complete a signed/notarized clean-machine install plus
+first-run and updater tests. Canvas rubric-assessment posting remains disabled until local rubric
+criteria can be mapped to real Canvas criterion IDs; attachment write-back still needs separate
+evidence.
 
 ## Working-Tree Caution
 

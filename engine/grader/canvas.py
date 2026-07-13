@@ -35,10 +35,16 @@ CANVAS_TOKEN = (
 CANVAS_BASE = os.environ.get("CANVAS_BASE_URL", "")
 
 
-def _run(*args: str, timeout: int = 30) -> dict:
+def _run(*args: str, timeout: int = 30, stdin_json: dict[str, Any] | None = None) -> dict:
     """Run canvas-pp-cli with --agent flag, parse JSON output."""
-    cmd = [CLI_PATH, *args, "--agent"]
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+    cmd = [CLI_PATH, *args, "--agent", "--data-source", "live", "--no-cache"]
+    result = subprocess.run(
+        cmd,
+        capture_output=True,
+        input=json.dumps(stdin_json) if stdin_json is not None else None,
+        text=True,
+        timeout=timeout,
+    )
     if result.returncode != 0:
         raise RuntimeError(f"canvas-pp-cli failed: {result.stderr[:300]}")
     envelope = json.loads(result.stdout)
@@ -72,7 +78,7 @@ def list_submissions(course_id: int | str, assignment_id: int | str) -> list[dic
     """
     envelope = _run(
         "submissions", "index", str(course_id), str(assignment_id),
-        "--include", "rubric_assessment,submission_comments",
+        "--include", "submission_comments",
         timeout=30,
     )
     return _read_results(envelope)
@@ -88,7 +94,7 @@ def get_submission(course_id: int | str, assignment_id: int | str, user_id: int 
     """Show a single submission with attachments + comments."""
     envelope = _run(
         "submissions", "show", str(course_id), str(assignment_id), str(user_id),
-        "--include", "rubric_assessment,submission_comments",
+        "--include", "submission_comments",
         timeout=15,
     )
     results = _read_results(envelope)
@@ -156,15 +162,15 @@ def post_grade(
     """
     args = [
         "submissions", "update", str(course_id), str(assignment_id), str(user_id),
-        f"--posted_grade={grade}",
+        f"--submission-posted-grade={grade}",
     ]
     if comment:
-        args.append(f"--comment={comment}")
+        args.append(f"--comment-text-comment={comment}")
     if rubric_assessment:
-        args.append(f"--rubric_assessment={json.dumps(rubric_assessment)}")
+        args.append(f"--rubric-assessment={json.dumps(rubric_assessment)}")
     if comment_file_ids:
         for fid in comment_file_ids:
-            args.append(f"--comment[file_ids][]={fid}")
+            args.append(f"--comment-file-ids={fid}")
 
     envelope = _run(*args, timeout=15)
     return _mutation_data(envelope)
@@ -182,11 +188,25 @@ def post_grades_batch(
 
     grade_data: {user_id_str: {posted_grade, rubric_assessment, ...}}
     """
-    args = [
-        "submissions", "bulk-update", str(course_id), str(assignment_id),
-        f"--grade_data={json.dumps(grade_data)}",
-    ]
-    envelope = _run(*args, timeout=30)
+    assignment_data: dict[str, Any] = {}
+    for user_id, fields in grade_data.items():
+        payload: dict[str, Any] = {}
+        if "posted_grade" in fields:
+            payload["posted_grade"] = str(fields["posted_grade"])
+        if "excuse" in fields:
+            payload["excuse"] = fields["excuse"]
+        if fields.get("rubric_assessment"):
+            payload["rubric_assessment"] = fields["rubric_assessment"]
+        comment = fields.get("text_comment") or fields.get("comment")
+        if comment:
+            payload["text_comment"] = str(comment)
+        if fields.get("file_ids"):
+            payload["file_ids"] = fields["file_ids"]
+        assignment_data[str(user_id)] = payload
+
+    body = {"grade_data": {str(assignment_id): assignment_data}}
+
+    envelope = _run("submissions", "bulk-update", str(course_id), "--stdin", timeout=30, stdin_json=body)
 
     # Mutations return {action, resource, success, data, partial_failure}
     if not envelope.get("success", True):
@@ -208,9 +228,10 @@ def _poll_progress(
     course_id: int | str, progress_id: int | str, *, timeout: int = 60, interval: float = 1.0,
 ) -> dict:
     """Poll the Progress endpoint until completion or timeout (gotcha #1)."""
+    _ = course_id  # Progress show is global in canvas-pp-cli; keep arg for API compatibility.
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        envelope = _run("progress", "show", str(course_id), str(progress_id), timeout=10)
+        envelope = _run("progress", "show", str(progress_id), timeout=10)
         results = _read_results(envelope)
         if not results:
             break

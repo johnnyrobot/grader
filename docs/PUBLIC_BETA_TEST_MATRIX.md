@@ -25,14 +25,14 @@ misrepresented as grading accuracy.
 | Public-proxy fairness | Style perturbation deltas within thresholds | `engine/gates/bias.py --profile public_proxy` on real open datasets | PASS only on tiny mechanics fixture | PASS only with real public-proxy artifacts |
 | Teacher-local quality | Instructor-specific QWK and override behavior | `fixtures/golden_set/` local authorized data | Missing | Not required for generic public proxy claim; required for teacher-specific claim |
 | Citations | >=90% fixture accuracy, zero false positives, 3/3 retractions | `engine/verify_citations.py --output ...` | PASS_EXPERIMENTAL: 20/29 accuracy, 0 false positives, 3/3 retractions; UI labels citation checks experimental | PASS enabled mode or visibly experimental with zero false positives and all retractions caught |
-| Canvas app round trip | Import -> approve -> post -> Progress completed -> read-back exact score/rubric/comment/attachment | `scripts/live_canvas_e2e.py --apply` against `ZZ-GRADER-TEST` | DRY_RUN: guarded app-level harness is wired, live apply evidence missing | PASS only with live guarded run evidence |
+| Canvas app round trip | Import -> teacher override/approval -> post -> Progress completed -> read-back exact score and teacher feedback comment | `scripts/live_canvas_e2e.py --apply` against `ZZ-GRADER-TEST` | PASS: live guarded run on `canvas.johnnyrobot.ai`, course `106`, assignment `2841`, Canvas user `8`; score `4` and one teacher comment read back | PASS for score/comment beta scope; rubric assessment remains disabled until Canvas criterion-ID mapping exists, and attachment write-back still needs separate evidence |
 | Privacy | Captured outbound connections remain allowlisted | `engine/gates/egress.py` | PASS: 3/3 allowlisted in latest run | PASS artifact must be supplied to readiness report |
 | Performance | 1,500-word essay under 90 seconds on target memory floor | `engine/gates/perf.py --memory-floor 16` | PASS: 37.8 seconds in latest run | PASS artifact must be supplied to readiness report |
 | Desktop build | React build, unit tests, E2E workflow, Rust check pass | `npm test`, `npm run build`, Playwright, `cargo check` | PASS: 11 component tests, 2 E2E tests, build, and Rust check | PASS artifact must be supplied to readiness report |
 | Accessibility | No serious/critical WCAG violations, 200% text scaling, keyboard-only loop | Playwright axe + visual inspection | PASS on synthetic fixture | PASS mechanics; still requires clean-machine app check |
 | Signing/notarization | Signed/notarized app or DMG passes codesign, stapler, spctl | release script + clean Mac | Signing preflight pass; no clean artifact | PASS only with notarized artifact evidence |
 | Clean-machine | First launch, model setup, crash recovery, keyboard review, updater N->N+1 | manual/VM evidence JSON | Missing | Required for public beta |
-| Release report | Consolidated verdict is `supervised_public_beta` | `scripts/release_readiness.py` | BLOCKED | Final release gate |
+| Release report | Consolidated verdict is `supervised_public_beta` | `scripts/release_readiness.py` | BLOCKED: Canvas now PASS; clean-machine evidence missing | Final release gate |
 
 ## Required Manual Visual Sweep
 
@@ -49,6 +49,8 @@ Record each sweep as `PASS`, `FAIL`, or `BLOCKED`, with screenshot paths or a Co
 
 ## Current Verdict
 
-Not public beta ready. The current release-readiness report is blocked because live Canvas app
-round-trip evidence and clean-machine signed/notarized evidence are still incomplete. Real
-public-proxy datasets should replace the tiny mechanics fixtures before broadening the beta.
+Not public beta ready. The current release-readiness report is blocked because clean-machine
+signed/notarized evidence is still incomplete. Canvas app-level score/comment round-trip now passes,
+but Canvas rubric-assessment posting is intentionally disabled until real Canvas criterion IDs can
+be mapped, and attachment write-back still needs separate evidence. Real public-proxy datasets
+should replace the tiny mechanics fixtures before broadening the beta.

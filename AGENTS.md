@@ -198,8 +198,11 @@ uv run python scripts/release_readiness.py --profile public_beta --out artifacts
   queue, review, settings, and model management. Eleven component tests and two mocked Playwright
   workflows pass, including automated accessibility checks and 200% text scaling. Still validate a
   clean-machine `.app`, crash recovery, real first-run model setup, and packaging.
-- **P3 in progress:** Canvas client/API/offline queue exist and sandbox mechanics were verified;
-  run the app-level import → approve → post → read-back path before calling it complete.
+- **P3 in progress:** Canvas client/API/offline queue exist and the guarded live app-level path
+  passed for score/comment: import → targeted grade → teacher override/approval → post → Progress
+  completed → read-back on `canvas.johnnyrobot.ai` course `106`, assignment `2841`, Canvas user `8`.
+  Canvas rubric-assessment posting remains disabled until local rubric criteria can be mapped to real
+  Canvas criterion IDs; attachment write-back still needs separate evidence.
 - **P4 in progress:** parse/transcribe/write-back/citation modules exist. The 2026-07-12 citation
   rerun scored 20/29 (69%), with 0 false positives and 3/3 retractions caught; enabled mode still
   fails the >=90% phase goal, so beta readiness accepts it only as visibly experimental.
@@ -207,12 +210,12 @@ uv run python scripts/release_readiness.py --profile public_beta --out artifacts
   performance gate passes at 38.3s per 1,500-word essay. Public-proxy quality/fairness profiles
   pass on tiny committed mechanics fixtures only; teacher-local validation still requires
   authorized instructor data. Signing/notarization still needs clean-machine release validation.
-- **Coverage:** Python collects 61 cases (49 pass, 12 skip). Frontend has 11 passing component
+- **Coverage:** Python collects 71 cases (59 pass, 12 skip). Frontend has 11 passing component
   tests plus two passing full-workflow Playwright tests.
 - **Public beta verdict:** not ready for unattended public testing with real student work. Limit
   current use to a developer-assisted alpha with synthetic or institution-approved test data.
-- **Highest-value next action:** run the public-proxy gates on real open human-scored datasets,
-  complete the guarded live Canvas app round trip, and collect clean-machine signed/notarized
-  evidence so `scripts/release_readiness.py` can return a truthful verdict.
+- **Highest-value next action:** collect clean-machine signed/notarized evidence, then replace the
+  tiny public-proxy mechanics fixtures with real open human-scored datasets before broadening beta
+  claims.
 - The existing modification under `.omo/run-continuation/` is unrelated operational state; do not
   overwrite or commit it unless explicitly requested.

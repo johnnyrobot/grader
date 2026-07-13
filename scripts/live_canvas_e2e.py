@@ -38,6 +38,7 @@ class CanvasE2EConfig:
     engine_token: str = "dev"
     model: str = "grader-text:8b"
     timeout_seconds: int = 180
+    target_canvas_user_id: int | None = None
 
 
 def redact(value: str) -> str:
@@ -63,6 +64,10 @@ def summarize_result(result: dict[str, Any]) -> dict[str, Any]:
         if row.get("expected_score") != row.get("actual_score"):
             failures.append(
                 f"read-back mismatch for {row.get('submission_id', '<unknown>')}"
+            )
+        if int(row.get("comments", 0) or 0) < 1:
+            failures.append(
+                f"missing Canvas feedback comment for {row.get('submission_id', '<unknown>')}"
             )
     status = "FAIL" if failures else "PASS"
     return {
@@ -115,7 +120,7 @@ def _wait_for_drafts(config: CanvasE2EConfig, assignment_key: str, expected: int
         items = queue.get("items", [])
         last_items = items
         ready = [item for item in items if item.get("ai_scores")]
-        if len(items) >= expected and ready:
+        if ready:
             return ready
         time.sleep(2)
     raise TimeoutError(
@@ -137,6 +142,46 @@ def _read_back_from_canvas(course_id: int, assignment_id: int, posted_scores: di
             "comments": len(sub.get("submission_comments") or []),
         })
     return rows
+
+
+def _approve_grade(config: CanvasE2EConfig, grade_id: str) -> dict:
+    """Approve a draft, treating a previously approved draft as idempotent."""
+    try:
+        return _engine_request(config, "POST", f"/api/grades/{grade_id}/approve", {})
+    except RuntimeError as exc:
+        message = str(exc)
+        if "HTTP 409" in message and "already approved" in message.lower():
+            return {"status": "already_approved"}
+        raise
+
+
+def _teacher_override(config: CanvasE2EConfig, grade: dict[str, Any]) -> dict:
+    """Apply a deterministic teacher override so Canvas read-back has a nonzero score/comment."""
+    draft_scores = grade.get("ai_scores") or {}
+    score_keys = list(draft_scores) or ["thesis", "evidence"]
+    teacher_scores = {
+        key: (2.0 if i < 2 else 0.0)
+        for i, key in enumerate(score_keys)
+    }
+    return _engine_request(config, "POST", f"/api/grades/{grade['id']}/override", {
+        "teacher_scores": teacher_scores,
+        "teacher_feedback": (
+            "GRADER TEST: teacher-approved feedback comment for Canvas read-back."
+        ),
+    })
+
+
+def _select_imported_submission(imported: dict[str, Any], target_canvas_user_id: int | None) -> str | None:
+    submissions = imported.get("submissions") or []
+    if target_canvas_user_id is not None:
+        target = str(target_canvas_user_id)
+        for row in submissions:
+            if str(row.get("canvas_user_id")) == target:
+                return row.get("id")
+        return None
+    if submissions:
+        return submissions[0].get("id")
+    return None
 
 
 def run(config: CanvasE2EConfig) -> dict[str, Any]:
@@ -198,14 +243,25 @@ def run(config: CanvasE2EConfig) -> dict[str, Any]:
                 f"no ungraded Canvas submissions imported: {imported}",
                 config,
             )
+        selected_submission_id = _select_imported_submission(
+            imported, config.target_canvas_user_id
+        )
+        if not selected_submission_id:
+            return _blocked(
+                "BLOCKED_CANVAS_DATA",
+                f"target Canvas user was not imported: {imported}",
+                config,
+            )
 
         _engine_request(config, "POST", "/api/grade/batch", {
             "assignment_id": assignment_key,
             "model": config.model,
+            "submission_ids": [selected_submission_id],
         })
-        drafts = _wait_for_drafts(config, assignment_key, int(imported["imported"]))
-        grade_id = drafts[0]["id"]
-        _engine_request(config, "POST", f"/api/grades/{grade_id}/approve", {})
+        drafts = _wait_for_drafts(config, assignment_key, 1)
+        draft = drafts[0]
+        grade_id = draft["id"]
+        _teacher_override(config, draft)
         posted = _engine_request(config, "POST", "/api/canvas/post", {
             "course_id": config.course_id,
             "assignment_id": config.assignment_id,
@@ -223,6 +279,7 @@ def run(config: CanvasE2EConfig) -> dict[str, Any]:
             "assignment_id": config.assignment_id,
             "assignment_key": assignment_key,
             "imported": imported.get("imported", 0),
+            "selected_submission_id": selected_submission_id,
             "grade_ids": [grade_id],
             "posted": posted.get("posted", 0),
             "progress_state": posted.get("progress_state", "unknown"),
@@ -244,6 +301,7 @@ def main() -> None:
     parser.add_argument("--engine-token", default=os.environ.get("GRADER_ENGINE_TOKEN", "dev"))
     parser.add_argument("--model", default="grader-text:8b")
     parser.add_argument("--timeout-seconds", type=int, default=180)
+    parser.add_argument("--target-canvas-user-id", type=int, default=None)
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--output", type=Path, default=None)
@@ -259,6 +317,7 @@ def main() -> None:
         engine_token=args.engine_token,
         model=args.model,
         timeout_seconds=args.timeout_seconds,
+        target_canvas_user_id=args.target_canvas_user_id,
     )
     try:
         result = run(config)

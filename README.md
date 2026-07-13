@@ -34,9 +34,8 @@ per-teacher model to train.
 
 🚧 **Developer-assisted alpha; not ready for an unattended public beta.** The engine and desktop
 review workflow work, including the neuroinclusive light-first interface and the new tiered
-release-gate machinery, but public beta still requires real public-proxy quality/fairness evidence,
-a guarded live Canvas app round trip, clean citation labeling, and signed/notarized clean-machine
-validation.
+release-gate machinery, but public beta still requires real public-proxy quality/fairness evidence
+and signed/notarized clean-machine validation.
 
 | | |
 |---|---|
@@ -44,7 +43,7 @@ validation.
 | Calibration validation | 🟡 P1 built (anchors +0.135 QWK at k=6) |
 | Desktop app (Tauri + React) | 🟢 Built — light/dark preferences, onboarding, queue, review, settings, model manager |
 | UI verification | 🟢 11 component tests + full Playwright workflow; no serious/critical axe findings |
-| Canvas integration | 🟡 Built — import, post grades, offline queue; app-level live round trip still required |
+| Canvas integration | 🟢 Live app-level import → teacher override/approve → post → Progress complete → score/comment read-back passed in `ZZ-GRADER-TEST` |
 | Document parsing + handwriting | 🟡 Built — Docling + Apple Vision + grader-vision |
 | Citation verification | 🟡 20/29 correct (69%); retraction check 3/3; accepted only as visibly experimental until accuracy reaches the enabled-mode gate |
 | CI gates | 🟡 Privacy PASS; perf PASS; public-proxy quality/fairness profiles added; teacher-local still unvalidated |
@@ -57,13 +56,13 @@ per-phase detail.
 
 ## Public beta readiness
 
-**Verdict as of 2026-07-12: no.** Grader is suitable for a developer-assisted usability alpha
+**Verdict as of 2026-07-13: no.** Grader is suitable for a developer-assisted usability alpha
 using synthetic data or institution-approved test data. It is not ready for an unattended public
 beta with real student work.
 
 Confirmed in the current checkout:
 
-- Python tests: 49 passed, 12 intentionally skipped.
+- Python tests: 59 passed, 12 intentionally skipped.
 - Frontend tests: 11 passed; TypeScript/Vite production build and Rust `cargo check` pass.
 - The complete mocked desktop workflow passes in Playwright across onboarding, queue, review,
   settings, and model management, including 200% text scaling and automated accessibility scans.
@@ -72,16 +71,20 @@ Confirmed in the current checkout:
   batch of 1,134 seconds against a 2,700-second budget.
 - Public-proxy quality/fairness gate profiles now run against tiny committed mechanics fixtures.
   These fixtures prove gate wiring only; they are not accuracy evidence.
+- Guarded live Canvas app E2E passes on `canvas.johnnyrobot.ai` course `106`, assignment `2841`:
+  import → targeted grade → teacher override/approval → Canvas post → Progress completed →
+  score/comment read-back.
 - `scripts/release_readiness.py` now writes a consolidated JSON/Markdown verdict. The current local
-  verdict is `blocked` without live Canvas and clean-machine evidence.
+  verdict is `blocked` because clean-machine signed/notarized evidence is missing.
 
 Public-beta blockers:
 
 1. Run the public-proxy quality/fairness gates on open human-scored data, then keep teacher-local
    validation separate until an instructor supplies authorized historical grading.
 2. Keep citation checking visibly experimental for beta users unless accuracy reaches at least 90%.
-3. Complete the app-level Canvas import -> grade -> approve -> post -> read-back path in the
-   guarded `ZZ-GRADER-TEST` course.
+3. Keep Canvas rubric-assessment posting disabled until local rubric criteria can be mapped to real
+   Canvas criterion IDs; score/comment round-trip is validated, attachment write-back still needs
+   separate evidence.
 4. Validate a signed/notarized DMG on a clean supported Mac, including first-run model setup,
    crash recovery, keyboard-only review, and updater behavior.
 5. Complete a supervised private pilot before opening enrollment publicly.
