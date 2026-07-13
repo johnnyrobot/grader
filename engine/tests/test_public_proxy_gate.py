@@ -1,7 +1,11 @@
 import json
 from pathlib import Path
 
-from gates.public_proxy import evaluate_public_proxy_quality, load_public_proxy_examples
+from gates.public_proxy import (
+    evaluate_public_proxy_fairness,
+    evaluate_public_proxy_quality,
+    load_public_proxy_examples,
+)
 
 
 FIXTURE_DIR = Path("fixtures/public_proxy")
@@ -36,3 +40,25 @@ def test_public_proxy_quality_fails_source_floor(tmp_path):
     result = evaluate_public_proxy_quality(source)
     assert result.status == "FAIL"
     assert "QWK" in result.summary
+
+
+def test_public_proxy_fairness_passes_on_controlled_fixture():
+    result = evaluate_public_proxy_fairness(FIXTURE_DIR)
+    assert result.status == "PASS"
+    assert result.details["tier"] == "public_proxy"
+    assert result.details["perturbations"]["informal"]["status"] == "PASS"
+
+
+def test_public_proxy_fairness_fails_large_delta(tmp_path):
+    source = tmp_path / "fixture"
+    source.mkdir()
+    (source / "manifest.json").write_text((FIXTURE_DIR / "public_proxy_manifest.json").read_text())
+    bad_rows = []
+    for line in (FIXTURE_DIR / "public_proxy_examples.jsonl").read_text().splitlines():
+        row = json.loads(line)
+        row["perturbed_scores"]["informal"]["content"] = 0
+        bad_rows.append(json.dumps(row))
+    (source / "examples.jsonl").write_text("\n".join(bad_rows) + "\n")
+    result = evaluate_public_proxy_fairness(source)
+    assert result.status == "FAIL"
+    assert "informal" in result.summary

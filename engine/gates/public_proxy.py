@@ -38,6 +38,23 @@ class GateResult:
             print(f"  {key}: {value}")
 
 
+@dataclass
+class FairnessResult:
+    status: str
+    summary: str
+    details: dict[str, Any] = field(default_factory=dict)
+
+    def exit_code(self) -> int:
+        return 0 if self.status != "FAIL" else 1
+
+    def print(self) -> None:
+        icon = {"PASS": "✓", "FAIL": "✗", "SKIP": "⊘"}[self.status]
+        print(f"\n{icon} PUBLIC PROXY FAIRNESS GATE: {self.status}")
+        print(f"  {self.summary}")
+        for key, value in self.details.items():
+            print(f"  {key}: {value}")
+
+
 @dataclass(frozen=True)
 class PublicProxyExample:
     id: str
@@ -244,3 +261,85 @@ def evaluate_public_proxy_quality(
     if failures:
         return GateResult("FAIL", "; ".join(failures), details)
     return GateResult("PASS", f"QWK {agr.qwk:.3f} >= floor {floor:.3f}", details)
+
+
+def evaluate_public_proxy_fairness(
+    path: Path,
+    threshold: float = 1.0,
+) -> FairnessResult:
+    examples = [example for example in load_public_proxy_examples(path) if example.split == "test"]
+    scored = [example for example in examples if example.ai_total is not None]
+    if not scored:
+        return FairnessResult(
+            "SKIP",
+            "public proxy set has no AI-scored examples for fairness",
+            {"tier": "public_proxy", "items": 0},
+        )
+
+    deltas: dict[str, list[float]] = {}
+    source_deltas: dict[str, dict[str, list[float]]] = {}
+    within_one_band: dict[str, list[bool]] = {}
+
+    for example in scored:
+        original = example.ai_total
+        if original is None:
+            continue
+        for name, scores in example.perturbed_scores.items():
+            delta = _score_total(scores) - original
+            deltas.setdefault(name, []).append(delta)
+            within_one_band.setdefault(name, []).append(abs(delta) <= 1.0)
+            source_deltas.setdefault(name, {}).setdefault(example.source, []).append(delta)
+
+    if not deltas:
+        return FairnessResult(
+            "SKIP",
+            "public proxy examples have no perturbed_scores",
+            {"tier": "public_proxy", "items": len(scored)},
+        )
+
+    perturbations: dict[str, dict[str, Any]] = {}
+    failures: list[str] = []
+    for name, values in sorted(deltas.items()):
+        mean_delta = sum(values) / len(values)
+        mean_abs_delta = sum(abs(value) for value in values) / len(values)
+        max_abs_delta = max(abs(value) for value in values)
+        within_rate = sum(1 for value in within_one_band[name] if value) / len(values)
+        sources: dict[str, dict[str, Any]] = {}
+        source_failure = False
+        for source, source_values in sorted(source_deltas[name].items()):
+            source_mean = sum(source_values) / len(source_values)
+            source_status = "PASS" if abs(source_mean) <= 1.25 else "FAIL"
+            if source_status == "FAIL":
+                source_failure = True
+            sources[source] = {
+                "n": len(source_values),
+                "mean_delta": f"{source_mean:+.2f}",
+                "status": source_status,
+            }
+        status = "PASS"
+        if mean_abs_delta > threshold or within_rate < 0.90 or source_failure:
+            status = "FAIL"
+            failures.append(name)
+        perturbations[name] = {
+            "n": len(values),
+            "mean_delta": f"{mean_delta:+.2f}",
+            "mean_abs_delta": f"{mean_abs_delta:.2f}",
+            "max_abs_delta": f"{max_abs_delta:.2f}",
+            "within_one_band": f"{within_rate:.0%}",
+            "threshold": f"{threshold:.2f}",
+            "sources": sources,
+            "status": status,
+        }
+
+    details = {
+        "tier": "public_proxy",
+        "items": len(scored),
+        "perturbations": perturbations,
+    }
+    if failures:
+        return FairnessResult(
+            "FAIL",
+            f"fairness deltas exceeded thresholds: {', '.join(failures)}",
+            details,
+        )
+    return FairnessResult("PASS", "all perturbations within public proxy thresholds", details)
