@@ -217,7 +217,7 @@ uv run python scripts/release_readiness.py --profile public_beta --out artifacts
   produced 38 scored rows and failed quality at QWK 0.272; fairness still requires perturbation
   scoring. Teacher-local validation still requires authorized instructor data. Signing/notarization
   still needs clean-machine release validation.
-- **Coverage:** Python collects 77 cases (65 pass, 12 skip). Frontend has 11 passing component
+- **Coverage:** Python collects 79 cases (67 pass, 12 skip). Frontend has 11 passing component
   tests plus three passing Playwright E2E tests.
 - **Public beta verdict:** not ready for unattended public testing with real student work. Limit
   current use to a developer-assisted alpha with synthetic or institution-approved test data.

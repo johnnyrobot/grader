@@ -14,6 +14,9 @@ To create unscored evidence rows:
 To populate ``ai_scores`` with the local Grader model:
     uv run python scripts/build_public_proxy.py mohler-asag --grade
 
+To evaluate the teacher-anchor behavior the app uses in practice:
+    uv run python scripts/build_public_proxy.py mohler-asag --grade --anchor-exemplars-per-source 40 --anchor-k 6
+
 To also populate fairness perturbation scores:
     uv run python scripts/build_public_proxy.py mohler-asag --grade --grade-perturbations
 """
@@ -109,6 +112,57 @@ def select_mohler_rows(
     return selected
 
 
+def _score_balanced_sample(df: pd.DataFrame, *, n: int, seed: int) -> pd.DataFrame:
+    if n <= 0 or df.empty:
+        return df.iloc[0:0].copy()
+    working = df.copy()
+    working["_score_band"] = working["score_avg"].round().astype(int)
+    by_band = {
+        band: rows.sample(frac=1.0, random_state=seed + int(band)).reset_index(drop=True)
+        for band, rows in working.groupby("_score_band")
+    }
+    selected_rows = []
+    cursor = {band: 0 for band in by_band}
+    bands = sorted(by_band)
+    while len(selected_rows) < n and any(cursor[band] < len(by_band[band]) for band in bands):
+        for band in bands:
+            if len(selected_rows) >= n:
+                break
+            idx = cursor[band]
+            rows = by_band[band]
+            if idx < len(rows):
+                selected_rows.append(rows.iloc[idx].drop(labels=["_score_band"]))
+                cursor[band] += 1
+    return pd.DataFrame(selected_rows).reset_index(drop=True)
+
+
+def select_mohler_anchor_rows(
+    df: pd.DataFrame,
+    selected: list[SelectedMohlerRow],
+    *,
+    exemplars_per_source: int,
+    seed: int,
+) -> dict[str, list[SelectedMohlerRow]]:
+    if exemplars_per_source <= 0:
+        return {}
+    clean = df.dropna(subset=["id", "question", "instructor_answer", "student_answer", "score_avg"]).copy()
+    selected_ids = {str(item.row["id"]) for item in selected}
+    question_by_source = {item.source_id: item.row["question"] for item in selected}
+    anchors: dict[str, list[SelectedMohlerRow]] = {}
+    for source_index, (source_id, question) in enumerate(sorted(question_by_source.items()), start=1):
+        candidates = clean[(clean["question"] == question) & ~clean["id"].astype(str).isin(selected_ids)]
+        sampled = _score_balanced_sample(
+            candidates,
+            n=exemplars_per_source,
+            seed=seed + 1000 + source_index,
+        )
+        anchors[source_id] = [
+            SelectedMohlerRow(source_id=source_id, row=row)
+            for _, row in sampled.iterrows()
+        ]
+    return anchors
+
+
 def _rubric() -> dict[str, Any]:
     return {
         "title": "Mohler ASAG Short Answer Correctness",
@@ -158,7 +212,22 @@ def row_to_example(selected: SelectedMohlerRow) -> dict[str, Any]:
     }
 
 
-def _grade_text(example: dict[str, Any], text: str, model: str) -> dict[str, float]:
+def _render_anchor_context(anchors: list[SelectedMohlerRow], *, k: int) -> str:
+    if not anchors or k <= 0:
+        return ""
+    chunks: list[str] = []
+    for index, anchor in enumerate(anchors[:k], start=1):
+        row = anchor.row
+        chunks.append(
+            "\n".join([
+                f"Example {index}: teacher score {float(row['score_avg']):.1f}/5",
+                f"Student answer: {_clean_text(row['student_answer'])}",
+            ])
+        )
+    return "\n\n".join(chunks)
+
+
+def _grade_text(example: dict[str, Any], text: str, model: str, *, anchors: str = "") -> dict[str, float]:
     from grader.agent import grade
     from grader.schema import Rubric
 
@@ -169,6 +238,7 @@ def _grade_text(example: dict[str, Any], text: str, model: str) -> dict[str, flo
         model_name=model,
         mode="tool",
         materials=f"Reference answer: {example['reference_answer']}",
+        anchors=anchors,
     )
     if not run.ok:
         raise RuntimeError(run.error or "grading failed")
@@ -196,23 +266,34 @@ def populate_model_scores(
     *,
     model: str,
     grade_perturbations: bool,
+    anchors_by_source: dict[str, str] | None = None,
+    anchor_ids_by_source: dict[str, list[str]] | None = None,
     checkpoint_path: Path | None = None,
     continue_on_error: bool = True,
+    limit: int | None = None,
 ) -> None:
     from gates.bias import PERTURBATIONS, perturb
 
+    graded_this_run = 0
     for index, example in enumerate(examples, start=1):
         if example.get("ai_scores") and (not grade_perturbations or example.get("perturbed_scores")):
             continue
+        if limit is not None and graded_this_run >= limit:
+            break
         print(f"[{index:03d}/{len(examples):03d}] grading {example['id']}")
+        graded_this_run += 1
+        anchors = (anchors_by_source or {}).get(str(example["source"]), "")
+        anchor_ids = (anchor_ids_by_source or {}).get(str(example["source"]), [])
+        if anchor_ids:
+            example["anchor_ids"] = anchor_ids
         try:
             if not example.get("ai_scores"):
-                example["ai_scores"] = _grade_text(example, example["student_text"], model)
+                example["ai_scores"] = _grade_text(example, example["student_text"], model, anchors=anchors)
             if grade_perturbations and not example.get("perturbed_scores"):
                 example["perturbed_scores"] = {}
                 for name in PERTURBATIONS:
                     text = perturb(example["student_text"], name)
-                    example["perturbed_scores"][name] = _grade_text(example, text, model)
+                    example["perturbed_scores"][name] = _grade_text(example, text, model, anchors=anchors)
             example.pop("grade_error", None)
         except Exception as error:
             example["grade_error"] = str(error)[:500]
@@ -232,11 +313,15 @@ def write_public_proxy(
     grade_perturbations: bool,
     model: str,
     seed: int,
+    anchor_rows_by_source: dict[str, list[SelectedMohlerRow]] | None = None,
+    anchor_k: int = 0,
+    force_regrade: bool = False,
+    limit: int | None = None,
 ) -> tuple[Path, Path]:
     out_dir.mkdir(parents=True, exist_ok=True)
     examples = [row_to_example(row) for row in selected]
     examples_path = out_dir / "examples.jsonl"
-    existing_examples = _load_existing_examples(examples_path) if grade else {}
+    existing_examples = _load_existing_examples(examples_path) if grade and not force_regrade else {}
     if existing_examples:
         for index, example in enumerate(examples):
             existing = existing_examples.get(example["id"])
@@ -250,6 +335,15 @@ def write_public_proxy(
     by_source: dict[str, list[SelectedMohlerRow]] = {}
     for row in selected:
         by_source.setdefault(row.source_id, []).append(row)
+    anchor_rows_by_source = anchor_rows_by_source or {}
+    anchors_by_source = {
+        source_id: _render_anchor_context(rows, k=anchor_k)
+        for source_id, rows in anchor_rows_by_source.items()
+    }
+    anchor_ids_by_source = {
+        source_id: [str(row.row["id"]) for row in rows[:anchor_k]]
+        for source_id, rows in anchor_rows_by_source.items()
+    }
 
     manifest = {
         "tier": "public_proxy",
@@ -265,6 +359,12 @@ def write_public_proxy(
         "model": model if grade else None,
         "graded": grade,
         "perturbations_graded": grade_perturbations,
+        "anchor_exemplars_per_source": {
+            source_id: len(rows)
+            for source_id, rows in sorted(anchor_rows_by_source.items())
+        },
+        "anchor_k": anchor_k,
+        "force_regrade": force_regrade,
         "sources": [
             {
                 "id": source_id,
@@ -286,7 +386,10 @@ def write_public_proxy(
             examples,
             model=model,
             grade_perturbations=grade_perturbations,
+            anchors_by_source=anchors_by_source,
+            anchor_ids_by_source=anchor_ids_by_source,
             checkpoint_path=examples_path,
+            limit=limit,
         )
         manifest["scored_items"] = sum(1 for example in examples if example.get("ai_scores"))
         manifest["grade_errors"] = sum(1 for example in examples if example.get("grade_error"))
@@ -305,6 +408,12 @@ def build_mohler_asag(args: argparse.Namespace) -> None:
         items_per_source=args.items_per_source,
         seed=args.seed,
     )
+    anchors = select_mohler_anchor_rows(
+        df,
+        selected,
+        exemplars_per_source=args.anchor_exemplars_per_source,
+        seed=args.seed,
+    )
     manifest_path, examples_path = write_public_proxy(
         selected,
         args.out,
@@ -312,10 +421,17 @@ def build_mohler_asag(args: argparse.Namespace) -> None:
         grade_perturbations=args.grade_perturbations,
         model=args.model,
         seed=args.seed,
+        anchor_rows_by_source=anchors,
+        anchor_k=args.anchor_k,
+        force_regrade=args.force_regrade,
+        limit=args.limit,
     )
     print(f"wrote {manifest_path}")
     print(f"wrote {examples_path}")
-    print(f"examples={len(selected)} sources={args.sources} graded={args.grade} perturbations={args.grade_perturbations}")
+    print(
+        f"examples={len(selected)} sources={args.sources} graded={args.grade} "
+        f"perturbations={args.grade_perturbations} anchor_k={args.anchor_k}"
+    )
 
 
 def main() -> None:
@@ -330,6 +446,10 @@ def main() -> None:
     mohler.add_argument("--grade", action="store_true", help="Populate ai_scores with the local Grader model")
     mohler.add_argument("--grade-perturbations", action="store_true", help="Also populate perturbed_scores for fairness")
     mohler.add_argument("--model", default="grader-text:8b")
+    mohler.add_argument("--anchor-exemplars-per-source", type=int, default=0)
+    mohler.add_argument("--anchor-k", type=int, default=0)
+    mohler.add_argument("--force-regrade", action="store_true", help="Ignore existing ai_scores/perturbed_scores in the output directory")
+    mohler.add_argument("--limit", type=int, default=None, help="Grade at most this many pending examples in this run")
     mohler.set_defaults(func=build_mohler_asag)
     args = parser.parse_args()
     args.func(args)

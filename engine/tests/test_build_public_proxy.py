@@ -8,7 +8,12 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).parents[2]))
 
-from scripts.build_public_proxy import row_to_example, select_mohler_rows, write_public_proxy
+from scripts.build_public_proxy import (
+    row_to_example,
+    select_mohler_anchor_rows,
+    select_mohler_rows,
+    write_public_proxy,
+)
 
 
 def _fake_mohler(rows_per_question: int = 4) -> pd.DataFrame:
@@ -67,3 +72,36 @@ def test_write_public_proxy_manifest_is_release_candidate(tmp_path):
     assert len(manifest["sources"]) == 2
     assert len(examples) == 6
     assert all("ai_scores" not in example for example in examples)
+
+
+def test_select_mohler_anchor_rows_excludes_test_rows_and_balances_sources():
+    df = _fake_mohler(rows_per_question=8)
+    selected = select_mohler_rows(df, sources=2, items_per_source=3, seed=7)
+    anchors = select_mohler_anchor_rows(df, selected, exemplars_per_source=4, seed=7)
+    selected_ids = {str(row.row["id"]) for row in selected}
+
+    assert set(anchors) == {"mohler_q01", "mohler_q02"}
+    assert all(len(rows) == 4 for rows in anchors.values())
+    assert all(str(row.row["id"]) not in selected_ids for rows in anchors.values() for row in rows)
+
+
+def test_write_public_proxy_records_anchor_settings(tmp_path):
+    df = _fake_mohler(rows_per_question=8)
+    selected = select_mohler_rows(df, sources=2, items_per_source=3, seed=7)
+    anchors = select_mohler_anchor_rows(df, selected, exemplars_per_source=4, seed=7)
+
+    manifest_path, _ = write_public_proxy(
+        selected,
+        tmp_path,
+        grade=False,
+        grade_perturbations=False,
+        model="grader-text:8b",
+        seed=7,
+        anchor_rows_by_source=anchors,
+        anchor_k=2,
+        force_regrade=False,
+    )
+
+    manifest = json.loads(manifest_path.read_text())
+    assert manifest["anchor_k"] == 2
+    assert manifest["anchor_exemplars_per_source"] == {"mohler_q01": 4, "mohler_q02": 4}

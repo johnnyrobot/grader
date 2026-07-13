@@ -62,7 +62,7 @@ beta with real student work.
 
 Confirmed in the current checkout:
 
-- Python tests: 65 passed, 12 intentionally skipped.
+- Python tests: 67 passed, 12 intentionally skipped.
 - Frontend tests: 11 passed; TypeScript/Vite production build and Rust `cargo check` pass.
 - The complete mocked desktop workflow passes in Playwright across onboarding, queue, review,
   settings, and model management. The visual sweep records 15 screens, 153 visible controls,
@@ -148,6 +148,13 @@ The release commands above intentionally fail on the tiny fixture; use
 ```bash
 uv run python engine/gates/quality.py --profile public_proxy --public-proxy-dir fixtures/public_proxy --allow-mechanics-fixture
 uv run python engine/gates/bias.py --profile public_proxy --public-proxy-dir fixtures/public_proxy --allow-mechanics-fixture
+```
+
+For diagnostic comparisons, the Mohler builder can also run limited or anchor-conditioned scoring
+passes, for example:
+
+```bash
+uv run python scripts/build_public_proxy.py mohler-asag --out artifacts/public_proxy/mohler_asag_anchored_pilot --grade --anchor-exemplars-per-source 40 --anchor-k 6 --force-regrade --limit 4
 ```
 
 The calibration run uses [Mohler ASAG](https://huggingface.co/datasets/nkazi/MohlerASAG)

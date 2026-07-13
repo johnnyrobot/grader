@@ -25,7 +25,9 @@ scripts/
 
 - **`make_models.sh`**: `CTX` env var override: `GRADER_CTX=8192 ./scripts/make_models.sh`
 - **`build_public_proxy.py`**: output is gitignored. `--grade` calls the local Grader model;
-  `--grade-perturbations` is required before fairness can pass.
+  `--grade-perturbations` is required before fairness can pass. Use `--limit` for short pilot
+  scoring runs and `--anchor-exemplars-per-source ... --anchor-k ...` only for diagnostic anchored
+  comparisons.
 - **`seed_canvas_sandbox.py`**: dry-run by default. `--apply` to write. Refuses courses without `ZZ-GRADER-TEST` marker.
 - Fake students use `ZZGraderTest` prefix + `.invalid` email domain (RFC 2606 — can never resolve)
 - Canvas credentials: env vars (`CANVAS_BASE_URL`, `CANVAS_API_TOKEN`) or canvas-pp-cli's `credentials.toml`
