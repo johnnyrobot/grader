@@ -86,7 +86,7 @@ As of 2026-07-13, Grader is suitable only for a developer-assisted alpha using s
 institution-approved test data. It is not ready for an unattended public beta with real student
 work.
 
-- Python: 68 passed, 12 skipped.
+- Python: 72 passed, 12 skipped.
 - Frontend: 11 component tests and three Playwright E2E tests pass, including a 15-screen visual
   sweep with 153 visible controls recorded.
 - Privacy: PASS in isolation, 3/3 captured connections allowlisted.
@@ -101,8 +101,8 @@ work.
 - Canvas: guarded live app-level E2E passes on `canvas.johnnyrobot.ai` course `106`, assignment
   `2841`: import, targeted grade, teacher override/approval, post, Progress completed, score/comment
   read-back.
-- Release readiness: local report currently returns `blocked` because public-proxy fairness and
-  clean-machine signed/notarized evidence are missing.
+- Release readiness: local report currently returns `blocked` with blocker summaries for
+  public-proxy fairness completion and clean-machine signed/notarized evidence.
 
 Before public beta: run real public-proxy quality/fairness evidence, keep citation checks visibly
 experimental unless accuracy improves, and complete a signed/notarized clean-machine install plus

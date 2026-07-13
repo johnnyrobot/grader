@@ -62,7 +62,7 @@ beta with real student work.
 
 Confirmed in the current checkout:
 
-- Python tests: 68 passed, 12 intentionally skipped.
+- Python tests: 72 passed, 12 intentionally skipped.
 - Frontend tests: 11 passed; TypeScript/Vite production build and Rust `cargo check` pass.
 - The complete mocked desktop workflow passes in Playwright across onboarding, queue, review,
   settings, and model management. The visual sweep records 15 screens, 153 visible controls,
@@ -76,9 +76,9 @@ Confirmed in the current checkout:
 - Guarded live Canvas app E2E passes on `canvas.johnnyrobot.ai` course `106`, assignment `2841`:
   import → targeted grade → teacher override/approval → Canvas post → Progress completed →
   score/comment read-back.
-- `scripts/release_readiness.py` now writes a consolidated JSON/Markdown verdict. The current local
-  verdict remains `blocked` because public-proxy fairness and clean-machine signed/notarized
-  evidence are still missing.
+- `scripts/release_readiness.py` now writes a consolidated JSON/Markdown verdict with blocker
+  summaries. With current local artifacts, the report is `blocked` on public-proxy fairness
+  completion and clean-machine signed/notarized evidence.
 
 Public-beta blockers:
 
