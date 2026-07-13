@@ -61,7 +61,7 @@ pub fn start_engine() -> Result<(String, u16), String> {
 
     let engine_dir = find_engine_dir().ok_or("engine directory not found")?;
     let project_root = engine_dir.parent().unwrap_or(&PathBuf::from(".")).to_path_buf();
-    let uv = find_uv().ok_or("uv not found. Install: curl -LsSf https://astral.sh/uv/install.sh | sh")?;
+    let _uv = find_uv().ok_or("uv not found. Install: curl -LsSf https://astral.sh/uv/install.sh | sh")?;
 
     let token = uuid::Uuid::new_v4().to_string();
     let port = 8756u16;
