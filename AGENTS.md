@@ -194,7 +194,7 @@ uv run python engine/verify_citations.py --fixtures fixtures/citations/citation_
 uv run python scripts/frontend_evidence.py --out artifacts/release-evidence/frontend.json
 uv run python scripts/signing_doctor.py --out artifacts/release-evidence/signing.json --no-fail
 uv run python scripts/generate_appcast.py --dmg /path/to/Grader.dmg --version 0.1.0 --signing-key /path/to/tauri-updater-key.pem --output latest.json
-uv run python scripts/updater_evidence.py --manifest latest.json --artifact /path/to/Grader.dmg --out artifacts/release-evidence/updater.json
+uv run python scripts/updater_evidence.py --manifest latest.json --artifact /path/to/Grader.dmg --out artifacts/release-evidence/updater.json  # fails if artifacts predate current git commit
 uv run python scripts/live_canvas_e2e.py --dry-run
 uv run python scripts/clean_machine_evidence.py --print-manual-runbook > clean-machine-runbook.md
 uv run python scripts/clean_machine_evidence.py --print-manual-template > clean-machine-manual-evidence.json
@@ -228,20 +228,21 @@ uv run python scripts/release_readiness.py --profile public_beta --expected-vers
   performance gate passes at 38.3s per 1,500-word essay. Public-proxy quality/fairness release mode
   rejects the tiny committed mechanics fixtures. The local anchored 40-item Mohler ASAG public-proxy
   artifact passes quality at QWK 0.845 and passes fairness across all five perturbation families.
-  Static updater evidence now passes with a signed `latest.json`, DMG artifact metadata, stapler/spctl
-  checks, and mounted bundled-app codesign/spctl checks. Fresh local signing/notarization is currently
-  blocked: `codesign` returns `errSecInternalComponent` and notarytool profile `grader` is unavailable; run
-  `scripts/signing_doctor.py` to refresh the fail-closed credential diagnostic before release
-  signing. The release-readiness JSON/Markdown now includes an end-to-end public-beta matrix that
-  maps requirements to evidence. Teacher-local validation still requires authorized instructor data,
-  and clean-machine behavioral checks still need release validation.
+  Updater/DMG/app evidence now fails closed when artifacts predate the current git commit; the latest
+  local signed-app Computer Use sweep found the existing DMG stale because review approval still showed
+  both an approved state and "Teacher changes not saved yet." Fresh local signing/notarization is
+  currently blocked: `codesign` returns `errSecInternalComponent` and notarytool profile `grader` is
+  unavailable; run `scripts/signing_doctor.py` to refresh the fail-closed credential diagnostic before
+  release signing. The release-readiness JSON/Markdown now includes an end-to-end public-beta matrix
+  that maps requirements to evidence. Teacher-local validation still requires authorized instructor
+  data, and clean-machine behavioral checks still need release validation.
 - **Coverage:** Python collects 133 cases (121 pass, 12 skip). Frontend has 12 passing component
   tests plus four passing Playwright E2E tests.
 - **Public beta verdict:** not ready for unattended public testing with real student work. Limit
   current use to a developer-assisted alpha with synthetic or institution-approved test data.
-- **Highest-value next action:** restore signing/notarization credentials, then collect
+- **Highest-value next action:** restore signing/notarization credentials, rebuild/re-sign/notarize
+  from the current source commit, rerun updater and clean-machine evidence, then collect
   clean-machine first-run model setup, crash recovery, keyboard-only review, Computer Use instructor
-  sweep, and updater-path evidence before broadening
-  beta claims.
+  sweep, and updater-path evidence before broadening beta claims.
 - The existing modification under `.omo/run-continuation/` is unrelated operational state; do not
   overwrite or commit it unless explicitly requested.

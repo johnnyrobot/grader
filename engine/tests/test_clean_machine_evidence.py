@@ -6,6 +6,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parents[2]))
 
+import scripts.clean_machine_evidence as clean_machine_evidence
 from scripts.clean_machine_evidence import (
     MANUAL_CHECKS,
     REQUIRED_CHECKS,
@@ -237,3 +238,33 @@ def test_collect_release_provenance_rejects_unsigned_or_wrong_version_manifest(t
     assert ok is False
     assert details["missing_provenance"] == ["updater_manifest"]
     assert details["updater_manifest"]["ok"] is False
+
+
+def test_collect_release_provenance_rejects_artifacts_older_than_source_commit(tmp_path, monkeypatch):
+    app = tmp_path / "Grader.app"
+    dmg = tmp_path / "Grader.dmg"
+    manifest = tmp_path / "latest.json"
+    app.mkdir()
+    dmg.write_text("fake dmg")
+    manifest.write_text('{"version":"0.1.0","pub_date":"2026-07-13T00:00:00Z","platforms":{"darwin-aarch64":{"signature":"sig","url":"https://example.invalid/Grader.dmg"},"darwin-x86_64":{"signature":"sig","url":"https://example.invalid/Grader.dmg"}}}')
+    monkeypatch.setattr(
+        clean_machine_evidence,
+        "_git_source_revision",
+        lambda: {
+            "available": True,
+            "commit": "abc123",
+            "commit_time_epoch": 2_000_000_000,
+            "commit_time": "2033-05-18T03:33:20+00:00",
+        },
+    )
+
+    ok, details = collect_release_provenance(
+        app_path=app,
+        dmg_path=dmg,
+        updater_manifest=manifest,
+        expected_version="0.1.0",
+    )
+
+    assert ok is False
+    assert "source_freshness" in details["missing_provenance"]
+    assert details["source_freshness"]["stale_artifacts"]

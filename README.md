@@ -81,9 +81,11 @@ Confirmed in the current checkout:
   Progress completed → score `2` and one teacher feedback comment read back.
 - `scripts/release_readiness.py` writes a consolidated JSON/Markdown verdict with blocker
   summaries plus an end-to-end testing and evaluation matrix that maps public-beta requirements to
-  evidence. With current local artifacts, the report is `blocked` on signing credentials and
-  clean-machine behavior evidence: first-run models, crash recovery, keyboard-only review, Computer
-  Use instructor sweep, and updater path.
+  evidence. With current local artifacts, the report is `blocked`: the signed updater/DMG/app
+  evidence now fails closed because those artifacts predate the current source commit, local signing
+  credentials are still unavailable, and clean-machine behavior evidence is still missing for
+  first-run models, crash recovery, keyboard-only review, Computer Use instructor sweep, and updater
+  path.
 
 Public-beta blockers:
 
@@ -91,9 +93,11 @@ Public-beta blockers:
 2. Keep Canvas rubric-assessment posting disabled until local rubric criteria can be mapped to real
    Canvas criterion IDs; score/comment round-trip is validated, attachment write-back still needs
    separate evidence.
-3. Restore local release signing/notarization credentials, then validate the signed/notarized DMG
-   on a clean supported Mac, including first-run model setup, crash recovery, keyboard-only review,
-   Computer Use instructor sweep, and updater behavior.
+3. Restore local release signing/notarization credentials, rebuild/re-sign/notarize from the current
+   source commit, then validate the signed/notarized DMG on a clean supported Mac, including first-run
+   model setup, crash recovery, keyboard-only review, Computer Use instructor sweep, and updater
+   behavior. The latest local signed-app Computer Use sweep found the existing DMG stale: after review
+   approval it still displayed both the approved message and "Teacher changes not saved yet."
 4. Keep teacher-local validation separate until an instructor supplies authorized historical grading.
 5. Complete a supervised private pilot before opening enrollment publicly.
 
@@ -145,7 +149,7 @@ uv run python scripts/frontend_evidence.py --out artifacts/release-evidence/fron
 uv run python scripts/dev_mock_engine.py  # optional: safe synthetic backend for local UI/Computer Use inspection
 uv run python scripts/signing_doctor.py --out artifacts/release-evidence/signing.json --no-fail
 uv run python scripts/generate_appcast.py --dmg /path/to/Grader.dmg --version 0.1.0 --signing-key /path/to/tauri-updater-key.pem --output latest.json
-uv run python scripts/updater_evidence.py --manifest latest.json --artifact /path/to/Grader.dmg --out artifacts/release-evidence/updater.json
+uv run python scripts/updater_evidence.py --manifest latest.json --artifact /path/to/Grader.dmg --out artifacts/release-evidence/updater.json  # fails if local artifacts predate the current git commit
 uv run python scripts/live_canvas_e2e.py --dry-run
 uv run python scripts/clean_machine_evidence.py --print-manual-runbook > clean-machine-runbook.md
 uv run python scripts/clean_machine_evidence.py --print-manual-template > clean-machine-manual-evidence.json

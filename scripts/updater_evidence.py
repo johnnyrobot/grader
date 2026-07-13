@@ -25,6 +25,7 @@ from pathlib import Path
 from typing import Any, Callable, Protocol
 
 
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 REQUIRED_PLATFORMS = ("darwin-aarch64", "darwin-x86_64")
 
 
@@ -43,6 +44,84 @@ def _sha256(path: Path) -> str:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def _git_source_revision() -> dict[str, Any]:
+    try:
+        commit = subprocess.run(
+            ["git", "-C", str(PROJECT_ROOT), "rev-parse", "HEAD"],
+            text=True,
+            capture_output=True,
+            check=True,
+        ).stdout.strip()
+        timestamp = int(subprocess.run(
+            ["git", "-C", str(PROJECT_ROOT), "log", "-1", "--format=%ct"],
+            text=True,
+            capture_output=True,
+            check=True,
+        ).stdout.strip())
+    except Exception as exc:
+        return {"available": False, "reason": str(exc)}
+    return {
+        "available": True,
+        "commit": commit,
+        "commit_time_epoch": timestamp,
+        "commit_time": datetime.fromtimestamp(timestamp, timezone.utc).isoformat(),
+    }
+
+
+def _mtime_metadata(path: Path) -> dict[str, Any]:
+    mtime = path.stat().st_mtime
+    return {
+        "mtime_epoch": mtime,
+        "mtime": datetime.fromtimestamp(mtime, timezone.utc).isoformat(),
+    }
+
+
+def _source_freshness(paths: dict[str, Path]) -> tuple[list[str], dict[str, Any]]:
+    source = _git_source_revision()
+    details: dict[str, Any] = {
+        "source_revision": source,
+        "checked_artifacts": [],
+        "stale_artifacts": [],
+    }
+    if source.get("available") is not True:
+        details["ok"] = False
+        details["reason"] = "could not determine current git source revision"
+        return ["could not determine current git source revision for artifact freshness"], details
+
+    commit_time = float(source["commit_time_epoch"])
+    failures: list[str] = []
+    stale: list[str] = []
+    for name, path in paths.items():
+        if not path.exists():
+            continue
+        mtime = path.stat().st_mtime
+        row = {
+            "name": name,
+            "path": str(path),
+            **_mtime_metadata(path),
+            "current_commit": source.get("commit"),
+            "current_commit_time": source.get("commit_time"),
+        }
+        details["checked_artifacts"].append(row)
+        if mtime + 1 < commit_time:
+            stale.append(name)
+
+    if stale:
+        failures.append(
+            "release artifact timestamps predate the current git commit: " + ", ".join(stale)
+        )
+        details["reason"] = (
+            "rebuild the release artifact and regenerate updater evidence from this checkout"
+        )
+    elif not details["checked_artifacts"]:
+        failures.append("no updater artifacts were available for source freshness")
+        details["reason"] = "no checked artifacts"
+
+    details["stale_artifacts"] = stale
+    details["ok"] = not failures
+    return failures, details
 
 
 def _load_json(path: Path) -> dict[str, Any]:
@@ -203,6 +282,8 @@ def collect(
     else:
         manifest = _load_json(manifest_path)
         details["manifest_path"] = str(manifest_path)
+        details["manifest_mtime"] = _mtime_metadata(manifest_path)["mtime"]
+        details["manifest_mtime_epoch"] = _mtime_metadata(manifest_path)["mtime_epoch"]
         details["manifest_version"] = manifest.get("version")
         if str(manifest.get("version") or "") != expected:
             failures.append(
@@ -225,6 +306,10 @@ def collect(
             details["artifact_path"] = str(artifact_path)
             details["artifact_size_bytes"] = artifact_path.stat().st_size
             details["artifact_sha256"] = _sha256(artifact_path)
+            details.update({
+                "artifact_mtime": _mtime_metadata(artifact_path)["mtime"],
+                "artifact_mtime_epoch": _mtime_metadata(artifact_path)["mtime_epoch"],
+            })
             manifest_urls = [
                 str(entry.get("url") or "")
                 for entry in (manifest.get("platforms") or {}).values()
@@ -238,6 +323,15 @@ def collect(
                 failures.extend(artifact_failures)
     else:
         warnings.append("no local updater artifact supplied; clean-machine download test still required")
+
+    freshness_paths: dict[str, Path] = {}
+    if manifest_path is not None:
+        freshness_paths["manifest"] = manifest_path
+    if artifact_path is not None:
+        freshness_paths["artifact"] = artifact_path
+    freshness_failures, freshness_details = _source_freshness(freshness_paths)
+    details["source_freshness"] = freshness_details
+    failures.extend(freshness_failures)
 
     status = "PASS" if not failures else "BLOCKED_UPDATER_EVIDENCE"
     return {

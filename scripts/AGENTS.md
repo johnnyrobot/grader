@@ -29,8 +29,8 @@ scripts/
 | Collect frontend release evidence | `frontend_evidence.py` | Runs component tests, production build, managed Playwright E2E, and validates visual-sweep screenshots/control coverage |
 | Diagnose signing credentials | `signing_doctor.py` | Writes `artifacts/release-evidence/signing.json`; probes Developer ID private-key access and notarytool profile before signing |
 | Generate updater manifest | `generate_appcast.py` | Requires `--signing-key` for release manifests; use `--allow-unsigned` only for local smoke fixtures |
-| Validate updater evidence | `updater_evidence.py` | Requires updater config, signed latest.json, artifact filename/hash checks, and local artifact signature/notarization checks |
-| Clean-machine release evidence | `clean_machine_evidence.py` | Writes `artifacts/release-evidence/clean-machine.json`; PASS requires signing, app/DMG/latest.json provenance, plus structured manual evidence for first-run/crash/keyboard/Computer Use/updater checks |
+| Validate updater evidence | `updater_evidence.py` | Requires updater config, signed latest.json, artifact filename/hash/source-freshness checks, and local artifact signature/notarization checks |
+| Clean-machine release evidence | `clean_machine_evidence.py` | Writes `artifacts/release-evidence/clean-machine.json`; PASS requires signing, app/DMG/latest.json provenance, current-source freshness, plus structured manual evidence for first-run/crash/keyboard/Computer Use/updater checks |
 | Seed Canvas sandbox | `seed_canvas_sandbox.py` | `--apply --students 6` to create + exercise |
 | Tear down sandbox | `seed_canvas_sandbox.py` | `--teardown --course-id 106 --apply` |
 | Understand Canvas API quirks | `seed_canvas_sandbox.py` | All 4 gotchas encoded in code comments |
@@ -50,9 +50,10 @@ scripts/
   fixture data only and is not release evidence by itself; signed clean-machine claims still require
   `clean_machine_evidence.py`.
 - **`updater_evidence.py`**: blocks public beta when `latest.json` is missing, any platform
-  signature is empty, the manifest does not reference the supplied artifact, or the local artifact
-  fails signature/notarization checks. For DMGs it mounts the image and verifies the bundled `.app`
-  with codesign and spctl. It does not replace the clean-machine N→N+1 update test.
+  signature is empty, the manifest does not reference the supplied artifact, the supplied
+  manifest/artifact predates the current git commit, or the local artifact fails
+  signature/notarization checks. For DMGs it mounts the image and verifies the bundled `.app` with
+  codesign and spctl. It does not replace the clean-machine N→N+1 update test.
 - **`generate_appcast.py`**: despite the historical name, this creates Tauri `latest.json`
   manifests, not Sparkle XML. It fails closed without a Tauri updater signing key unless
   `--allow-unsigned` is supplied for a non-release smoke fixture. `--app` zips the `.app` bundle
@@ -66,11 +67,12 @@ scripts/
   `--print-manual-template`. Fill it on the clean Mac with `passed: true`, `performed_at`, `tester`,
   notes, and existing screenshot/log paths, then run with `--app ... --dmg ... --updater-manifest ...
   --expected-version ... --manual-evidence ... --evidence-root ...` so the PASS records the exact
-  tested app/DMG/latest.json hashes. If the loose build `.app` signature is stale, the script mounts
-  the supplied DMG and verifies the bundled `.app` for the app codesign/spctl checks. The template
-  includes `computer_use_instructor_sweep`; this is the required signed-app Computer Use inspection
-  and complements the automated Playwright visual sweep. Manual flags without evidence are
-  legacy-only and should not be used for release claims.
+  tested app/DMG/latest.json hashes and confirms those artifacts are fresh relative to the current
+  git commit. If the loose build `.app` signature is stale, the script mounts the supplied DMG and
+  verifies the bundled `.app` for the app codesign/spctl checks. The template includes
+  `computer_use_instructor_sweep`; this is the required signed-app Computer Use inspection and
+  complements the automated Playwright visual sweep. Manual flags without evidence are legacy-only
+  and should not be used for release claims.
 - **`release_readiness.py`**: pass `--expected-version ...` for release runs. The script defaults
   to `app/src-tauri/tauri.conf.json`, records artifact path/mtime/SHA-256 metadata, and rejects PASS
   updater or clean-machine artifacts whose recorded version does not match the evaluated app. Its

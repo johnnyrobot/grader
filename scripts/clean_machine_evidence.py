@@ -28,6 +28,8 @@ from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping
 
 
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
 REQUIRED_CHECKS = (
     "codesign_verify",
     "stapler_validate",
@@ -141,6 +143,42 @@ def _sha256_tree(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _latest_mtime(path: Path) -> float:
+    if path.is_file():
+        return path.stat().st_mtime
+    latest = path.stat().st_mtime
+    for child in path.rglob("*"):
+        try:
+            latest = max(latest, child.stat().st_mtime)
+        except OSError:
+            continue
+    return latest
+
+
+def _git_source_revision() -> dict[str, object]:
+    try:
+        commit = subprocess.run(
+            ["git", "-C", str(PROJECT_ROOT), "rev-parse", "HEAD"],
+            text=True,
+            capture_output=True,
+            check=True,
+        ).stdout.strip()
+        timestamp = int(subprocess.run(
+            ["git", "-C", str(PROJECT_ROOT), "log", "-1", "--format=%ct"],
+            text=True,
+            capture_output=True,
+            check=True,
+        ).stdout.strip())
+    except Exception as exc:
+        return {"available": False, "reason": str(exc)}
+    return {
+        "available": True,
+        "commit": commit,
+        "commit_time_epoch": timestamp,
+        "commit_time": datetime.fromtimestamp(timestamp, timezone.utc).isoformat(),
+    }
+
+
 def _artifact_metadata(path: Path | None) -> dict[str, object]:
     if path is None:
         return {"present": False, "path": None}
@@ -151,6 +189,9 @@ def _artifact_metadata(path: Path | None) -> dict[str, object]:
         "path": str(path),
         "kind": "directory" if path.is_dir() else "file",
     }
+    latest_mtime = _latest_mtime(path)
+    metadata["mtime_epoch"] = latest_mtime
+    metadata["mtime"] = datetime.fromtimestamp(latest_mtime, timezone.utc).isoformat()
     if path.is_file():
         metadata["size_bytes"] = path.stat().st_size
         metadata["sha256"] = _sha256_file(path)
@@ -159,6 +200,55 @@ def _artifact_metadata(path: Path | None) -> dict[str, object]:
         metadata["file_count"] = len(files)
         metadata["sha256_tree"] = _sha256_tree(path)
     return metadata
+
+
+def _source_freshness(details: Mapping[str, object]) -> tuple[bool, dict[str, object]]:
+    source = _git_source_revision()
+    result: dict[str, object] = {
+        "source_revision": source,
+        "checked_artifacts": [],
+        "stale_artifacts": [],
+    }
+    if source.get("available") is not True:
+        result["ok"] = False
+        result["reason"] = "could not determine current git source revision"
+        return False, result
+
+    commit_time = float(source["commit_time_epoch"])
+    stale: list[str] = []
+    checked: list[dict[str, object]] = []
+    for name in ("app", "dmg", "updater_manifest"):
+        artifact = details.get(name)
+        if not isinstance(artifact, Mapping) or artifact.get("present") is not True:
+            continue
+        mtime = artifact.get("mtime_epoch")
+        if not isinstance(mtime, (int, float)):
+            stale.append(name)
+            checked.append({"name": name, "reason": "missing mtime"})
+            continue
+        row = {
+            "name": name,
+            "path": artifact.get("path"),
+            "mtime": artifact.get("mtime"),
+            "mtime_epoch": mtime,
+            "current_commit": source.get("commit"),
+            "current_commit_time": source.get("commit_time"),
+        }
+        checked.append(row)
+        if float(mtime) + 1 < commit_time:
+            stale.append(name)
+
+    result["checked_artifacts"] = checked
+    result["stale_artifacts"] = stale
+    result["ok"] = not stale and bool(checked)
+    if stale:
+        result["reason"] = (
+            "release artifact timestamps predate the current git commit; "
+            "rebuild and regenerate release evidence from this checkout"
+        )
+    elif not checked:
+        result["reason"] = "no release artifacts with mtimes were available for source freshness"
+    return bool(result["ok"]), result
 
 
 def _manifest_metadata(path: Path | None, expected_version: str | None) -> dict[str, object]:
@@ -211,7 +301,9 @@ def collect_release_provenance(
     dmg_ok = bool(details["dmg"].get("present")) if isinstance(details["dmg"], Mapping) else False
     manifest_ok = bool(details["updater_manifest"].get("ok")) if isinstance(details["updater_manifest"], Mapping) else False
     version_ok = bool(expected_version)
-    ok = app_ok and dmg_ok and manifest_ok and version_ok
+    freshness_ok, freshness_details = _source_freshness(details)
+    details["source_freshness"] = freshness_details
+    ok = app_ok and dmg_ok and manifest_ok and version_ok and freshness_ok
     if not ok:
         missing: list[str] = []
         if not version_ok:
@@ -222,6 +314,8 @@ def collect_release_provenance(
             missing.append("dmg")
         if not manifest_ok:
             missing.append("updater_manifest")
+        if not freshness_ok:
+            missing.append("source_freshness")
         details["missing_provenance"] = missing
     return ok, details
 
