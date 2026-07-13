@@ -31,10 +31,10 @@ misrepresented as grading accuracy.
 | Desktop build | React build, unit tests, E2E workflow, Rust check pass | `scripts/frontend_evidence.py`, `cargo check` | PASS: 12 component tests, 4 E2E tests, build, and Rust check; frontend artifact records 16 visual-sweep screens and 167 controls | PASS artifact must be supplied to readiness report |
 | Accessibility | No serious/critical WCAG violations, 200% text scaling, keyboard-only loop | Playwright axe + visual inspection | PASS on synthetic fixture; visual sweep covers 16 screens and 167 visible controls | PASS mechanics; still requires clean-machine app check |
 | Computer Use instructor sweep | Signed app is inspected as an instructor using Computer Use, with screenshots/accessibility-tree notes for every visible screen and safe control path | `scripts/clean_machine_evidence.py --print-manual-runbook`, then `computer_use_instructor_sweep` manual evidence | BLOCKED: no signed-app Computer Use sweep evidence has been supplied yet | Required for public beta; complements, not replaces, Playwright |
-| Updater evidence | Signed updater manifest references the signed artifact and current version | `scripts/generate_appcast.py --signing-key ...`, then `scripts/updater_evidence.py` | BLOCKED: no signed `latest.json` release manifest is available in the current checkout; manifest generation now fails closed unless a Tauri updater signing key is supplied | Required before clean-machine updater path |
+| Updater evidence | Signed updater manifest references the signed artifact and current version, and the local artifact passes macOS signature/notarization checks | `scripts/generate_appcast.py --signing-key ...`, then `scripts/updater_evidence.py` | PASS: signed `latest.json` references `Grader.dmg`; updater evidence records artifact SHA-256, stapler/spctl checks, and mounted bundled-app codesign/spctl checks | Required before clean-machine updater path |
 | Signing/notarization | Signed/notarized app or DMG passes codesign, stapler, spctl | `scripts/signing_doctor.py`, release script, clean Mac | BLOCKED: fresh local signing fails with `errSecInternalComponent`, and notarytool profile `grader` is unavailable; `sign_and_notarize.sh` now runs the doctor before mutating the app bundle | PASS automated signing/notarization evidence; clean-machine behavior remains separate |
 | Clean-machine | First launch, model setup, crash recovery, keyboard review, Computer Use instructor sweep, updater N->N+1 | `scripts/clean_machine_evidence.py --print-manual-runbook`, then JSON from a clean Mac/VM with structured manual evidence notes, files, and release artifact hashes | BLOCKED: current local evidence is missing codesign/spctl plus release provenance, first-run models, crash recovery, keyboard-only review, Computer Use instructor sweep, and updater path; clean-machine manual evidence now requires tester, timestamp, notes, existing screenshot/log paths, and exact app/DMG/latest.json provenance | Required for public beta |
-| Release report | Consolidated verdict is `supervised_public_beta` | `scripts/release_readiness.py` | BLOCKED: updater evidence, signing credentials, and clean-machine evidence are incomplete | Final release gate |
+| Release report | Consolidated verdict is `supervised_public_beta` | `scripts/release_readiness.py` | BLOCKED: signing credentials and clean-machine evidence are incomplete | Final release gate |
 
 ## Required Manual Visual Sweep
 
@@ -58,9 +58,10 @@ The latest Playwright sweep is `PASS`; the clean-machine signed app still needs 
 
 Not public beta ready. The current anchored real-data public-proxy quality and fairness runs pass on
 Mohler ASAG, Canvas app-level score/comment round-trip passes, and citations are acceptable only in
-visibly experimental beta mode. The remaining public-beta blockers are fresh signing/notarization
-credentials, signed updater manifest evidence, plus clean-machine behavioral evidence: first-run
-model setup, crash recovery, keyboard-only review, Computer Use instructor sweep, and updater N→N+1. Run
+visibly experimental beta mode. Static signed-updater evidence passes, including local DMG and bundled
+app signature checks. The remaining public-beta blockers are fresh signing/notarization credentials
+plus clean-machine behavioral evidence: first-run model setup, crash recovery, keyboard-only review,
+Computer Use instructor sweep, and updater N→N+1. Run
 `uv run python scripts/signing_doctor.py --out artifacts/release-evidence/signing.json --no-fail`
 to refresh the local signing diagnostic artifact before a release attempt, and generate
 `clean-machine-runbook.md` with `scripts/clean_machine_evidence.py --print-manual-runbook` before

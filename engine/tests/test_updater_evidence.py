@@ -1,5 +1,6 @@
 import json
 import sys
+import zipfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parents[2]))
@@ -37,35 +38,90 @@ def test_updater_evidence_blocks_without_manifest(tmp_path):
 
 def test_updater_evidence_passes_signed_manifest_and_artifact(tmp_path):
     config = tmp_path / "tauri.conf.json"
-    artifact = tmp_path / "Grader.dmg"
+    artifact = tmp_path / "Grader.zip"
     manifest = tmp_path / "latest.json"
     _write_config(config)
-    artifact.write_bytes(b"fake signed dmg")
+    with zipfile.ZipFile(artifact, "w") as archive:
+        archive.writestr("Grader.app/Contents/MacOS/Grader", "binary")
     manifest.write_text(json.dumps({
         "version": "0.1.0",
         "pub_date": "2026-07-13T00:00:00Z",
         "platforms": {
             "darwin-aarch64": {
                 "signature": "signed-aarch64",
-                "url": "https://example.invalid/releases/Grader.dmg",
+                "url": "https://example.invalid/releases/Grader.zip",
             },
             "darwin-x86_64": {
                 "signature": "signed-x86",
-                "url": "https://example.invalid/releases/Grader.dmg",
+                "url": "https://example.invalid/releases/Grader.zip",
             },
         },
     }))
+
+    def fake_run(command, **_kwargs):
+        class Proc:
+            returncode = 0
+            stdout = ""
+            stderr = ""
+
+        assert command[0] in {"codesign", "spctl"}
+        return Proc()
 
     evidence = collect(
         config_path=config,
         manifest_path=manifest,
         artifact_path=artifact,
         expected_version=None,
+        runner=fake_run,
     )
 
     assert evidence["status"] == "PASS"
     assert evidence["failures"] == []
-    assert evidence["details"]["artifact_size_bytes"] == len(b"fake signed dmg")
+    assert evidence["details"]["artifact_size_bytes"] == artifact.stat().st_size
+    assert evidence["details"]["artifact_signature_checks"]["bundled_app"]["codesign_verify"]["ok"] is True
+
+
+def test_updater_evidence_blocks_when_local_artifact_signature_fails(tmp_path):
+    config = tmp_path / "tauri.conf.json"
+    artifact = tmp_path / "Grader.zip"
+    manifest = tmp_path / "latest.json"
+    _write_config(config)
+    with zipfile.ZipFile(artifact, "w") as archive:
+        archive.writestr("Grader.app/Contents/MacOS/Grader", "binary")
+    manifest.write_text(json.dumps({
+        "version": "0.1.0",
+        "pub_date": "2026-07-13T00:00:00Z",
+        "platforms": {
+            "darwin-aarch64": {"signature": "signed", "url": "https://example.invalid/Grader.zip"},
+            "darwin-x86_64": {"signature": "signed", "url": "https://example.invalid/Grader.zip"},
+        },
+    }))
+
+    def fake_run(command, **_kwargs):
+        class Proc:
+            stdout = ""
+            stderr = ""
+
+            def __init__(self, returncode: int, stderr: str = ""):
+                self.returncode = returncode
+                self.stderr = stderr
+
+        if command[0] == "codesign":
+            return Proc(1, "code has no resources but signature indicates they must be present")
+        if command[0] == "spctl":
+            return Proc(0)
+        raise AssertionError(command)
+
+    evidence = collect(
+        config_path=config,
+        manifest_path=manifest,
+        artifact_path=artifact,
+        expected_version=None,
+        runner=fake_run,
+    )
+
+    assert evidence["status"] == "BLOCKED_UPDATER_EVIDENCE"
+    assert "app signature check failed: codesign_verify" in evidence["failures"]
 
 
 def test_updater_evidence_blocks_unsigned_manifest(tmp_path):

@@ -100,16 +100,17 @@ work.
 - Canvas: guarded live app-level E2E passes on `canvas.johnnyrobot.ai` course `106`, assignment
   `2841`: import, targeted grade for Canvas user `9`, teacher override/approval, post, Progress
   completed, score `2`, and one teacher feedback comment read back.
-- Release readiness: local report currently returns `blocked` for updater evidence, signing
-  credentials, and clean-machine evidence. Updater evidence is blocked until signed `latest.json`
-  references the signed release artifact. Fresh local signing/notarization is blocked because
-  `codesign` returns `errSecInternalComponent` and notarytool profile `grader` is unavailable;
-  clean-machine first-run models, crash recovery, keyboard-only review, and updater path also
-  remain unverified and now require structured manual evidence notes plus screenshot/log paths.
+- Release readiness: local report currently returns `blocked` for signing credentials and
+  clean-machine evidence. Static updater evidence passes with signed `latest.json`, DMG artifact
+  metadata, stapler/spctl checks, and mounted bundled-app codesign/spctl checks. Fresh local
+  signing/notarization is blocked because `codesign` returns `errSecInternalComponent` and notarytool
+  profile `grader` is unavailable; clean-machine first-run models, crash recovery, keyboard-only
+  review, and updater path also remain unverified and now require structured manual evidence notes
+  plus screenshot/log paths.
 
 Before public beta: keep citation checks visibly experimental unless accuracy improves, restore
-signing/notarization credentials, generate signed updater evidence, and complete a signed/notarized
-clean-machine install plus first-run, crash-recovery, keyboard-only, and updater tests. Canvas
+signing/notarization credentials and complete a signed/notarized clean-machine install plus
+first-run, crash-recovery, keyboard-only, and updater tests. Canvas
 rubric-assessment posting remains disabled until local rubric criteria can be mapped to real Canvas
 criterion IDs; attachment write-back still needs separate evidence.
 

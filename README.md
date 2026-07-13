@@ -48,7 +48,7 @@ clean-machine behavioral validation.
 | Document parsing + handwriting | 🟡 Built — Docling + Apple Vision + grader-vision |
 | Citation verification | 🟡 20/29 correct (69%); retraction check 3/3; accepted only as visibly experimental until accuracy reaches the enabled-mode gate |
 | CI gates | 🟢 Privacy PASS; perf PASS; public-proxy quality/fairness PASS; teacher-local still unvalidated |
-| Updater evidence | 🔴 Blocked until signed `latest.json` references the signed release artifact |
+| Updater evidence | 🟢 Signed `latest.json` references the DMG artifact; evidence now validates the DMG plus bundled app signature checks |
 | Signing + notarization | 🔴 Fresh local signing/notarization is blocked: `codesign` returns `errSecInternalComponent` and notarytool profile `grader` is unavailable |
 | Updates | 🟡 Tauri updater integrated, manifest generator built |
 | Beta rollout | ⬜ Blocked until release-readiness report returns `supervised_public_beta` |
@@ -64,7 +64,7 @@ beta with real student work.
 
 Confirmed in the current checkout:
 
-- Python tests: 118 passed, 12 intentionally skipped.
+- Python tests: 120 passed, 12 intentionally skipped.
 - Frontend tests: 12 passed; TypeScript/Vite production build and Rust `cargo check` pass.
 - The complete mocked desktop workflow passes in Playwright across onboarding, queue, review,
   settings, model management, and local-engine recovery. The visual sweep now fail-closes unless it
@@ -81,10 +81,9 @@ Confirmed in the current checkout:
   Progress completed → score `2` and one teacher feedback comment read back.
 - `scripts/release_readiness.py` writes a consolidated JSON/Markdown verdict with blocker
   summaries plus an end-to-end testing and evaluation matrix that maps public-beta requirements to
-  evidence. With current local artifacts, the report is `blocked` on updater evidence, signing
-  credentials, and clean-machine evidence: missing signed `latest.json`, codesign/spctl, release
-  provenance, first-run models, crash recovery, keyboard-only review, Computer Use instructor
-  sweep, and updater path.
+  evidence. With current local artifacts, the report is `blocked` on signing credentials and
+  clean-machine evidence: missing clean-machine codesign/spctl, release provenance, first-run
+  models, crash recovery, keyboard-only review, Computer Use instructor sweep, and updater path.
 
 Public-beta blockers:
 
@@ -92,12 +91,11 @@ Public-beta blockers:
 2. Keep Canvas rubric-assessment posting disabled until local rubric criteria can be mapped to real
    Canvas criterion IDs; score/comment round-trip is validated, attachment write-back still needs
    separate evidence.
-3. Generate and validate a signed updater manifest for the signed release artifact.
-4. Restore local release signing/notarization credentials, then validate the signed/notarized DMG
+3. Restore local release signing/notarization credentials, then validate the signed/notarized DMG
    on a clean supported Mac, including first-run model setup, crash recovery, keyboard-only review,
    Computer Use instructor sweep, and updater behavior.
-5. Keep teacher-local validation separate until an instructor supplies authorized historical grading.
-6. Complete a supervised private pilot before opening enrollment publicly.
+4. Keep teacher-local validation separate until an instructor supplies authorized historical grading.
+5. Complete a supervised private pilot before opening enrollment publicly.
 
 ## Design commitments
 

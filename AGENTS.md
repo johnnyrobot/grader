@@ -228,19 +228,19 @@ uv run python scripts/release_readiness.py --profile public_beta --expected-vers
   performance gate passes at 38.3s per 1,500-word essay. Public-proxy quality/fairness release mode
   rejects the tiny committed mechanics fixtures. The local anchored 40-item Mohler ASAG public-proxy
   artifact passes quality at QWK 0.845 and passes fairness across all five perturbation families.
-  Updater evidence is currently blocked until signed `latest.json` references the signed release
-  artifact. Fresh local signing/notarization is currently blocked: `codesign` returns
-  `errSecInternalComponent` and notarytool profile `grader` is unavailable; run
+  Static updater evidence now passes with a signed `latest.json`, DMG artifact metadata, stapler/spctl
+  checks, and mounted bundled-app codesign/spctl checks. Fresh local signing/notarization is currently
+  blocked: `codesign` returns `errSecInternalComponent` and notarytool profile `grader` is unavailable; run
   `scripts/signing_doctor.py` to refresh the fail-closed credential diagnostic before release
   signing. The release-readiness JSON/Markdown now includes an end-to-end public-beta matrix that
   maps requirements to evidence. Teacher-local validation still requires authorized instructor data,
   and clean-machine behavioral checks still need release validation.
-- **Coverage:** Python collects 130 cases (118 pass, 12 skip). Frontend has 12 passing component
+- **Coverage:** Python collects 132 cases (120 pass, 12 skip). Frontend has 12 passing component
   tests plus four passing Playwright E2E tests.
 - **Public beta verdict:** not ready for unattended public testing with real student work. Limit
   current use to a developer-assisted alpha with synthetic or institution-approved test data.
-- **Highest-value next action:** restore signing/notarization credentials, generate signed updater
-  evidence, then collect clean-machine release provenance, first-run model setup, crash recovery,
+- **Highest-value next action:** restore signing/notarization credentials, then collect
+  clean-machine release provenance, first-run model setup, crash recovery,
   keyboard-only review, Computer Use instructor sweep, and updater-path evidence before broadening
   beta claims.
 - The existing modification under `.omo/run-continuation/` is unrelated operational state; do not

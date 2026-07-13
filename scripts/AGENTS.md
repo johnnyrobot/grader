@@ -29,7 +29,7 @@ scripts/
 | Collect frontend release evidence | `frontend_evidence.py` | Runs component tests, production build, managed Playwright E2E, and validates visual-sweep screenshots/control coverage |
 | Diagnose signing credentials | `signing_doctor.py` | Writes `artifacts/release-evidence/signing.json`; probes Developer ID private-key access and notarytool profile before signing |
 | Generate updater manifest | `generate_appcast.py` | Requires `--signing-key` for release manifests; use `--allow-unsigned` only for local smoke fixtures |
-| Validate updater evidence | `updater_evidence.py` | Requires updater config, signed latest.json, and optional artifact filename/hash checks |
+| Validate updater evidence | `updater_evidence.py` | Requires updater config, signed latest.json, artifact filename/hash checks, and local artifact signature/notarization checks |
 | Clean-machine release evidence | `clean_machine_evidence.py` | Writes `artifacts/release-evidence/clean-machine.json`; PASS requires signing, app/DMG/latest.json provenance, plus structured manual evidence for first-run/crash/keyboard/Computer Use/updater checks |
 | Seed Canvas sandbox | `seed_canvas_sandbox.py` | `--apply --students 6` to create + exercise |
 | Tear down sandbox | `seed_canvas_sandbox.py` | `--teardown --course-id 106 --apply` |
@@ -49,8 +49,10 @@ scripts/
 - **`dev_mock_engine.py`**: safe for local/manual/Computer Use UI inspection. It uses synthetic
   fixture data only and is not release evidence by itself; signed clean-machine claims still require
   `clean_machine_evidence.py`.
-- **`updater_evidence.py`**: blocks public beta when `latest.json` is missing or any platform
-  signature is empty. It does not replace the clean-machine N→N+1 update test.
+- **`updater_evidence.py`**: blocks public beta when `latest.json` is missing, any platform
+  signature is empty, the manifest does not reference the supplied artifact, or the local artifact
+  fails signature/notarization checks. For DMGs it mounts the image and verifies the bundled `.app`
+  with codesign and spctl. It does not replace the clean-machine N→N+1 update test.
 - **`generate_appcast.py`**: despite the historical name, this creates Tauri `latest.json`
   manifests, not Sparkle XML. It fails closed without a Tauri updater signing key unless
   `--allow-unsigned` is supplied for a non-release smoke fixture. `--app` zips the `.app` bundle

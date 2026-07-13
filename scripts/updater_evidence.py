@@ -16,12 +16,25 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import plistlib
+import subprocess
+import tempfile
+import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable, Protocol
 
 
 REQUIRED_PLATFORMS = ("darwin-aarch64", "darwin-x86_64")
+
+
+class CompletedProcessLike(Protocol):
+    returncode: int
+    stdout: str
+    stderr: str
+
+
+Runner = Callable[..., CompletedProcessLike]
 
 
 def _sha256(path: Path) -> str:
@@ -36,12 +49,129 @@ def _load_json(path: Path) -> dict[str, Any]:
     return json.loads(path.read_text())
 
 
+def _run(command: list[str], *, runner: Runner = subprocess.run, timeout: int = 60) -> dict[str, Any]:
+    try:
+        proc = runner(command, text=True, capture_output=True, check=False, timeout=timeout)
+        output = ((proc.stdout or "") + (proc.stderr or "")).strip()
+        return {
+            "command": command,
+            "returncode": proc.returncode,
+            "ok": proc.returncode == 0,
+            "output": output[:2000],
+        }
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return {
+            "command": command,
+            "returncode": 127,
+            "ok": False,
+            "output": str(exc)[:2000],
+        }
+
+
+def _find_mounted_app(mount_point: Path) -> Path | None:
+    for child in sorted(mount_point.iterdir()):
+        if child.is_dir() and child.suffix == ".app":
+            return child
+    for child in sorted(mount_point.rglob("*.app")):
+        if child.is_dir():
+            return child
+    return None
+
+
+def _verify_app_signature(app_path: Path, *, runner: Runner = subprocess.run) -> tuple[list[str], dict[str, Any]]:
+    checks = {
+        "codesign_verify": _run(["codesign", "--verify", "--deep", "--strict", str(app_path)], runner=runner),
+        "spctl_assess": _run(["spctl", "--assess", "--type", "execute", str(app_path)], runner=runner),
+    }
+    failures = [
+        f"app signature check failed: {name}"
+        for name, result in checks.items()
+        if not result.get("ok")
+    ]
+    return failures, checks
+
+
+def _verify_dmg_artifact(path: Path, *, runner: Runner = subprocess.run) -> tuple[list[str], dict[str, Any]]:
+    details: dict[str, Any] = {
+        "stapler_validate": _run(["xcrun", "stapler", "validate", str(path)], runner=runner),
+        "spctl_assess": _run(["spctl", "--assess", "--type", "open", "--context", "context:primary-signature", str(path)], runner=runner),
+    }
+    failures = [
+        f"DMG signature/notarization check failed: {name}"
+        for name in ("stapler_validate", "spctl_assess")
+        if not details[name].get("ok")
+    ]
+
+    attach = _run(["hdiutil", "attach", "-nobrowse", "-readonly", "-plist", str(path)], runner=runner, timeout=120)
+    details["hdiutil_attach"] = attach
+    mount_point: Path | None = None
+    if attach.get("ok"):
+        try:
+            plist = plistlib.loads(str(attach.get("output", "")).encode())
+            for entity in plist.get("system-entities", []):
+                candidate = entity.get("mount-point")
+                if candidate:
+                    mount_point = Path(candidate)
+                    break
+        except Exception as exc:
+            failures.append(f"could not parse mounted DMG metadata: {exc}")
+    else:
+        failures.append("could not mount DMG to verify bundled app")
+
+    if mount_point is not None:
+        details["mount_point"] = str(mount_point)
+        app_path = _find_mounted_app(mount_point)
+        if app_path is None:
+            failures.append("mounted DMG does not contain a .app bundle")
+        else:
+            details["bundled_app_path"] = str(app_path)
+            app_failures, app_details = _verify_app_signature(app_path, runner=runner)
+            details["bundled_app"] = app_details
+            failures.extend(f"bundled {failure}" for failure in app_failures)
+        details["hdiutil_detach"] = _run(["hdiutil", "detach", str(mount_point)], runner=runner, timeout=120)
+
+    return failures, details
+
+
+def _verify_zip_artifact(path: Path, *, runner: Runner = subprocess.run) -> tuple[list[str], dict[str, Any]]:
+    details: dict[str, Any] = {}
+    failures: list[str] = []
+    with tempfile.TemporaryDirectory(prefix="grader-updater-zip-") as tmp:
+        extract_dir = Path(tmp)
+        try:
+            with zipfile.ZipFile(path) as archive:
+                archive.extractall(extract_dir)
+        except Exception as exc:
+            return [f"could not extract updater zip artifact: {exc}"], details
+        app_path = _find_mounted_app(extract_dir)
+        if app_path is None:
+            return ["updater zip artifact does not contain a .app bundle"], details
+        details["bundled_app_path"] = str(app_path)
+        app_failures, app_details = _verify_app_signature(app_path, runner=runner)
+        details["bundled_app"] = app_details
+        failures.extend(app_failures)
+    return failures, details
+
+
+def _verify_local_artifact(path: Path, *, runner: Runner = subprocess.run) -> tuple[list[str], dict[str, Any]]:
+    suffix = path.suffix.lower()
+    if suffix == ".dmg":
+        return _verify_dmg_artifact(path, runner=runner)
+    if suffix == ".app" and path.is_dir():
+        return _verify_app_signature(path, runner=runner)
+    if suffix == ".zip":
+        return _verify_zip_artifact(path, runner=runner)
+    return [f"unsupported updater artifact type for signature validation: {path.name}"], {}
+
+
 def collect(
     *,
     config_path: Path,
     manifest_path: Path | None,
     artifact_path: Path | None,
     expected_version: str | None,
+    runner: Runner = subprocess.run,
+    verify_artifact_signature: bool = True,
 ) -> dict[str, Any]:
     failures: list[str] = []
     warnings: list[str] = []
@@ -102,6 +232,10 @@ def collect(
             ]
             if manifest_urls and not any(url.endswith(artifact_path.name) for url in manifest_urls):
                 failures.append("manifest urls do not reference the supplied artifact filename")
+            if verify_artifact_signature:
+                artifact_failures, artifact_details = _verify_local_artifact(artifact_path, runner=runner)
+                details["artifact_signature_checks"] = artifact_details
+                failures.extend(artifact_failures)
     else:
         warnings.append("no local updater artifact supplied; clean-machine download test still required")
 
@@ -122,6 +256,8 @@ def main() -> None:
     parser.add_argument("--artifact", type=Path, default=None, help="Path to signed update artifact")
     parser.add_argument("--version", default=None, help="Expected version; defaults to tauri.conf.json")
     parser.add_argument("--out", type=Path, default=Path("artifacts/release-evidence/updater.json"))
+    parser.add_argument("--skip-artifact-signature-checks", action="store_true",
+                        help="Only for local script development; public beta evidence requires artifact signature checks")
     args = parser.parse_args()
 
     evidence = collect(
@@ -129,6 +265,7 @@ def main() -> None:
         manifest_path=args.manifest,
         artifact_path=args.artifact,
         expected_version=args.version,
+        verify_artifact_signature=not args.skip_artifact_signature_checks,
     )
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(evidence, indent=2, sort_keys=True) + "\n")
