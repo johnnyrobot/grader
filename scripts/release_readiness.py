@@ -34,6 +34,35 @@ REQUIRED_GATES = (
 )
 
 
+def _gate_summary(gate: dict[str, Any]) -> str:
+    for key in ("summary", "reason"):
+        value = gate.get(key)
+        if value:
+            return str(value)
+    output = str(gate.get("output", "")).strip()
+    if output:
+        lines = [line.strip() for line in output.splitlines() if line.strip()]
+        if lines:
+            if lines[0][:1] in {"✓", "✗", "⊘"} and len(lines) > 1:
+                return f"{lines[0]} — {lines[1]}"[:240]
+            return lines[0][:240]
+    return ""
+
+
+def summarize_blockers(evidence: dict[str, Any]) -> list[dict[str, str]]:
+    blockers: list[dict[str, str]] = []
+    for gate in REQUIRED_GATES:
+        gate_evidence = evidence.get(gate, {})
+        status = str(gate_evidence.get("status", "MISSING"))
+        if status == "FAIL" or status.startswith("BLOCKED") or status in {"MISSING", "SKIP"}:
+            blockers.append({
+                "gate": gate,
+                "status": status,
+                "summary": _gate_summary(gate_evidence),
+            })
+    return blockers
+
+
 def redact_secrets(value: str) -> str:
     redacted = SECRET_RE.sub(lambda match: f"{match.group(1)}=<redacted>", value)
     return BEARER_RE.sub("Bearer <redacted>", redacted)
@@ -177,6 +206,7 @@ def collect_evidence(args: argparse.Namespace) -> dict[str, Any]:
         "BLOCKED_CLEAN_MACHINE_EVIDENCE",
     )
     evidence["verdict"] = decide_verdict(evidence)
+    evidence["blockers"] = summarize_blockers(evidence)
     return evidence
 
 
@@ -191,12 +221,20 @@ def write_reports(evidence: dict[str, Any], out_dir: Path) -> tuple[Path, Path]:
         "",
         f"Verdict: `{evidence.get('verdict', 'unknown')}`",
         "",
-        "| Gate | Status |",
-        "| --- | --- |",
+        "| Gate | Status | Summary |",
+        "| --- | --- | --- |",
     ]
     for gate in REQUIRED_GATES:
-        status = evidence.get(gate, {}).get("status", "MISSING")
-        lines.append(f"| {gate} | `{status}` |")
+        gate_evidence = evidence.get(gate, {})
+        status = gate_evidence.get("status", "MISSING")
+        summary = _gate_summary(gate_evidence).replace("|", "\\|")
+        lines.append(f"| {gate} | `{status}` | {summary} |")
+    blockers = evidence.get("blockers") or summarize_blockers(evidence)
+    if blockers:
+        lines.extend(["", "## Blocking Items", ""])
+        for blocker in blockers:
+            suffix = f" — {blocker['summary']}" if blocker.get("summary") else ""
+            lines.append(f"- `{blocker['gate']}`: `{blocker['status']}`{suffix}")
     lines.extend(
         [
             "",

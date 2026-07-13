@@ -8,6 +8,7 @@ from scripts.release_readiness import (
     _normalize_citation_artifact,
     decide_verdict,
     redact_secrets,
+    summarize_blockers,
     write_reports,
 )
 
@@ -97,4 +98,23 @@ def test_redact_secrets_masks_tokens():
 def test_write_reports(tmp_path):
     json_path, md_path = write_reports({"verdict": "alpha", "quality": {"status": "SKIP"}}, tmp_path)
     assert json.loads(json_path.read_text())["verdict"] == "alpha"
-    assert "alpha" in md_path.read_text()
+    markdown = md_path.read_text()
+    assert "alpha" in markdown
+    assert "Blocking Items" in markdown
+
+
+def test_summarize_blockers_includes_fail_skip_and_blocked_reasons():
+    blockers = summarize_blockers({
+        "quality": {"status": "PASS"},
+        "fairness": {"status": "FAIL", "output": "\n✗ FAIRNESS\n  incomplete perturbed_scores\n"},
+        "citations": {"status": "SKIP", "reason": "missing artifact"},
+        "clean_machine": {"status": "BLOCKED_CLEAN_MACHINE_EVIDENCE"},
+    })
+
+    by_gate = {blocker["gate"]: blocker for blocker in blockers}
+    assert "quality" not in by_gate
+    assert by_gate["fairness"]["status"] == "FAIL"
+    assert "FAIRNESS" in by_gate["fairness"]["summary"]
+    assert "incomplete perturbed_scores" in by_gate["fairness"]["summary"]
+    assert by_gate["citations"]["summary"] == "missing artifact"
+    assert by_gate["clean_machine"]["status"] == "BLOCKED_CLEAN_MACHINE_EVIDENCE"
