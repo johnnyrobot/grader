@@ -36,8 +36,8 @@ per-teacher model to train.
 review workflow work, including the neuroinclusive light-first interface and the tiered
 release-gate machinery. Public-proxy quality/fairness pass and Canvas score/comment round-trip is
 validated, and a current-source local app/DMG now signs, notarizes, staples, and passes macOS
-signature checks. Public beta is still blocked by signed updater-manifest evidence and clean-machine
-behavioral validation.
+signature checks. Signed updater-manifest evidence now passes locally. Public beta is still blocked
+by clean-machine updater N→N+1 behavioral validation.
 
 | | |
 |---|---|
@@ -49,7 +49,7 @@ behavioral validation.
 | Document parsing + handwriting | 🟡 Built — Docling + Apple Vision + grader-vision |
 | Citation verification | 🟡 20/29 correct (69%); retraction check 3/3; accepted only as visibly experimental until accuracy reaches the enabled-mode gate |
 | CI gates | 🟢 Privacy PASS; perf PASS; public-proxy quality/fairness PASS; teacher-local still unvalidated |
-| Updater evidence | 🔴 Current-source signed/notarized DMG exists, but updater evidence blocks because the manifest is unsigned |
+| Updater evidence | 🟢 Signed `latest.json` references the current-source signed/notarized DMG and passes updater evidence |
 | Signing + notarization | 🟢 Current-source local app/DMG signed, notarized, stapled, and passed `codesign`/`stapler`/`spctl` checks |
 | Updates | 🟡 Tauri updater integrated, manifest generator built |
 | Beta rollout | ⬜ Blocked until release-readiness report returns `supervised_public_beta` |
@@ -86,10 +86,10 @@ Confirmed in the current checkout:
 - `scripts/release_readiness.py` writes a consolidated JSON/Markdown verdict with blocker
   summaries plus an end-to-end testing and evaluation matrix that maps public-beta requirements to
   evidence. With current local artifacts, the report is `blocked`: the latest local app/DMG signs,
-  notarizes, staples, and passes macOS signature checks, but release provenance still requires a
-  rebuild from the final committed source plus a signed updater manifest, and the updater N→N+1 path
-  is still missing. Local signed-app evidence now covers fresh-profile first-run model reconciliation,
-  crash recovery, keyboard-only review, and the Computer Use instructor sweep.
+  notarizes, staples, and passes macOS signature checks; signed updater manifest/release provenance
+  passes; and local signed-app evidence covers fresh-profile first-run model reconciliation, crash
+  recovery, keyboard-only review, and the Computer Use instructor sweep. The only remaining
+  clean-machine blocker is the updater N→N+1 path.
 
 Public-beta blockers:
 
@@ -97,12 +97,11 @@ Public-beta blockers:
 2. Keep Canvas rubric-assessment posting disabled until local rubric criteria can be mapped to real
    Canvas criterion IDs; score/comment round-trip is validated, attachment write-back still needs
    separate evidence.
-3. Provide the Tauri updater private-key password through `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`, rebuild
-   from the final committed source so app/DMG/latest.json evidence is fresh, sign `latest.json`, then
-   validate the signed/notarized DMG on a clean supported Mac, including updater behavior. The current
-   local signed-app fresh-profile first-run, crash recovery, Computer Use sweep, and keyboard-only
-   review path pass against `/Applications/Grader.app` installed as `com.grader.app`; rerun those
-   checks if the release bundle identity changes.
+3. Validate the updater N→N+1 path on a clean supported Mac against the signed `latest.json` and
+   signed/notarized DMG. The current local signed-app fresh-profile first-run, crash recovery,
+   Computer Use sweep, keyboard-only review path, and signed updater manifest pass against
+   `/Applications/Grader.app` installed as `com.grader.app`; rerun those checks if the release bundle
+   identity changes.
 4. Keep teacher-local validation separate until an instructor supplies authorized historical grading.
 5. Complete a supervised private pilot before opening enrollment publicly.
 

@@ -100,20 +100,18 @@ work.
 - Canvas: guarded live app-level E2E passes on `canvas.johnnyrobot.ai` course `106`, assignment
   `2841`: import, targeted grade for Canvas user `9`, teacher override/approval, post, Progress
   completed, score `2`, and one teacher feedback comment read back.
-- Release readiness: local report currently returns `blocked` for clean-machine evidence. `scripts/updater_evidence.py` and
-  `scripts/clean_machine_evidence.py` now fail closed when the supplied `latest.json`, DMG, or app
-  predate the current git commit. The latest local app/DMG build signs, notarizes, staples, and
-  passes macOS signature checks, but the final release artifact must be rebuilt after the last
-  committed source change. Updater evidence blocks because the local `latest.json` smoke manifest is
-  unsigned; provide `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` for encrypted updater-key signing. The latest
-  local signed-app Computer Use sweep targets `/Applications/Grader.app` as `com.grader.app` and
-  passes with 73 accessibility/screenshot capture pairs; local keyboard-only review, crash recovery,
-  and fresh-profile first-run model reconciliation also pass. Next rebuild after the final commit,
-  collect a signed updater manifest, and collect updater path evidence with structured manual evidence
-  notes, screenshot/log paths, and all check-specific assertions set true.
+- Release readiness: local report currently returns `blocked` only for clean-machine updater-path
+  evidence. `scripts/updater_evidence.py` and `scripts/clean_machine_evidence.py` now fail closed
+  when the supplied `latest.json`, DMG, or app predate the current git commit. The latest local
+  app/DMG build signs, notarizes, staples, and passes macOS signature checks; signed updater
+  manifest/release provenance passes; and the latest local signed-app Computer Use sweep targets
+  `/Applications/Grader.app` as `com.grader.app` and passes with 73 accessibility/screenshot capture
+  pairs. Local keyboard-only review, crash recovery, and fresh-profile first-run model reconciliation
+  also pass. Next collect updater path evidence with structured manual evidence notes, screenshot/log
+  paths, and all check-specific assertions set true.
 
-Before public beta: keep citation checks visibly experimental unless accuracy improves, rebuild from
-the final committed source, sign the Tauri updater manifest, and complete the updater path test. Canvas
+Before public beta: keep citation checks visibly experimental unless accuracy improves and complete
+the updater path test. Canvas
 rubric-assessment posting remains disabled until local rubric criteria can be mapped to real Canvas
 criterion IDs; attachment write-back still needs separate evidence.
 

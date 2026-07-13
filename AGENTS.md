@@ -249,20 +249,18 @@ package is a clean-Mac handoff bundle only; do not treat it as passing clean-mac
   from the visible recovery alert, and local fresh-profile first-run evidence passes through
   onboarding, engine readiness, queue reachability, and installed-model reconciliation.
   `scripts/computer_use_sweep_evidence.py` still fails stale capture sets and clean-machine evidence
-  requires a PASS sweep JSON. The remaining updater blocker is providing
-  `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` for encrypted updater-key signing; run
-  `scripts/signing_doctor.py` to refresh the fail-closed credential diagnostic before release signing,
-  or `scripts/signing_doctor.py --print-repair-runbook` for local-only recovery commands if it
-  regresses. The release-readiness JSON/Markdown now includes an end-to-end public-beta matrix that
-  maps requirements to evidence. Teacher-local validation still requires authorized instructor data,
-  and the signed updater manifest plus updater-path checks still need release validation.
+  requires a PASS sweep JSON. The encrypted updater key was rotated before public release, the public
+  key/config now target `github.com/johnnyrobot/grader`, `scripts/updater_key_doctor.py` passes with
+  the local Keychain-backed password, and signed `latest.json` updater evidence now passes. The
+  release-readiness JSON/Markdown now includes an end-to-end public-beta matrix that maps
+  requirements to evidence. Teacher-local validation still requires authorized instructor data, and
+  the updater-path check still needs release validation.
 - **Coverage:** Python collects 142 cases (130 pass, 12 skip). Frontend has 14 passing component
   tests plus four passing Playwright E2E tests.
 - **Public beta verdict:** not ready for unattended public testing with real student work. Limit
   current use to a developer-assisted alpha with synthetic or institution-approved test data.
-- **Highest-value next action:** set `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`, run
-  `scripts/updater_key_doctor.py`, rebuild/sign/notarize the app and DMG after the final commit,
-  generate a signed updater manifest for that fresh signed/notarized DMG, rerun updater and
-  clean-machine evidence, then collect updater-path evidence before broadening beta claims.
+- **Highest-value next action:** publish a real N+1 updater test artifact to the configured
+  `github.com/johnnyrobot/grader` release channel, exercise the in-app updater path on a clean
+  supported Mac, then add structured `updater_path` manual evidence before broadening beta claims.
 - The existing modification under `.omo/run-continuation/` is unrelated operational state; do not
   overwrite or commit it unless explicitly requested.
