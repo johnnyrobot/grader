@@ -167,6 +167,8 @@ uv run python scripts/signing_doctor.py --print-repair-runbook > signing-repair-
 uv run python scripts/release_version_guard.py --tag v0.1.1 --out artifacts/release-evidence/release-version.json
 uv run python scripts/github_release_secrets.py --print-runbook > github-release-secrets-runbook.md
 uv run python scripts/github_release_secrets.py --out artifacts/release-evidence/github-release-secrets-current.json  # dry-run inventory; use --apply only in a private release shell
+# If the updater-key password is in macOS Keychain, add:
+#   --updater-password-keychain-service TAURI_SIGNING_PRIVATE_KEY_PASSWORD --updater-password-keychain-account grader-updater
 uv run python scripts/bump_release_version.py --target-version 0.1.1 --allow-same --out artifacts/release-evidence/version-bump-plan.json  # dry-run/idempotency check; use --apply only when preparing a future release commit
 uv run python scripts/github_release_preflight.py --candidate-tag v0.1.1 --out artifacts/release-evidence/github-release-preflight-current.json --no-fail
 uv run python scripts/updater_key_doctor.py --print-private-runbook > updater-key-private-runbook.md

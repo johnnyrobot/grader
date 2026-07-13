@@ -13,6 +13,7 @@ import argparse
 import base64
 import json
 import os
+import re
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -36,6 +37,13 @@ class SecretValue:
 
 
 Runner = Callable[..., subprocess.CompletedProcess[str]]
+SECRET_RE = re.compile(
+    r"(?i)\b([A-Z0-9_]*(TOKEN|PASSWORD|SECRET|PRIVATE_KEY|API_KEY)[A-Z0-9_]*)=([^\s]+)"
+)
+
+
+def redact_secrets(value: str) -> str:
+    return SECRET_RE.sub(lambda match: f"{match.group(1)}=<redacted>", value)
 
 
 def _file_text(path: Path | None) -> str | None:
@@ -60,12 +68,51 @@ def _first_env(env: dict[str, str], *names: str) -> tuple[str | None, str]:
     return None, ""
 
 
+def _keychain_password(
+    *,
+    service: str | None,
+    account: str | None = None,
+    runner: Runner = subprocess.run,
+) -> tuple[str | None, dict[str, Any] | None]:
+    if not service:
+        return None, None
+    command = ["security", "find-generic-password", "-w", "-s", service]
+    if account:
+        command.extend(["-a", account])
+    try:
+        proc = runner(
+            command,
+            text=True,
+            capture_output=True,
+            check=False,
+            timeout=10,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return None, {
+            "service": service,
+            "account": account,
+            "ok": False,
+            "output": redact_secrets(str(exc)),
+        }
+    password = (proc.stdout or "").rstrip("\n")
+    return (password or None), {
+        "service": service,
+        "account": account,
+        "ok": proc.returncode == 0 and bool(password),
+        "returncode": proc.returncode,
+        "stderr": redact_secrets((proc.stderr or "").strip()),
+    }
+
+
 def collect_secret_values(
     *,
     env: dict[str, str] | None = None,
     certificate_p12: Path | None = None,
     tauri_signing_key: Path | None = None,
     signing_identity: str | None = None,
+    updater_password_keychain_service: str | None = None,
+    updater_password_keychain_account: str | None = None,
+    runner: Runner = subprocess.run,
 ) -> list[SecretValue]:
     env = dict(os.environ if env is None else env)
     values: list[SecretValue] = []
@@ -103,6 +150,18 @@ def collect_secret_values(
     values.append(SecretValue("TAURI_SIGNING_KEY", updater_key, updater_key_source))
 
     updater_password, updater_password_source = _first_env(env, "TAURI_SIGNING_PRIVATE_KEY_PASSWORD")
+    if updater_password is None and updater_password_keychain_service:
+        updater_password, keychain_details = _keychain_password(
+            service=updater_password_keychain_service,
+            account=updater_password_keychain_account,
+            runner=runner,
+        )
+        if updater_password:
+            updater_password_source = (
+                "keychain:"
+                + updater_password_keychain_service
+                + (f":{updater_password_keychain_account}" if updater_password_keychain_account else "")
+            )
     values.append(SecretValue("TAURI_SIGNING_PRIVATE_KEY_PASSWORD", updater_password, updater_password_source))
 
     known = {item.name for item in values}
@@ -153,6 +212,8 @@ def collect(
     certificate_p12: Path | None = None,
     tauri_signing_key: Path | None = None,
     signing_identity: str | None = None,
+    updater_password_keychain_service: str | None = None,
+    updater_password_keychain_account: str | None = None,
     apply: bool = False,
     runner: Runner = subprocess.run,
 ) -> dict[str, Any]:
@@ -161,6 +222,9 @@ def collect(
         certificate_p12=certificate_p12,
         tauri_signing_key=tauri_signing_key,
         signing_identity=signing_identity,
+        updater_password_keychain_service=updater_password_keychain_service,
+        updater_password_keychain_account=updater_password_keychain_account,
+        runner=runner,
     )
     available, missing = _summary(values)
     applied: dict[str, dict[str, Any]] = {}
@@ -221,6 +285,22 @@ uv run python scripts/github_release_secrets.py \\
   --signing-identity 'Developer ID Application: Example (TEAMID)'
 ```
 
+If the encrypted updater key password is stored in macOS Keychain instead of the shell environment:
+
+```bash
+security add-generic-password -U \\
+  -a grader-updater \\
+  -s TAURI_SIGNING_PRIVATE_KEY_PASSWORD \\
+  -w '<updater-key-password>'
+
+uv run python scripts/github_release_secrets.py \\
+  --certificate-p12 /private/path/DeveloperIDApplication.p12 \\
+  --tauri-signing-key tauri-updater-key.pem \\
+  --signing-identity 'Developer ID Application: Example (TEAMID)' \\
+  --updater-password-keychain-service TAURI_SIGNING_PRIVATE_KEY_PASSWORD \\
+  --updater-password-keychain-account grader-updater
+```
+
 Apply to GitHub after the dry-run reports no missing values:
 
 ```bash
@@ -234,6 +314,18 @@ uv run python scripts/github_release_secrets.py \\
   --certificate-p12 /private/path/DeveloperIDApplication.p12 \\
   --tauri-signing-key tauri-updater-key.pem \\
   --signing-identity 'Developer ID Application: Example (TEAMID)' \\
+  --apply
+```
+
+Or, using the Keychain item for the updater password:
+
+```bash
+uv run python scripts/github_release_secrets.py \\
+  --certificate-p12 /private/path/DeveloperIDApplication.p12 \\
+  --tauri-signing-key tauri-updater-key.pem \\
+  --signing-identity 'Developer ID Application: Example (TEAMID)' \\
+  --updater-password-keychain-service TAURI_SIGNING_PRIVATE_KEY_PASSWORD \\
+  --updater-password-keychain-account grader-updater \\
   --apply
 ```
 
@@ -251,6 +343,10 @@ def main() -> None:
     parser.add_argument("--certificate-p12", type=Path, default=None)
     parser.add_argument("--tauri-signing-key", type=Path, default=None)
     parser.add_argument("--signing-identity", default=None)
+    parser.add_argument("--updater-password-keychain-service", default=None,
+                        help="Read TAURI_SIGNING_PRIVATE_KEY_PASSWORD from this macOS Keychain service")
+    parser.add_argument("--updater-password-keychain-account", default=None,
+                        help="Optional macOS Keychain account for --updater-password-keychain-service")
     parser.add_argument("--out", type=Path, default=Path("artifacts/release-evidence/github-release-secrets-current.json"))
     parser.add_argument("--apply", action="store_true", help="Write available secrets to GitHub using gh secret set")
     parser.add_argument("--print-runbook", action="store_true")
@@ -265,6 +361,8 @@ def main() -> None:
         certificate_p12=args.certificate_p12,
         tauri_signing_key=args.tauri_signing_key,
         signing_identity=args.signing_identity,
+        updater_password_keychain_service=args.updater_password_keychain_service,
+        updater_password_keychain_account=args.updater_password_keychain_account,
         apply=args.apply,
     )
     args.out.parent.mkdir(parents=True, exist_ok=True)

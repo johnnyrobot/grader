@@ -60,6 +60,64 @@ def test_collect_blocks_when_required_values_are_missing():
     assert result["applied"] is False
 
 
+def test_collect_secret_values_reads_updater_password_from_keychain(tmp_path):
+    cert = tmp_path / "cert.p12"
+    key = tmp_path / "tauri.pem"
+    cert.write_bytes(b"fake-p12")
+    key.write_text("private updater key")
+    env = {
+        "APPLE_CERTIFICATE_PASSWORD": "cert-pass",
+        "APPLE_ID": "teacher@example.edu",
+        "APPLE_APP_SPECIFIC_PASSWORD": "app-pass",
+        "APPLE_TEAM_ID": "TEAM123",
+    }
+
+    def fake_run(command, **_kwargs):
+        assert command == [
+            "security",
+            "find-generic-password",
+            "-w",
+            "-s",
+            "TAURI_SIGNING_PRIVATE_KEY_PASSWORD",
+            "-a",
+            "grader-updater",
+        ]
+        return _proc(command, 0, "updater-pass-from-keychain\n")
+
+    values = collect_secret_values(
+        env=env,
+        certificate_p12=cert,
+        tauri_signing_key=key,
+        signing_identity="Developer ID Application: Example (TEAM123)",
+        updater_password_keychain_service="TAURI_SIGNING_PRIVATE_KEY_PASSWORD",
+        updater_password_keychain_account="grader-updater",
+        runner=fake_run,
+    )
+    by_name = {item.name: item for item in values}
+
+    assert by_name["TAURI_SIGNING_PRIVATE_KEY_PASSWORD"].value == "updater-pass-from-keychain"
+    assert by_name["TAURI_SIGNING_PRIVATE_KEY_PASSWORD"].source == (
+        "keychain:TAURI_SIGNING_PRIVATE_KEY_PASSWORD:grader-updater"
+    )
+
+    result = collect(
+        env=env,
+        certificate_p12=cert,
+        tauri_signing_key=key,
+        signing_identity="Developer ID Application: Example (TEAM123)",
+        updater_password_keychain_service="TAURI_SIGNING_PRIVATE_KEY_PASSWORD",
+        updater_password_keychain_account="grader-updater",
+        runner=fake_run,
+    )
+
+    assert result["status"] == "PASS"
+    assert result["missing"] == []
+    assert "updater-pass-from-keychain" not in str(result)
+    assert result["available"]["TAURI_SIGNING_PRIVATE_KEY_PASSWORD"]["source"] == (
+        "keychain:TAURI_SIGNING_PRIVATE_KEY_PASSWORD:grader-updater"
+    )
+
+
 def test_apply_uses_stdin_not_command_arguments(tmp_path):
     cert = tmp_path / "cert.p12"
     key = tmp_path / "tauri.pem"

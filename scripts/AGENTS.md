@@ -89,8 +89,11 @@ scripts/
   missing. `--print-runbook` emits private-shell setup steps. Dry-run mode writes a secret-free JSON
   inventory. `--apply` writes available values with `gh secret set` via stdin so values do not appear
   in command arguments. Required secrets include the Developer ID `.p12` as base64, its password,
-  Apple notarization credentials, signing identity, and the encrypted Tauri updater key/password.
-  Never paste those values into chat or commit generated runbooks containing filled values.
+  Apple notarization credentials, signing identity, and the encrypted Tauri updater key/password. It
+  can read `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` from a named macOS Keychain item with
+  `--updater-password-keychain-service TAURI_SIGNING_PRIVATE_KEY_PASSWORD --updater-password-keychain-account grader-updater`
+  so the updater-key password does not need to be exported or pasted. Never paste those values into
+  chat or commit generated runbooks containing filled values.
 - **`updater_evidence.py`**: blocks public beta when `latest.json` is missing, any platform
   signature is empty, the manifest does not reference the supplied artifact, the supplied
   manifest/artifact predates the current git commit, or the local artifact fails
