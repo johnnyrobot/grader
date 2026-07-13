@@ -90,6 +90,20 @@ def _workflow_has_publish_permission(path: Path) -> bool:
     )
 
 
+def _workflow_has_release_test_gates(path: Path) -> bool:
+    if not path.exists():
+        return False
+    text = path.read_text()
+    required = (
+        "uv sync",
+        "uv run pytest engine/tests/ -q",
+        "npm test -- --run",
+        "cargo check",
+        "npx tauri build --bundles app --no-sign --ci",
+    )
+    return all(item in text for item in required)
+
+
 def _gh_available() -> bool:
     return shutil.which("gh") is not None
 
@@ -161,6 +175,7 @@ def collect(
         "repo_access": None,
         "release_workflow_present": None,
         "release_workflow_publish_permission": None,
+        "release_workflow_test_gates": None,
         "updater_endpoint_matches_repo": None,
         "required_actions_secrets_present": None,
         "candidate_release_absent": None,
@@ -180,6 +195,11 @@ def collect(
     if workflow_path.exists() and checks["release_workflow_publish_permission"] is not True:
         failures.append(
             "release workflow must include permissions.contents=write and GitHub Release publishing"
+        )
+    checks["release_workflow_test_gates"] = _workflow_has_release_test_gates(workflow_path)
+    if workflow_path.exists() and checks["release_workflow_test_gates"] is not True:
+        failures.append(
+            "release workflow must run Python tests, frontend tests, Rust check, and Tauri build before publishing"
         )
 
     try:

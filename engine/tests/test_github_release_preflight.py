@@ -34,6 +34,11 @@ def _write_workflow(path: Path, *, contents_write: bool = True) -> None:
         "jobs:\n"
         "  build:\n"
         "    steps:\n"
+        "      - run: uv sync\n"
+        "      - run: uv run pytest engine/tests/ -q\n"
+        "      - run: npm test -- --run\n"
+        "      - run: cargo check\n"
+        "      - run: npx tauri build --bundles app --no-sign --ci\n"
         "      - uses: softprops/action-gh-release@v2\n"
     )
 
@@ -199,3 +204,36 @@ def test_github_release_preflight_blocks_workflow_without_publish_permission(tmp
     assert result["status"] == "BLOCKED_GITHUB_RELEASE_PREFLIGHT"
     assert result["checks"]["release_workflow_publish_permission"] is False
     assert any("contents=write" in failure for failure in result["failures"])
+
+
+def test_github_release_preflight_blocks_workflow_without_release_tests(tmp_path, monkeypatch):
+    config = tmp_path / "tauri.conf.json"
+    workflow = tmp_path / "release.yml"
+    _write_config(config)
+    workflow.write_text(
+        "name: Release\n\n"
+        "permissions:\n  contents: write\n\n"
+        "jobs:\n"
+        "  build:\n"
+        "    steps:\n"
+        "      - run: npx tauri build --bundles app --no-sign --ci\n"
+        "      - uses: softprops/action-gh-release@v2\n"
+    )
+    monkeypatch.setattr(preflight.shutil, "which", lambda name: "/usr/bin/gh" if name == "gh" else None)
+
+    def fake_run(command, **_kwargs):
+        if command[:3] == ["gh", "auth", "status"]:
+            return _proc(command, 0)
+        if command[:3] == ["gh", "repo", "view"]:
+            return _proc(command, 0, json.dumps({"nameWithOwner": "johnnyrobot/grader"}))
+        if command[:3] == ["gh", "secret", "list"]:
+            return _proc(command, 0, json.dumps([{"name": name} for name in preflight.REQUIRED_ACTIONS_SECRETS]))
+        if command[:3] == ["gh", "release", "list"]:
+            return _proc(command, 0, json.dumps([]))
+        raise AssertionError(f"unexpected command: {command}")
+
+    result = preflight.collect(config_path=config, workflow_path=workflow, runner=fake_run)
+
+    assert result["status"] == "BLOCKED_GITHUB_RELEASE_PREFLIGHT"
+    assert result["checks"]["release_workflow_test_gates"] is False
+    assert any("Python tests" in failure for failure in result["failures"])

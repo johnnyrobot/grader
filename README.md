@@ -67,7 +67,7 @@ beta with real student work.
 
 Confirmed in the current checkout:
 
-- Python tests: 165 passed, 12 intentionally skipped.
+- Python tests: 166 passed, 12 intentionally skipped.
 - Frontend tests: 14 passed; TypeScript/Vite production build and Rust `cargo check` pass.
 - The complete mocked desktop workflow passes in Playwright across onboarding, queue, review,
   settings, model management, and local-engine recovery. The visual sweep now fail-closes unless it
@@ -224,10 +224,11 @@ signed-updater-channel, and clean-machine release behavior evidence pass. Use
 `scripts/github_release_secrets.py --print-runbook` to prepare the Developer ID certificate and
 release secrets without exposing values, then use
 `scripts/github_release_preflight.py --candidate-tag v<N+1>` before creating the release tag so
-missing Actions secrets, missing release publish permissions, or stale tag/release state are caught
-without writing to GitHub. The GitHub release workflow imports the Developer ID `.p12` into a
-temporary runner keychain before signing and requests `contents: write` for release asset upload; a
-local signing identity name alone is not enough on `macos-latest`. Use
+missing Actions secrets, missing release publish permissions, missing publish-time tests, or stale
+tag/release state are caught without writing to GitHub. The GitHub release workflow runs Python
+tests, frontend component tests, Rust `cargo check`, and the Tauri build before importing the
+Developer ID `.p12` into a temporary runner keychain for signing. It also requests `contents: write`
+for release asset upload; a local signing identity name alone is not enough on `macos-latest`. Use
 `scripts/updater_key_doctor.py` to verify the updater key/password before regenerating
 `latest.json`, and use `scripts/updater_channel_preflight.py` after publishing N+1 to confirm the
 live release channel advertises a signed newer, reachable `Grader.dmg` before clean-machine updater

@@ -9,6 +9,10 @@ def test_release_workflow_builds_tauri_bundle_before_signing():
     text = WORKFLOW.read_text()
 
     assert "permissions:\n  contents: write" in text
+    assert "run: uv sync" in text
+    assert "run: uv run pytest engine/tests/ -q" in text
+    assert "run: npm test -- --run" in text
+    assert "run: cargo check" in text
     assert "npx tauri build --bundles app --no-sign --ci" in text
     assert "working-directory: app/src-tauri\n        run: cargo build --release" not in text
 
