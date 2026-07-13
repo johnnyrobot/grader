@@ -5,7 +5,7 @@
 
 ## OVERVIEW
 
-Local-first macOS desktop app for college instructors: AI drafts rubric-aligned grades, teacher approves. Python engine (Pydantic AI v2 + Ollama) is working; Tauri/React shell not started. Student data never leaves the device.
+Local-first macOS desktop app for college instructors: AI drafts rubric-aligned grades, teacher approves. The Python/FastAPI engine and Tauri/React shell exist, with Canvas, document parsing, citation verification, release tooling, and public beta readiness gates in progress. Student data never leaves the device.
 
 ## STRUCTURE
 
@@ -39,6 +39,7 @@ grader/
 | Add a grading feature | `engine/grader/` | schema.py = contract, agent.py = LLM, triage.py = routing |
 | Citation verification | `fixtures/citations/` | 29 fixtures with expected verdicts |
 | Canvas integration | `scripts/seed_canvas_sandbox.py` | live sandbox course 106 |
+| Public beta readiness | `engine/gates/public_proxy.py`, `scripts/release_readiness.py` | tiered evidence, public-proxy gates, consolidated verdict |
 | Phase status | `docs/phases/P0..P5.md` | each has goal, status, build sequence, gotchas |
 | Data licensing | `docs/DATA-PLAN.md`, `.gitignore` | NC corpora gitignored; never commit student work |
 
@@ -110,12 +111,19 @@ python scripts/seed_canvas_sandbox.py --teardown --course-id 106 --apply
 
 # Fixtures
 python fixtures/citations/generate_fixtures.py
+
+# Public beta readiness gates
+uv run python engine/gates/quality.py --profile public_proxy --public-proxy-dir fixtures/public_proxy
+uv run python engine/gates/bias.py --profile public_proxy --public-proxy-dir fixtures/public_proxy
+uv run python engine/verify_citations.py --fixtures fixtures/citations/citation_fixtures.json --output artifacts/citation-results.json
+uv run python scripts/live_canvas_e2e.py --dry-run
+uv run python scripts/release_readiness.py --profile public_beta --out artifacts/release-readiness
 ```
 
 ## NOTES
 
-- **Status:** P0 complete (engine works, model choice reversed to MiniCPM-V). P1 built but not run. P2–P5 not started.
-- **Highest-value next action:** `uv run python engine/calibrate.py --n-test 20 --n-exemplars 60` — proves the core product bet (do teacher anchors help?)
+- **Status:** Developer-assisted alpha. Public-proxy quality/fairness gate profiles exist; teacher-local grading remains unvalidated until authorized instructor data is supplied.
+- **Highest-value next action:** run the release-readiness report with real public-proxy artifacts, a guarded live Canvas app round trip, signed/notarized build evidence, and clean-machine test evidence.
 - **16 GB context trap:** Ollama loads models at full default context. Qwen3-VL's 262k default made a 4B model consume 41 GB. Always use capped variants from `make_models.sh`.
 - **Canvas gotchas:** bulk-update is async (poll Progress, not grades); returns HTML without `Accept: application/json`; submission files need `as_user_id` masquerade; Canvas Free-for-Teacher is dead.
 - **`humanizer-main/`** is a separate agent-skill subproject with its own AGENTS.md — don't conflate with grader.

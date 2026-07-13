@@ -1,0 +1,21 @@
+{
+  "tier": "public_proxy",
+  "name": "tiny-public-proxy-fixture",
+  "license": "CC BY 4.0",
+  "retrieved_at": "2026-07-12",
+  "adapter_version": "tiny-fixture-v1",
+  "sources": [
+    {
+      "id": "tiny_source_a",
+      "url": "https://example.invalid/tiny-source-a",
+      "license": "CC BY 4.0",
+      "sha256": "synthetic-fixture"
+    },
+    {
+      "id": "tiny_source_b",
+      "url": "https://example.invalid/tiny-source-b",
+      "license": "CC BY 4.0",
+      "sha256": "synthetic-fixture"
+    }
+  ]
+}

@@ -19,6 +19,29 @@ sys.path.insert(0, str(Path(__file__).parent))
 from grader.citations import verify, CitationCheck
 
 
+def decide_citation_mode(summary: dict) -> dict:
+    """Decide whether citation verification can ship as enabled or experimental."""
+    failures: list[str] = []
+    if summary.get("accuracy", 0) < 0.90:
+        failures.append("accuracy below 90%")
+    if summary.get("false_positives", 0) > 0:
+        failures.append(f"{summary['false_positives']} false positive citation verdict(s)")
+
+    retraction = summary.get("retraction_check", {})
+    retraction_total = int(retraction.get("total", 0) or 0)
+    retraction_caught = int(retraction.get("caught", 0) or 0)
+    if retraction_total > 0 and retraction_caught < retraction_total:
+        missed = retraction_total - retraction_caught
+        failures.append(f"retraction check missed {missed}/{retraction_total}")
+
+    return {
+        "mode": "enabled" if not failures else "experimental",
+        "release_status": "PASS" if not failures else "FAIL",
+        "experimental_required": bool(failures),
+        "failures": failures,
+    }
+
+
 def score_fixtures(fixtures_path: Path, *, check_claim: bool = True, verbose: bool = False) -> dict:
     """Run the verifier against all 29 fixtures and score results."""
     data = json.loads(fixtures_path.read_text())
@@ -109,6 +132,12 @@ def score_fixtures(fixtures_path: Path, *, check_claim: bool = True, verbose: bo
         },
         "results": results,
     }
+    mode = decide_citation_mode(summary)
+    summary["citation_mode"] = mode
+    summary["mode"] = mode["mode"]
+    summary["release_status"] = mode["release_status"]
+    summary["experimental_required"] = mode["experimental_required"]
+    summary["failures"] = mode["failures"]
     return summary
 
 
@@ -155,6 +184,14 @@ def main() -> None:
         passed = False
     if summary["retraction_check"]["total"] > 0 and summary["retraction_check"]["caught"] < summary["retraction_check"]["total"]:
         print(f"\n✗ FAIL: retraction check missed {summary['retraction_check']['total'] - summary['retraction_check']['caught']}")
+        passed = False
+
+    if summary.get("experimental_required"):
+        print("\nCitation beta mode: experimental")
+        for failure in summary.get("failures", []):
+            print(f"  - {failure}")
+    else:
+        print("\nCitation beta mode: enabled")
 
     if passed:
         print("\n✓ ALL CHECKS PASSED")

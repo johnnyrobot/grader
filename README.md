@@ -32,21 +32,23 @@ per-teacher model to train.
 
 ## Status
 
-🚧 **Beta.** Engine works, desktop app built, Canvas + citations + handwriting integrated.
-Golden set + signing pending.
+🚧 **Developer-assisted alpha; not ready for an unattended public beta.** Engine, desktop,
+Canvas, document, citation, and release-gate plumbing exist, but public beta requires passing
+public-proxy quality/fairness evidence, explicit citation labeling, a guarded live Canvas app
+round trip, signed/notarized clean-machine testing, and updater validation.
 
 | | |
 |---|---|
 | Engine (grading, calibration, triage) | 🟢 Working |
 | Calibration validation | 🟡 P1 built (anchors +0.135 QWK at k=6) |
 | Desktop app (Tauri + React) | 🟡 Built — sidecar, queue, split-view, model manager, settings |
-| Canvas integration | 🟡 Built — import, post grades, offline queue (untested live) |
+| Canvas integration | 🟡 Built — import, post grades, offline queue; app-level live round trip still required |
 | Document parsing + handwriting | 🟡 Built — Docling + Apple Vision + grader-vision |
-| Citation verification | 🟡 Built — 4-layer ladder (69% accuracy, 0% false positives) |
-| CI gates | 🟡 Egress + perf PASS, quality + bias SKIP (need golden set) |
-| Signing + notarization | ⬜ Scripts built, need Apple Developer cert |
+| Citation verification | 🟡 Built — current fixture result is experimental until ≥90% and 3/3 retractions pass |
+| CI gates | 🟡 Privacy/perf built; public-proxy quality + fairness profiles added |
+| Signing + notarization | ⬜ Scripts built; signed/notarized clean-machine test still required |
 | Updates | 🟡 Tauri updater integrated, manifest generator built |
-| Beta rollout | ⬜ Docs ready, need testers |
+| Beta rollout | ⬜ Blocked until release-readiness report returns `supervised_public_beta` |
 
 See [`docs/HANDOFF.md`](docs/HANDOFF.md) for exact status and [`docs/phases/`](docs/phases/) for
 per-phase detail.
@@ -79,6 +81,19 @@ ollama pull qwen3:8b && ollama pull qwen3-vl:4b      # models (16 GB tier)
 uv run python engine/bench.py                        # which model/output-mode works
 uv run python engine/calibrate.py --n-test 20        # do teacher anchors actually help?
 ```
+
+## Public beta gate commands
+
+```bash
+uv run python engine/gates/quality.py --profile public_proxy --public-proxy-dir fixtures/public_proxy
+uv run python engine/gates/bias.py --profile public_proxy --public-proxy-dir fixtures/public_proxy
+uv run python engine/verify_citations.py --fixtures fixtures/citations/citation_fixtures.json --output artifacts/citation-results.json
+uv run python scripts/live_canvas_e2e.py --dry-run
+uv run python scripts/release_readiness.py --profile public_beta --out artifacts/release-readiness
+```
+
+The committed `fixtures/public_proxy/` set is a tiny mechanics fixture. Real public-proxy datasets
+must be downloaded into gitignored local storage and reported separately from teacher-local data.
 
 The calibration run uses [Mohler ASAG](https://huggingface.co/datasets/nkazi/MohlerASAG)
 (CC BY 4.0) — 2,273 short answers, each scored by **two independent human graders**, so we can

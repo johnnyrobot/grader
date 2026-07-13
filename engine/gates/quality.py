@@ -205,14 +205,26 @@ def run_quality_gate(
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Quality gate: QWK ≥ 0.70")
+    parser.add_argument(
+        "--profile",
+        choices=("teacher_local", "public_proxy"),
+        default="teacher_local",
+        help="Evidence profile to evaluate",
+    )
     parser.add_argument("--golden-dir", type=Path, default=GOLDEN_DIR)
+    parser.add_argument("--public-proxy-dir", type=Path, default=Path("fixtures/public_proxy"))
     parser.add_argument("--model", default="grader-text:8b")
     parser.add_argument("--save-baseline", action="store_true",
                         help="Save current QWK as the regression baseline")
     args = parser.parse_args()
 
-    result = run_quality_gate(golden_dir=args.golden_dir, model=args.model,
-                              save_baseline=args.save_baseline)
+    if args.profile == "public_proxy":
+        from gates.public_proxy import evaluate_public_proxy_quality
+
+        result = evaluate_public_proxy_quality(args.public_proxy_dir, BASELINE_FILE)
+    else:
+        result = run_quality_gate(golden_dir=args.golden_dir, model=args.model,
+                                  save_baseline=args.save_baseline)
     result.print()
     sys.exit(result.exit_code())
 

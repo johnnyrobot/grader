@@ -276,12 +276,24 @@ def _grade_for_gate(item: dict, text: str, golden_dir: Path) -> dict | float | N
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Fairness gate: style perturbation delta")
+    parser.add_argument(
+        "--profile",
+        choices=("teacher_local", "public_proxy"),
+        default="teacher_local",
+        help="Evidence profile to evaluate",
+    )
     parser.add_argument("--golden-dir", type=Path, default=GOLDEN_DIR)
+    parser.add_argument("--public-proxy-dir", type=Path, default=Path("fixtures/public_proxy"))
     parser.add_argument("--threshold", type=float, default=MAX_DELTA,
                         help="Max acceptable mean score delta (default: 1.0)")
     args = parser.parse_args()
 
-    result = run_bias_gate(golden_dir=args.golden_dir, threshold=args.threshold)
+    if args.profile == "public_proxy":
+        from gates.public_proxy import evaluate_public_proxy_fairness
+
+        result = evaluate_public_proxy_fairness(args.public_proxy_dir, threshold=args.threshold)
+    else:
+        result = run_bias_gate(golden_dir=args.golden_dir, threshold=args.threshold)
     result.print()
     sys.exit(result.exit_code())
 
