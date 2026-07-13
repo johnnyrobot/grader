@@ -35,9 +35,10 @@ per-teacher model to train.
 🚧 **Developer-assisted alpha; not ready for an unattended public beta.** The engine and desktop
 review workflow work, including the neuroinclusive light-first interface and the tiered
 release-gate machinery. Public-proxy quality/fairness pass and Canvas score/comment round-trip is
-validated. Local Developer ID codesigning still works, but the current notarytool keychain profile
-`grader` is missing, so fresh notarization/stapling is blocked until Apple notarization credentials
-are restored locally. Signed updater-manifest regeneration is also blocked until the updater-key
+validated. The current signing doctor blocks on Developer ID private-key access
+(`errSecInternalComponent`) and a missing notarytool keychain profile `grader`, so fresh
+codesigning/notarization/stapling is blocked until local Apple signing credentials are repaired.
+Signed updater-manifest regeneration is also blocked until the updater-key
 password is supplied in a private shell or Keychain. Public beta is still blocked by GitHub
 release-publication setup, the live updater channel, and clean-machine updater N→N+1 behavioral
 validation.
@@ -54,7 +55,7 @@ validation.
 | CI gates | 🟢 Privacy PASS; perf PASS; public-proxy quality/fairness PASS; teacher-local still unvalidated |
 | GitHub release preflight | 🔴 Missing required Actions secrets for signed/notarized updater releases |
 | Updater evidence | 🟡 Signed `latest.json` regeneration is blocked until the updater-key password is provided in a private shell or Keychain; current `latest.json` is stale/0.1.0 |
-| Signing + notarization | 🔴 Codesign identity works; current notarization is blocked because notarytool profile `grader` is missing |
+| Signing + notarization | 🔴 Fresh signing/notarization preflight blocks on Developer ID private-key access and missing notarytool profile `grader` |
 | Updates | 🟡 Tauri updater integrated with signed manifest generation and in-app install/restart UI; real N→N+1 path still needs release-channel evidence |
 | Beta rollout | ⬜ Blocked until release-readiness report returns `supervised_public_beta` |
 
@@ -89,8 +90,9 @@ Confirmed in the current checkout:
   least one teacher feedback comment read back.
 - `scripts/release_readiness.py` writes a consolidated JSON/Markdown verdict with blocker
   summaries plus an end-to-end testing and evaluation matrix that maps public-beta requirements to
-  evidence. With current local artifacts, the report is `blocked`: local codesigning works, but
-  notarization/stapling is blocked by the missing `grader` notarytool profile. Local signed-app
+  evidence. With current local artifacts, the report is `blocked`: fresh signing/notarization
+  preflight is blocked by Developer ID private-key access and the missing `grader` notarytool
+  profile. Local signed-app
   evidence covers fresh-profile first-run model reconciliation, crash recovery, keyboard-only review,
   and the Computer Use instructor sweep. The remaining release blockers are the missing GitHub
   Actions release secrets, stale/missing signed updater evidence (`latest.json` is still 0.1.0), the
