@@ -121,10 +121,11 @@ scripts/
   keychain private-key ACLs and notarytool profile setup; do not commit filled credentials or paste
   secrets into chat. Use `--skip-notary` only for explicit sign-only testing.
 - **`computer_use_sweep_evidence.py`**: run after a Computer Use sweep of the signed app:
-  `uv run python scripts/computer_use_sweep_evidence.py --capture-dir <captures> --out <evidence-root>/computer_use_instructor_sweep.json`.
-  It requires accessibility-tree/screenshot pairs, checks core instructor screens, and fail-closes
-  on stale review states such as approved + "Teacher changes not saved yet" or "Score updated from N
-  to N". Include the PASS JSON in clean-machine manual evidence for `computer_use_instructor_sweep`.
+  `uv run python scripts/computer_use_sweep_evidence.py --capture-dir <captures> --app /path/to/Grader.app --expected-version <version> --out <evidence-root>/computer_use_instructor_sweep.json`.
+  It requires accessibility-tree/screenshot pairs, checks core instructor screens, records the
+  inspected `.app` bundle id/version/tree hash, and fail-closes on wrong app versions or stale review
+  states such as approved + "Teacher changes not saved yet" or "Score updated from N to N". Include
+  the PASS JSON in clean-machine manual evidence for `computer_use_instructor_sweep`.
 - **`seed_canvas_sandbox.py`**: dry-run by default. `--apply` to write. Refuses courses without `ZZ-GRADER-TEST` marker.
 - **`clean_machine_evidence.py`**: cannot prove a clean-machine pass by itself. Generate the
   tester runbook with `--print-manual-runbook` and the evidence template with

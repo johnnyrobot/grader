@@ -30,7 +30,7 @@ misrepresented as grading accuracy.
 | Performance | 1,500-word essay under 90 seconds on target memory floor | `engine/gates/perf.py --memory-floor 16` | PASS: 37.8 seconds in latest run | PASS artifact must be supplied to readiness report |
 | Desktop build | React build, unit tests, E2E workflow, Rust check pass | `scripts/frontend_evidence.py`, `cargo check` | PASS: 15 component tests, 4 E2E tests, build, and Rust check; frontend artifact records 16 visual-sweep screens and 167 controls | PASS artifact must be supplied to readiness report |
 | Accessibility | No serious/critical WCAG violations, 200% text scaling, keyboard-only loop | Playwright axe + visual inspection | PASS on synthetic fixture; visual sweep covers 16 screens and 167 visible controls | PASS mechanics; still requires clean-machine app check |
-| Computer Use instructor sweep | Signed app is inspected as an instructor using Computer Use, with screenshots/accessibility-tree notes for every visible screen and safe control path | `scripts/computer_use_sweep_evidence.py`, then `scripts/clean_machine_evidence.py` manual evidence | PASS locally: the latest local app/DMG was signed, notarized, stapled, installed to `/Applications/Grader.app`, and targeted by Computer Use as `com.grader.app`; `artifacts/release-evidence/computer-use-signed-app/computer-use-signed-local-evidence.json` validates 73 capture pairs with all required markers and no stale approval contradictions. | PASS for signed-app local evidence; still include in clean-machine handoff and rerun if the release bundle identity changes |
+| Computer Use instructor sweep | Signed app is inspected as an instructor using Computer Use, with screenshots/accessibility-tree notes for every visible screen and safe control path | `scripts/computer_use_sweep_evidence.py`, then `scripts/clean_machine_evidence.py` manual evidence | PASS locally: `scripts/computer_use_sweep_evidence.py --app app/src-tauri/target/release/bundle/macos/Grader.app --expected-version 0.1.1` validates the 73-capture signed-app sweep and records the inspected bundle id/version. A separate current smoke capture confirms Computer Use can open the rebuilt 0.1.1 app, but the full 73-screen sweep predates the latest rebuild and should be rerun for final clean-machine evidence. | PASS for signed-app local mechanics; rerun full sweep on the final release bundle before public beta |
 | Release version consistency | Git tag/updater version matches Tauri config, Rust crate/lockfile, frontend package/lockfile, Python project, engine launcher, and dev mock update fixture | `scripts/bump_release_version.py --target-version <N+1>` for release prep, `scripts/release_version_guard.py --tag v<version>`, and GitHub release workflow | NEW: fail-closed guard now covers package, lockfile, and runtime update-reporting surfaces before release asset publishing | Required before signed updater/release-channel evidence |
 | GitHub release publication preflight | Release workflow, updater endpoint, Actions secrets, Developer ID certificate import, candidate version consistency, and optional N+1 candidate tag checks are ready before publishing | `scripts/github_release_secrets.py`, `scripts/bump_release_version.py`, then `scripts/github_release_preflight.py --candidate-tag v<N+1>` | BLOCKED: required GitHub Actions release secrets are missing, including the Developer ID `.p12` export/password needed to sign on `macos-latest`; stale inactive `gh` account is a warning only because the active account can read the repo | Required before creating/pushing the N+1 release tag |
 | Updater evidence | Signed updater manifest references the signed artifact and current version, passes macOS signature/notarization checks, and is fresh relative to the current source commit | `scripts/updater_key_doctor.py --print-private-runbook`, `scripts/generate_appcast.py --signing-key ...`, then `scripts/updater_evidence.py` | BLOCKED: 0.1.1 app/DMG are signed/notarized, but local `latest.json` is still 0.1.0 and stale; the encrypted updater key password must be provided in a private shell or named macOS Keychain item before regenerating signed 0.1.1 updater evidence | Required before clean-machine updater path |
@@ -57,11 +57,12 @@ Record each sweep as `PASS`, `FAIL`, or `BLOCKED`, with screenshot paths or a Co
 The latest Playwright sweep is `PASS`. The latest local signed-app Computer Use sweep is also `PASS`:
 `artifacts/release-evidence/computer-use-signed-app/` contains 73 accessibility/screenshot capture
 pairs covering onboarding, queue, filters, review, settings, local models, signed-app keyboard-only
-review, and approval states. `scripts/computer_use_sweep_evidence.py` validates that capture set with
-all required markers and no stale approved/unsaved state. This was unblocked by installing the signed
-diagnostic bundle as `com.grader.app`, which the local Computer Use runtime can target; Tauri warns
-that identifiers ending in `.app` are not ideal, so rerun this sweep if the release bundle identity is
-changed back to a conventional identifier.
+review, and approval states. `scripts/computer_use_sweep_evidence.py --app ... --expected-version ...`
+now validates that capture set with all required markers, no stale approved/unsaved state, and the
+specific `.app` bundle/version that the evidence is being attached to. A newer single-screen smoke
+capture in `artifacts/release-evidence/computer-use-current-smoke/` confirms Computer Use can open
+the rebuilt 0.1.1 signed app, while preserving the warning that the full 73-screen sweep should be
+rerun on the final release bundle.
 For clean-machine evidence, each manual check must also set all check-specific `assertions` to
 `true`; generic screenshots or notes alone no longer satisfy the public-beta gate.
 
@@ -70,10 +71,10 @@ For clean-machine evidence, each manual check must also set all check-specific `
 Not public beta ready. The current anchored real-data public-proxy quality and fairness runs pass on
 Mohler ASAG, Canvas app-level score/comment round-trip passes, and citations are acceptable only in
 visibly experimental beta mode. The latest local app/DMG is signed/notarized and passes macOS
-signature checks, signed updater evidence passes, and release provenance passes. Local signed-app
-Computer Use and keyboard-only review evidence now pass. The remaining public-beta blockers are the
-missing GitHub Actions release secrets, missing live GitHub updater channel, and clean-machine
-behavioral evidence for updater N→N+1 through the native install/restart action. Run
+signature checks, and local signed-app Computer Use/keyboard-only review evidence exists, but the
+current release-readiness report still blocks on missing GitHub Actions release secrets, stale/missing
+signed updater evidence, the missing live GitHub updater channel, and clean-machine behavioral
+evidence for updater N→N+1 through the native install/restart action. Run
 `scripts/github_release_secrets.py --print-runbook` and apply the secrets in a private shell, run
 `scripts/bump_release_version.py --target-version <N+1> --apply` in the release-prep commit, run
 `scripts/github_release_preflight.py --candidate-tag v<N+1>` before creating/pushing N+1, then run
