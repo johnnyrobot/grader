@@ -5,7 +5,7 @@ This does not mark Grader public-beta ready. It creates a deterministic folder
 for the clean-machine tester containing:
 
   - the signed/notarized release artifact and updater manifest, when supplied
-  - the latest updater/clean-machine/release-readiness evidence JSON
+  - the latest version/updater/clean-machine/release-readiness evidence JSON
   - the clean-machine manual runbook and evidence template
   - a package manifest with SHA-256 metadata and current blocker summaries
 
@@ -120,20 +120,22 @@ Current readiness verdict: `{summary.get('readiness_verdict', 'unknown')}`
 ## Tester workflow
 
 1. Install the signed/notarized N release DMG from `release-artifacts/` on a clean supported Mac.
-2. Publish a signed N+1 DMG and signed `latest.json` to the configured GitHub release channel:
+2. Before publishing N+1, require `scripts/release_version_guard.py --tag v<N+1>` to pass so the
+   tag, app bundle, Rust crate, frontend package, and Python project agree on the release version.
+3. Publish a signed N+1 DMG and signed `latest.json` to the configured GitHub release channel:
    `https://github.com/johnnyrobot/grader/releases/latest/download/latest.json`.
    The private release operator should set `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` only in the release
    shell or CI secret store when generating the signed N+1 manifest.
-3. Run `uv run python scripts/updater_channel_preflight.py --current-version <installed-N-version>`
+4. Run `uv run python scripts/updater_channel_preflight.py --current-version <installed-N-version>`
    and require `status=PASS` before starting the clean-machine updater-path test.
-4. Launch N, wait for the update banner, use the in-app `Install update and restart` action, and
+5. Launch N, wait for the update banner, use the in-app `Install update and restart` action, and
    confirm the relaunched app is N+1. Do not manually replace the app for this check.
-5. Fill `clean-machine-manual-evidence.json` while following `clean-machine-runbook.md`.
-6. Run `scripts/computer_use_sweep_evidence.py` against the signed-app Computer Use capture folder and
+6. Fill `clean-machine-manual-evidence.json` while following `clean-machine-runbook.md`.
+7. Run `scripts/computer_use_sweep_evidence.py` against the signed-app Computer Use capture folder and
    place the PASS JSON in the evidence root as `computer_use_instructor_sweep.json`.
-7. Run `scripts/clean_machine_evidence.py` with the filled manual evidence, release DMG, signed
+8. Run `scripts/clean_machine_evidence.py` with the filled manual evidence, release DMG, signed
    updater manifest, and expected app version.
-8. Rerun `scripts/release_readiness.py` and require verdict `supervised_public_beta` before public
+9. Rerun `scripts/release_readiness.py` and require verdict `supervised_public_beta` before public
    beta claims.
 
 Do not add student work, Canvas tokens, Apple credentials, updater private keys, or private-key
@@ -150,6 +152,7 @@ def build_package(
     clean_machine_evidence: Path | None = None,
     readiness_report: Path | None = None,
     signing_evidence: Path | None = None,
+    release_version_evidence: Path | None = None,
     updater_key_evidence: Path | None = None,
     copy_artifacts: bool = True,
 ) -> dict[str, Any]:
@@ -173,6 +176,7 @@ def build_package(
         "clean_machine_evidence": _safe_copy(clean_machine_evidence, evidence_dir, copy_artifacts=True),
         "readiness_report": _safe_copy(readiness_report, evidence_dir, copy_artifacts=True),
         "signing_evidence": _safe_copy(signing_evidence, evidence_dir, copy_artifacts=True),
+        "release_version_evidence": _safe_copy(release_version_evidence, evidence_dir, copy_artifacts=True),
         "updater_key_evidence": _safe_copy(updater_key_evidence, evidence_dir, copy_artifacts=True),
     }
 
@@ -213,6 +217,7 @@ def main() -> None:
     parser.add_argument("--clean-machine-evidence", type=Path, default=Path("artifacts/release-evidence/clean-machine-local-current.json"))
     parser.add_argument("--readiness-report", type=Path, default=Path("artifacts/release-readiness/release-readiness.json"))
     parser.add_argument("--signing-evidence", type=Path, default=Path("artifacts/release-evidence/signing-current.json"))
+    parser.add_argument("--release-version-evidence", type=Path, default=Path("artifacts/release-evidence/release-version.json"))
     parser.add_argument("--updater-key-evidence", type=Path, default=Path("artifacts/release-evidence/updater-key.json"))
     parser.add_argument("--no-copy-release-artifacts", action="store_true",
                         help="Write metadata only for DMG/latest.json instead of copying them into the package")
@@ -226,6 +231,7 @@ def main() -> None:
         clean_machine_evidence=args.clean_machine_evidence,
         readiness_report=args.readiness_report,
         signing_evidence=args.signing_evidence,
+        release_version_evidence=args.release_version_evidence,
         updater_key_evidence=args.updater_key_evidence,
         copy_artifacts=not args.no_copy_release_artifacts,
     )

@@ -153,6 +153,7 @@ uv run python scripts/frontend_evidence.py --out artifacts/release-evidence/fron
 uv run python scripts/dev_mock_engine.py  # optional: safe synthetic backend for local UI/Computer Use inspection
 uv run python scripts/signing_doctor.py --out artifacts/release-evidence/signing.json --no-fail
 uv run python scripts/signing_doctor.py --print-repair-runbook > signing-repair-runbook.md  # local-only recovery steps if the doctor blocks
+uv run python scripts/release_version_guard.py --tag v0.1.0 --out artifacts/release-evidence/release-version.json
 export TAURI_SIGNING_PRIVATE_KEY_PASSWORD='<updater-key-password>'  # required for encrypted updater keys
 uv run python scripts/updater_key_doctor.py --signing-key /path/to/tauri-updater-key.pem --out artifacts/release-evidence/updater-key.json
 uv run python scripts/generate_appcast.py --dmg /path/to/Grader.dmg --version 0.1.0 --signing-key /path/to/tauri-updater-key.pem --output latest.json
@@ -164,7 +165,7 @@ uv run python scripts/clean_machine_evidence.py --print-manual-template > clean-
 uv run python scripts/computer_use_sweep_evidence.py --capture-dir /path/to/computer-use-captures --out /path/to/evidence-root/computer_use_instructor_sweep.json
 uv run python scripts/clean_machine_evidence.py --app /Applications/Grader.app --dmg /path/to/Grader.dmg --updater-manifest /path/to/latest.json --expected-version 0.1.0 --manual-evidence clean-machine-manual-evidence.json --evidence-root /path/to/screenshots-and-logs --out artifacts/release-evidence/clean-machine.json
 uv run python scripts/release_evidence_package.py --out-dir artifacts/release-evidence/clean-machine-handoff
-uv run python scripts/release_readiness.py --profile public_beta --expected-version 0.1.0 --public-proxy-dir artifacts/public_proxy/mohler_asag_diverse_anchored_pilot --citation-artifact artifacts/citation-results.json --canvas-artifact artifacts/release-evidence/canvas-live.json --privacy-artifact artifacts/release-evidence/privacy.json --performance-artifact artifacts/release-evidence/performance.json --frontend-artifact artifacts/release-evidence/frontend.json --rust-artifact artifacts/release-evidence/rust.json --updater-artifact artifacts/release-evidence/updater.json --updater-channel-artifact artifacts/release-evidence/updater-channel-current.json --updater-key-artifact artifacts/release-evidence/updater-key.json --clean-machine-artifact artifacts/release-evidence/clean-machine-local-current.json --out artifacts/release-readiness
+uv run python scripts/release_readiness.py --profile public_beta --expected-version 0.1.0 --public-proxy-dir artifacts/public_proxy/mohler_asag_diverse_anchored_pilot --citation-artifact artifacts/citation-results.json --canvas-artifact artifacts/release-evidence/canvas-live.json --privacy-artifact artifacts/release-evidence/privacy.json --performance-artifact artifacts/release-evidence/performance.json --frontend-artifact artifacts/release-evidence/frontend.json --rust-artifact artifacts/release-evidence/rust.json --release-version-artifact artifacts/release-evidence/release-version.json --updater-artifact artifacts/release-evidence/updater.json --updater-channel-artifact artifacts/release-evidence/updater-channel-current.json --updater-key-artifact artifacts/release-evidence/updater-key.json --clean-machine-artifact artifacts/release-evidence/clean-machine-local-current.json --out artifacts/release-readiness
 ```
 
 The clean-machine manual template is fail-closed: every manual row must include `passed: true`,
@@ -204,12 +205,13 @@ keychain passwords into chat or commit them. `scripts/generate_appcast.py` now f
 Tauri updater signing key is provided; set `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` for encrypted updater
 keys in non-interactive release runs. `--allow-unsigned` is only for local smoke fixtures.
 `scripts/release_readiness.py --expected-version ...` records artifact path/mtime/SHA-256 metadata
-and fails PASS updater or clean-machine artifacts that do not match the evaluated app version. The app
-is still not public-beta ready until signed updater evidence and clean-machine release behavior
-evidence pass. Use `scripts/updater_key_doctor.py` to verify the updater key/password before
-regenerating `latest.json`, and use `scripts/updater_channel_preflight.py` after publishing N+1 to
-confirm the live release channel advertises a signed newer `Grader.dmg` before clean-machine updater
-testing starts.
+and fails PASS updater or clean-machine artifacts that do not match the evaluated app version.
+`scripts/release_version_guard.py` fails release tags whose app/package metadata still reports a
+different version. The app is still not public-beta ready until signed updater evidence and
+clean-machine release behavior evidence pass. Use `scripts/updater_key_doctor.py` to verify the
+updater key/password before regenerating `latest.json`, and use
+`scripts/updater_channel_preflight.py` after publishing N+1 to confirm the live release channel
+advertises a signed newer `Grader.dmg` before clean-machine updater testing starts.
 
 ## Docs
 

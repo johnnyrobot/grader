@@ -12,6 +12,7 @@ scripts/
 ├── build_public_proxy.py       # build gitignored Mohler ASAG public-proxy evidence
 ├── dev_mock_engine.py          # synthetic loopback engine for safe local UI/Computer Use inspection
 ├── frontend_evidence.py        # collect component/build/E2E/visual-sweep release artifact
+├── release_version_guard.py    # fail closed when tag/app/package versions drift
 ├── signing_doctor.py           # diagnose Developer ID private-key and notarytool readiness
 ├── updater_key_doctor.py       # diagnose Tauri updater private-key/password readiness
 ├── generate_appcast.py         # generate signed Tauri updater latest.json manifests
@@ -31,6 +32,7 @@ scripts/
 | Build public-proxy evidence | `build_public_proxy.py` | Writes Mohler ASAG artifacts under `artifacts/public_proxy/`; optional local grading |
 | Inspect UI safely | `dev_mock_engine.py` | Serves synthetic queue/settings/models/rubric responses on loopback for local browser/Computer Use inspection only |
 | Collect frontend release evidence | `frontend_evidence.py` | Runs component tests, production build, managed Playwright E2E, and validates visual-sweep screenshots/control coverage |
+| Guard release version | `release_version_guard.py` | Requires the release tag/version to match Tauri config, Rust crate, frontend package, and Python project before publishing assets |
 | Diagnose signing credentials | `signing_doctor.py` | Writes `artifacts/release-evidence/signing.json`; probes Developer ID private-key access and notarytool profile before signing; `--print-repair-runbook` emits secret-free local recovery steps |
 | Diagnose updater key | `updater_key_doctor.py` | Writes `artifacts/release-evidence/updater-key.json`; signs a tiny temp file to verify the Tauri updater key and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` |
 | Generate updater manifest | `generate_appcast.py` | Requires `--signing-key` for release manifests; use `--allow-unsigned` only for local smoke fixtures |
@@ -57,6 +59,11 @@ scripts/
 - **`dev_mock_engine.py`**: safe for local/manual/Computer Use UI inspection. It uses synthetic
   fixture data only and is not release evidence by itself; signed clean-machine claims still require
   `clean_machine_evidence.py`.
+- **`release_version_guard.py`**: run before signing/publishing release assets:
+  `uv run python scripts/release_version_guard.py --tag v0.1.0 --out artifacts/release-evidence/release-version.json`.
+  It prevents tag/app metadata drift across `tauri.conf.json`, `Cargo.toml`, `package.json`, and
+  `pyproject.toml`. The GitHub release workflow runs it before building so a tag such as `v0.1.1`
+  cannot publish an app bundle still reporting `0.1.0`.
 - **`updater_evidence.py`**: blocks public beta when `latest.json` is missing, any platform
   signature is empty, the manifest does not reference the supplied artifact, the supplied
   manifest/artifact predates the current git commit, or the local artifact fails

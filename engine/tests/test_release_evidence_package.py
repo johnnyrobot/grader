@@ -14,6 +14,7 @@ def test_build_package_copies_artifacts_and_writes_runbook_template(tmp_path):
     clean = tmp_path / "clean-machine.json"
     readiness = tmp_path / "release-readiness.json"
     signing = tmp_path / "signing.json"
+    release_version = tmp_path / "release-version.json"
     updater_key = tmp_path / "updater-key.json"
     dmg.write_bytes(b"signed dmg")
     manifest.write_text('{"version":"0.1.0","platforms":{"darwin-aarch64":{"signature":""}}}')
@@ -32,6 +33,7 @@ def test_build_package_copies_artifacts_and_writes_runbook_template(tmp_path):
         "e2e_matrix_summary": {"blocking": 1, "passing": 15},
     }))
     signing.write_text(json.dumps({"status": "PASS"}))
+    release_version.write_text(json.dumps({"status": "PASS"}))
     updater_key.write_text(json.dumps({"status": "BLOCKED_UPDATER_KEY"}))
 
     out = tmp_path / "handoff"
@@ -43,6 +45,7 @@ def test_build_package_copies_artifacts_and_writes_runbook_template(tmp_path):
         clean_machine_evidence=clean,
         readiness_report=readiness,
         signing_evidence=signing,
+        release_version_evidence=release_version,
         updater_key_evidence=updater_key,
     )
 
@@ -52,12 +55,14 @@ def test_build_package_copies_artifacts_and_writes_runbook_template(tmp_path):
     assert (out / "release-artifacts" / "Grader.dmg").exists()
     assert (out / "release-artifacts" / "latest.json").exists()
     assert (out / "evidence" / "updater.json").exists()
+    assert (out / "evidence" / "release-version.json").exists()
     assert (out / "evidence" / "updater-key.json").exists()
     assert "first_run_models" in (out / "clean-machine-runbook.md").read_text()
     template = json.loads((out / "clean-machine-manual-evidence.json").read_text())
     assert template["computer_use_instructor_sweep"]["assertions"]
     readme = (out / "README.md").read_text()
     assert "TAURI_SIGNING_PRIVATE_KEY_PASSWORD" in readme
+    assert "release_version_guard.py" in readme
     assert "updater_channel_preflight.py" in readme
     manifest_payload = json.loads((out / "release-evidence-package.json").read_text())
     assert manifest_payload["files"]["dmg"]["sha256"] == package["files"]["dmg"]["sha256"]

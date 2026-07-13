@@ -37,6 +37,7 @@ grader/
 │   ├── start_engine.sh          # desktop engine launcher
 │   ├── sign_and_notarize.sh     # macOS release signing pipeline
 │   ├── signing_doctor.py        # signing/notary credential preflight + evidence
+│   ├── release_version_guard.py # tag/app/package version consistency gate
 │   ├── frontend_evidence.py     # frontend component/build/E2E/visual-sweep artifact
 │   ├── updater_evidence.py      # updater manifest/signature/artifact evidence
 │   ├── updater_channel_preflight.py # live GitHub release-channel preflight before N→N+1
@@ -196,6 +197,7 @@ uv run python engine/verify_citations.py --fixtures fixtures/citations/citation_
 uv run python scripts/frontend_evidence.py --out artifacts/release-evidence/frontend.json
 uv run python scripts/signing_doctor.py --out artifacts/release-evidence/signing.json --no-fail
 uv run python scripts/signing_doctor.py --print-repair-runbook > signing-repair-runbook.md
+uv run python scripts/release_version_guard.py --tag v0.1.0 --out artifacts/release-evidence/release-version.json
 export TAURI_SIGNING_PRIVATE_KEY_PASSWORD='<updater-key-password>'  # required for encrypted updater keys
 uv run python scripts/updater_key_doctor.py --signing-key /path/to/tauri-updater-key.pem --out artifacts/release-evidence/updater-key.json
 uv run python scripts/generate_appcast.py --dmg /path/to/Grader.dmg --version 0.1.0 --signing-key /path/to/tauri-updater-key.pem --output latest.json
@@ -207,7 +209,7 @@ uv run python scripts/clean_machine_evidence.py --print-manual-template > clean-
 uv run python scripts/computer_use_sweep_evidence.py --capture-dir /path/to/computer-use-captures --out /path/to/evidence-root/computer_use_instructor_sweep.json
 uv run python scripts/clean_machine_evidence.py --app /Applications/Grader.app --dmg /path/to/Grader.dmg --updater-manifest /path/to/latest.json --expected-version 0.1.0 --manual-evidence clean-machine-manual-evidence.json --evidence-root /path/to/screenshots-and-logs --out artifacts/release-evidence/clean-machine.json
 uv run python scripts/release_evidence_package.py --out-dir artifacts/release-evidence/clean-machine-handoff
-uv run python scripts/release_readiness.py --profile public_beta --expected-version 0.1.0 --public-proxy-dir artifacts/public_proxy/mohler_asag_diverse_anchored_pilot --citation-artifact artifacts/citation-results.json --canvas-artifact artifacts/release-evidence/canvas-live.json --privacy-artifact artifacts/release-evidence/privacy.json --performance-artifact artifacts/release-evidence/performance.json --frontend-artifact artifacts/release-evidence/frontend.json --rust-artifact artifacts/release-evidence/rust.json --updater-artifact artifacts/release-evidence/updater.json --updater-channel-artifact artifacts/release-evidence/updater-channel-current.json --updater-key-artifact artifacts/release-evidence/updater-key.json --clean-machine-artifact artifacts/release-evidence/clean-machine-local-current.json --out artifacts/release-readiness
+uv run python scripts/release_readiness.py --profile public_beta --expected-version 0.1.0 --public-proxy-dir artifacts/public_proxy/mohler_asag_diverse_anchored_pilot --citation-artifact artifacts/citation-results.json --canvas-artifact artifacts/release-evidence/canvas-live.json --privacy-artifact artifacts/release-evidence/privacy.json --performance-artifact artifacts/release-evidence/performance.json --frontend-artifact artifacts/release-evidence/frontend.json --rust-artifact artifacts/release-evidence/rust.json --release-version-artifact artifacts/release-evidence/release-version.json --updater-artifact artifacts/release-evidence/updater.json --updater-channel-artifact artifacts/release-evidence/updater-channel-current.json --updater-key-artifact artifacts/release-evidence/updater-key.json --clean-machine-artifact artifacts/release-evidence/clean-machine-local-current.json --out artifacts/release-readiness
 ```
 
 The clean-machine manual template must be filled with `passed: true`, tester/timestamp/notes,

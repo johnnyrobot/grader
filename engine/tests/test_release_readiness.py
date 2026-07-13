@@ -32,6 +32,7 @@ def test_decide_verdict_supervised_public_beta_when_required_gates_pass():
         "performance": {"status": "PASS"},
         "frontend": {"status": "PASS"},
         "rust": {"status": "PASS"},
+        "release_version": {"status": "PASS"},
         "updater": {"status": "PASS"},
         "updater_channel": {"status": "PASS"},
         "signing": {"status": "PASS"},
@@ -50,6 +51,7 @@ def test_decide_verdict_allows_accepted_experimental_citations():
         "performance": {"status": "PASS"},
         "frontend": {"status": "PASS"},
         "rust": {"status": "PASS"},
+        "release_version": {"status": "PASS"},
         "updater": {"status": "PASS"},
         "updater_channel": {"status": "PASS"},
         "signing": {"status": "PASS"},
@@ -90,6 +92,10 @@ def test_build_e2e_matrix_maps_public_beta_requirements_to_evidence():
             "artifact": {"path": "artifacts/release-evidence/canvas-live.json"},
         },
         "rust": {"status": "PASS"},
+        "release_version": {
+            "status": "PASS",
+            "artifact": {"path": "artifacts/release-evidence/release-version.json"},
+        },
         "updater": {"status": "PASS"},
         "updater_channel": {
             "status": "PASS",
@@ -107,11 +113,12 @@ def test_build_e2e_matrix_maps_public_beta_requirements_to_evidence():
 
     assert summary["total"] == len(matrix)
     assert summary["blocking"] == 0
-    assert summary["PASS"] == 16
+    assert summary["PASS"] == 17
     assert summary["PASS_EXPERIMENTAL"] == 1
     by_id = {row["id"]: row for row in matrix}
     assert by_id["ui-onboarding-queue-review-settings-models"]["status"] == "PASS"
     assert by_id["canvas-import-approve-post-readback"]["evidence"] == "artifacts/release-evidence/canvas-live.json"
+    assert by_id["release-version-consistency"]["evidence"] == "artifacts/release-evidence/release-version.json"
     assert by_id["updater-release-channel-preflight"]["evidence"] == "artifacts/release-evidence/updater-channel-current.json"
 
 
@@ -132,6 +139,7 @@ def test_build_e2e_matrix_exposes_clean_machine_subcheck_blockers():
         },
         "canvas": {"status": "PASS"},
         "rust": {"status": "PASS"},
+        "release_version": {"status": "BLOCKED_RELEASE_VERSION", "failures": ["tag v0.1.1 does not match app version"]},
         "updater": {"status": "BLOCKED_UPDATER_EVIDENCE"},
         "updater_channel": {"status": "BLOCKED_UPDATER_CHANNEL", "failures": ["manifest returned HTTP 404"]},
         "signing": {"status": "BLOCKED_SIGNING_CREDENTIALS"},
@@ -156,6 +164,7 @@ def test_build_e2e_matrix_exposes_clean_machine_subcheck_blockers():
     assert by_id["first-run-models"]["status"] == "BLOCKED_CLEAN_MACHINE_EVIDENCE"
     assert by_id["keyboard-only-review"]["status"] == "BLOCKED_CLEAN_MACHINE_EVIDENCE"
     assert by_id["computer-use-instructor-sweep"]["status"] == "BLOCKED_CLEAN_MACHINE_EVIDENCE"
+    assert by_id["release-version-consistency"]["blocking"] is True
     assert by_id["signed-updater-manifest"]["blocking"] is True
     assert by_id["updater-release-channel-preflight"]["blocking"] is True
     assert "HTTP 404" in by_id["updater-release-channel-preflight"]["summary"]

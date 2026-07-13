@@ -36,6 +36,7 @@ REQUIRED_GATES = (
     "performance",
     "frontend",
     "rust",
+    "release_version",
     "updater",
     "signing",
     "clean_machine",
@@ -281,6 +282,18 @@ def build_e2e_matrix(evidence: dict[str, Any]) -> list[dict[str, str | bool]]:
             status=_gate_status(evidence, "rust"),
             evidence="app/src-tauri cargo check evidence",
             summary=_gate_summary(evidence.get("rust", {})),
+        ),
+        _matrix_row(
+            id="release-version-consistency",
+            area="distribution",
+            requirement="Release tag/version metadata matches the app, Rust crate, frontend package, and Python project.",
+            gate="release_version",
+            status=_gate_status(evidence, "release_version"),
+            evidence=_artifact_path(
+                evidence.get("release_version", {}),
+                "artifacts/release-evidence/release-version.json",
+            ),
+            summary=_gate_summary(evidence.get("release_version", {})),
         ),
         _matrix_row(
             id="signed-updater-manifest",
@@ -652,6 +665,7 @@ def collect_evidence(args: argparse.Namespace) -> dict[str, Any]:
     evidence["performance"] = _normalize_artifact(args.performance_artifact, "SKIP")
     evidence["frontend"] = _normalize_artifact(args.frontend_artifact, "SKIP")
     evidence["rust"] = _normalize_artifact(args.rust_artifact, "SKIP")
+    evidence["release_version"] = _normalize_artifact(args.release_version_artifact, "BLOCKED_RELEASE_VERSION")
     evidence["updater_key"] = _normalize_updater_key_artifact(args.updater_key_artifact)
     evidence["updater"] = _augment_updater_with_key_diagnostic(
         _normalize_updater_artifact(args.updater_artifact, expected_version),
@@ -741,6 +755,7 @@ def main() -> None:
     parser.add_argument("--performance-artifact", type=Path, default=None)
     parser.add_argument("--frontend-artifact", type=Path, default=None)
     parser.add_argument("--rust-artifact", type=Path, default=None)
+    parser.add_argument("--release-version-artifact", type=Path, default=None)
     parser.add_argument("--updater-artifact", type=Path, default=None)
     parser.add_argument(
         "--updater-channel-artifact",
