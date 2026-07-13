@@ -64,7 +64,7 @@ beta with real student work.
 
 Confirmed in the current checkout:
 
-- Python tests: 104 passed, 12 intentionally skipped.
+- Python tests: 106 passed, 12 intentionally skipped.
 - Frontend tests: 12 passed; TypeScript/Vite production build and Rust `cargo check` pass.
 - The complete mocked desktop workflow passes in Playwright across onboarding, queue, review,
   settings, model management, and local-engine recovery. The visual sweep records 16 screens, 167
@@ -80,8 +80,8 @@ Confirmed in the current checkout:
   score/comment read-back.
 - `scripts/release_readiness.py` writes a consolidated JSON/Markdown verdict with blocker
   summaries. With current local artifacts, the report is `blocked` on updater evidence, signing
-  credentials, and clean-machine evidence: missing signed `latest.json`, codesign/spctl, first-run
-  models, crash recovery, keyboard-only review, and updater path.
+  credentials, and clean-machine evidence: missing signed `latest.json`, codesign/spctl, release
+  provenance, first-run models, crash recovery, keyboard-only review, and updater path.
 
 Public-beta blockers:
 
@@ -147,7 +147,7 @@ uv run python scripts/updater_evidence.py --manifest latest.json --artifact /pat
 uv run python scripts/live_canvas_e2e.py --dry-run
 uv run python scripts/clean_machine_evidence.py --print-manual-runbook > clean-machine-runbook.md
 uv run python scripts/clean_machine_evidence.py --print-manual-template > clean-machine-manual-evidence.json
-uv run python scripts/clean_machine_evidence.py --app /Applications/Grader.app --dmg /path/to/Grader.dmg --manual-evidence clean-machine-manual-evidence.json --evidence-root /path/to/screenshots-and-logs --out artifacts/release-evidence/clean-machine.json
+uv run python scripts/clean_machine_evidence.py --app /Applications/Grader.app --dmg /path/to/Grader.dmg --updater-manifest /path/to/latest.json --expected-version 0.1.0 --manual-evidence clean-machine-manual-evidence.json --evidence-root /path/to/screenshots-and-logs --out artifacts/release-evidence/clean-machine.json
 uv run python scripts/release_readiness.py --profile public_beta --public-proxy-dir artifacts/public_proxy/mohler_asag_diverse_anchored_pilot --citation-artifact artifacts/citation-results.json --canvas-artifact artifacts/release-evidence/canvas-live.json --privacy-artifact artifacts/release-evidence/privacy.json --performance-artifact artifacts/release-evidence/performance.json --frontend-artifact artifacts/release-evidence/frontend.json --rust-artifact artifacts/release-evidence/rust.json --updater-artifact artifacts/release-evidence/updater.json --clean-machine-artifact artifacts/release-evidence/clean-machine-local-current.json --out artifacts/release-readiness
 ```
 

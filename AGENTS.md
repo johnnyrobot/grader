@@ -198,7 +198,7 @@ uv run python scripts/updater_evidence.py --manifest latest.json --artifact /pat
 uv run python scripts/live_canvas_e2e.py --dry-run
 uv run python scripts/clean_machine_evidence.py --print-manual-runbook > clean-machine-runbook.md
 uv run python scripts/clean_machine_evidence.py --print-manual-template > clean-machine-manual-evidence.json
-uv run python scripts/clean_machine_evidence.py --app /Applications/Grader.app --dmg /path/to/Grader.dmg --manual-evidence clean-machine-manual-evidence.json --evidence-root /path/to/screenshots-and-logs --out artifacts/release-evidence/clean-machine.json
+uv run python scripts/clean_machine_evidence.py --app /Applications/Grader.app --dmg /path/to/Grader.dmg --updater-manifest /path/to/latest.json --expected-version 0.1.0 --manual-evidence clean-machine-manual-evidence.json --evidence-root /path/to/screenshots-and-logs --out artifacts/release-evidence/clean-machine.json
 uv run python scripts/release_readiness.py --profile public_beta --public-proxy-dir artifacts/public_proxy/mohler_asag_diverse_anchored_pilot --citation-artifact artifacts/citation-results.json --canvas-artifact artifacts/release-evidence/canvas-live.json --privacy-artifact artifacts/release-evidence/privacy.json --performance-artifact artifacts/release-evidence/performance.json --frontend-artifact artifacts/release-evidence/frontend.json --rust-artifact artifacts/release-evidence/rust.json --updater-artifact artifacts/release-evidence/updater.json --clean-machine-artifact artifacts/release-evidence/clean-machine-local-current.json --out artifacts/release-readiness
 ```
 
@@ -232,12 +232,12 @@ uv run python scripts/release_readiness.py --profile public_beta --public-proxy-
   `scripts/signing_doctor.py` to refresh the fail-closed credential diagnostic before release
   signing. Teacher-local validation still requires authorized instructor data, and clean-machine
   behavioral checks still need release validation.
-- **Coverage:** Python collects 116 cases (104 pass, 12 skip). Frontend has 12 passing component
+- **Coverage:** Python collects 118 cases (106 pass, 12 skip). Frontend has 12 passing component
   tests plus four passing Playwright E2E tests.
 - **Public beta verdict:** not ready for unattended public testing with real student work. Limit
   current use to a developer-assisted alpha with synthetic or institution-approved test data.
 - **Highest-value next action:** restore signing/notarization credentials, generate signed updater
-  evidence, then collect clean-machine first-run model setup, crash recovery, keyboard-only review,
-  and updater-path evidence before broadening beta claims.
+  evidence, then collect clean-machine release provenance, first-run model setup, crash recovery,
+  keyboard-only review, and updater-path evidence before broadening beta claims.
 - The existing modification under `.omo/run-continuation/` is unrelated operational state; do not
   overwrite or commit it unless explicitly requested.

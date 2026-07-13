@@ -11,6 +11,7 @@ from scripts.clean_machine_evidence import (
     REQUIRED_CHECKS,
     build_evidence,
     collect_checks,
+    collect_release_provenance,
     manual_evidence_template,
     manual_evidence_runbook,
     validate_manual_evidence,
@@ -38,12 +39,16 @@ def test_build_evidence_passes_when_all_required_checks_pass():
 def test_collect_checks_runs_app_and_dmg_commands(tmp_path):
     app = tmp_path / "Grader.app"
     dmg = tmp_path / "Grader.dmg"
+    manifest = tmp_path / "latest.json"
     app.mkdir()
     dmg.write_text("fake dmg")
+    manifest.write_text('{"version":"0.1.0","pub_date":"2026-07-13T00:00:00Z","platforms":{"darwin-aarch64":{"signature":"sig","url":"https://example.invalid/Grader.dmg"}}}')
 
     checks, details = collect_checks(
         app_path=app,
         dmg_path=dmg,
+        updater_manifest=manifest,
+        expected_version="0.1.0",
         manual_passes=["first_run_models", "crash_recovery", "keyboard_only_review", "updater_path"],
         runner=_runner,
     )
@@ -51,6 +56,9 @@ def test_collect_checks_runs_app_and_dmg_commands(tmp_path):
     assert all(checks.values())
     assert details["codesign_verify"]["command"][:2] == ["codesign", "--verify"]
     assert details["stapler_validate"]["command"][:3] == ["xcrun", "stapler", "validate"]
+    assert details["release_provenance"]["app"]["sha256_tree"]
+    assert details["release_provenance"]["dmg"]["sha256"]
+    assert details["release_provenance"]["updater_manifest"]["ok"] is True
 
 
 def test_validate_manual_evidence_requires_notes_and_files(tmp_path):
@@ -132,3 +140,46 @@ def test_manual_evidence_runbook_includes_every_manual_check():
     for name in MANUAL_CHECKS:
         assert f"### `{name}`" in runbook
     assert "--print-manual-template" in runbook
+    assert "--updater-manifest" in runbook
+
+
+def test_collect_release_provenance_requires_artifact_hashes_and_signed_manifest(tmp_path):
+    app = tmp_path / "Grader.app"
+    dmg = tmp_path / "Grader.dmg"
+    manifest = tmp_path / "latest.json"
+    (app / "Contents").mkdir(parents=True)
+    (app / "Contents" / "Info.plist").write_text("plist")
+    dmg.write_text("fake dmg")
+    manifest.write_text('{"version":"0.1.0","pub_date":"2026-07-13T00:00:00Z","platforms":{"darwin-aarch64":{"signature":"sig","url":"https://example.invalid/Grader.dmg"},"darwin-x86_64":{"signature":"sig","url":"https://example.invalid/Grader.dmg"}}}')
+
+    ok, details = collect_release_provenance(
+        app_path=app,
+        dmg_path=dmg,
+        updater_manifest=manifest,
+        expected_version="0.1.0",
+    )
+
+    assert ok is True
+    assert details["app"]["sha256_tree"]
+    assert details["dmg"]["sha256"]
+    assert details["updater_manifest"]["version"] == "0.1.0"
+
+
+def test_collect_release_provenance_rejects_unsigned_or_wrong_version_manifest(tmp_path):
+    app = tmp_path / "Grader.app"
+    dmg = tmp_path / "Grader.dmg"
+    manifest = tmp_path / "latest.json"
+    app.mkdir()
+    dmg.write_text("fake dmg")
+    manifest.write_text('{"version":"0.0.9","pub_date":"2026-07-13T00:00:00Z","platforms":{"darwin-aarch64":{"signature":"","url":"https://example.invalid/Grader.dmg"}}}')
+
+    ok, details = collect_release_provenance(
+        app_path=app,
+        dmg_path=dmg,
+        updater_manifest=manifest,
+        expected_version="0.1.0",
+    )
+
+    assert ok is False
+    assert details["missing_provenance"] == ["updater_manifest"]
+    assert details["updater_manifest"]["ok"] is False

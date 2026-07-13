@@ -17,6 +17,7 @@ all required checks are true.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import platform
 import subprocess
@@ -29,6 +30,7 @@ REQUIRED_CHECKS = (
     "codesign_verify",
     "stapler_validate",
     "spctl_assess",
+    "release_provenance",
     "first_run_models",
     "crash_recovery",
     "keyboard_only_review",
@@ -99,6 +101,112 @@ CHECK_DEFINITIONS: dict[str, dict[str, object]] = {
 
 
 Runner = Callable[..., subprocess.CompletedProcess[str]]
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _sha256_tree(path: Path) -> str:
+    digest = hashlib.sha256()
+    for child in sorted(p for p in path.rglob("*") if p.is_file()):
+        relative = child.relative_to(path).as_posix().encode()
+        digest.update(relative)
+        digest.update(b"\0")
+        with child.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(chunk)
+        digest.update(b"\0")
+    return digest.hexdigest()
+
+
+def _artifact_metadata(path: Path | None) -> dict[str, object]:
+    if path is None:
+        return {"present": False, "path": None}
+    if not path.exists():
+        return {"present": False, "path": str(path), "reason": "path does not exist"}
+    metadata: dict[str, object] = {
+        "present": True,
+        "path": str(path),
+        "kind": "directory" if path.is_dir() else "file",
+    }
+    if path.is_file():
+        metadata["size_bytes"] = path.stat().st_size
+        metadata["sha256"] = _sha256_file(path)
+    elif path.is_dir():
+        files = [child for child in path.rglob("*") if child.is_file()]
+        metadata["file_count"] = len(files)
+        metadata["sha256_tree"] = _sha256_tree(path)
+    return metadata
+
+
+def _manifest_metadata(path: Path | None, expected_version: str | None) -> dict[str, object]:
+    metadata = _artifact_metadata(path)
+    if not metadata.get("present") or path is None:
+        metadata["ok"] = False
+        return metadata
+    try:
+        manifest = json.loads(path.read_text())
+    except Exception as exc:
+        metadata["ok"] = False
+        metadata["reason"] = f"could not parse updater manifest: {exc}"
+        return metadata
+    platforms = manifest.get("platforms") or {}
+    signatures_present = {
+        str(name): bool(entry.get("signature"))
+        for name, entry in platforms.items()
+        if isinstance(entry, Mapping)
+    }
+    metadata.update({
+        "version": manifest.get("version"),
+        "pub_date": manifest.get("pub_date"),
+        "platforms": sorted(str(name) for name in platforms),
+        "signatures_present": signatures_present,
+    })
+    version_ok = expected_version is None or str(manifest.get("version") or "") == expected_version
+    signatures_ok = bool(signatures_present) and all(signatures_present.values())
+    metadata["ok"] = bool(version_ok and signatures_ok)
+    if not version_ok:
+        metadata["reason"] = f"manifest version {manifest.get('version')!r} does not match expected {expected_version!r}"
+    elif not signatures_ok:
+        metadata["reason"] = "updater manifest is missing one or more platform signatures"
+    return metadata
+
+
+def collect_release_provenance(
+    *,
+    app_path: Path | None,
+    dmg_path: Path | None,
+    updater_manifest: Path | None,
+    expected_version: str | None,
+) -> tuple[bool, dict[str, object]]:
+    details = {
+        "expected_version": expected_version,
+        "app": _artifact_metadata(app_path),
+        "dmg": _artifact_metadata(dmg_path),
+        "updater_manifest": _manifest_metadata(updater_manifest, expected_version),
+    }
+    app_ok = bool(details["app"].get("present")) if isinstance(details["app"], Mapping) else False
+    dmg_ok = bool(details["dmg"].get("present")) if isinstance(details["dmg"], Mapping) else False
+    manifest_ok = bool(details["updater_manifest"].get("ok")) if isinstance(details["updater_manifest"], Mapping) else False
+    version_ok = bool(expected_version)
+    ok = app_ok and dmg_ok and manifest_ok and version_ok
+    if not ok:
+        missing: list[str] = []
+        if not version_ok:
+            missing.append("expected_version")
+        if not app_ok:
+            missing.append("app")
+        if not dmg_ok:
+            missing.append("dmg")
+        if not manifest_ok:
+            missing.append("updater_manifest")
+        details["missing_provenance"] = missing
+    return ok, details
 
 
 def _run_check(command: list[str], *, runner: Runner = subprocess.run) -> dict[str, object]:
@@ -222,10 +330,10 @@ def manual_evidence_runbook() -> str:
         "uv run python scripts/clean_machine_evidence.py --print-manual-template > clean-machine-manual-evidence.json",
         "mkdir -p clean-machine-evidence",
         "# Fill clean-machine-manual-evidence.json after completing the checks below.",
-        "uv run python scripts/clean_machine_evidence.py --app /Applications/Grader.app --dmg /path/to/Grader.dmg --manual-evidence clean-machine-manual-evidence.json --evidence-root clean-machine-evidence --out artifacts/release-evidence/clean-machine.json",
+        "uv run python scripts/clean_machine_evidence.py --app /Applications/Grader.app --dmg /path/to/Grader.dmg --updater-manifest /path/to/latest.json --expected-version 0.1.0 --manual-evidence clean-machine-manual-evidence.json --evidence-root clean-machine-evidence --out artifacts/release-evidence/clean-machine.json",
         "```",
         "",
-        "Every manual check must include `passed: true`, `performed_at`, `tester`, non-empty `notes`, and at least one existing evidence file.",
+        "Every manual check must include `passed: true`, `performed_at`, `tester`, non-empty `notes`, and at least one existing evidence file. The final evidence also records hashes for the tested `.app`, DMG, and signed updater manifest.",
         "",
         "## Manual checks",
         "",
@@ -258,6 +366,8 @@ def collect_checks(
     app_path: Path | None,
     dmg_path: Path | None,
     manual_passes: Iterable[str],
+    updater_manifest: Path | None = None,
+    expected_version: str | None = None,
     runner: Runner = subprocess.run,
 ) -> tuple[dict[str, bool], dict[str, object]]:
     checks = {name: False for name in REQUIRED_CHECKS}
@@ -289,6 +399,15 @@ def collect_checks(
         if name in MANUAL_CHECKS:
             checks[name] = True
 
+    provenance_ok, provenance_details = collect_release_provenance(
+        app_path=app_path,
+        dmg_path=dmg_path,
+        updater_manifest=updater_manifest,
+        expected_version=expected_version,
+    )
+    checks["release_provenance"] = provenance_ok
+    details["release_provenance"] = provenance_details
+
     return checks, details
 
 
@@ -299,6 +418,8 @@ def build_evidence(
     manual_evidence: dict[str, object] | None = None,
     app_path: Path | None = None,
     dmg_path: Path | None = None,
+    updater_manifest: Path | None = None,
+    expected_version: str | None = None,
     notes: str = "",
 ) -> dict[str, object]:
     missing = [name for name in REQUIRED_CHECKS if checks.get(name) is not True]
@@ -312,6 +433,8 @@ def build_evidence(
         },
         "app_path": str(app_path) if app_path else None,
         "dmg_path": str(dmg_path) if dmg_path else None,
+        "updater_manifest": str(updater_manifest) if updater_manifest else None,
+        "expected_version": expected_version,
         "checks": {name: bool(checks.get(name)) for name in REQUIRED_CHECKS},
         "missing_checks": missing,
         "details": details or {},
@@ -329,6 +452,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Collect clean-machine release evidence")
     parser.add_argument("--app", type=Path, default=None, help="Path to signed/notarized Grader.app")
     parser.add_argument("--dmg", type=Path, default=None, help="Path to signed/notarized DMG")
+    parser.add_argument("--updater-manifest", type=Path, default=None, help="Path to signed Tauri latest.json")
+    parser.add_argument("--expected-version", default=None, help="Expected app/updater version")
     parser.add_argument("--out", type=Path, default=Path("artifacts/release-evidence/clean-machine.json"))
     parser.add_argument("--notes", default="")
     parser.add_argument("--manual-evidence", type=Path, default=None,
@@ -375,7 +500,13 @@ def main() -> None:
     if not args.allow_manual_flags_without_evidence:
         manual = []
     manual.extend(evidence_passes)
-    checks, details = collect_checks(app_path=args.app, dmg_path=args.dmg, manual_passes=manual)
+    checks, details = collect_checks(
+        app_path=args.app,
+        dmg_path=args.dmg,
+        updater_manifest=args.updater_manifest,
+        expected_version=args.expected_version,
+        manual_passes=manual,
+    )
     details["manual_evidence"] = evidence_details
     evidence = build_evidence(
         checks=checks,
@@ -383,6 +514,8 @@ def main() -> None:
         manual_evidence=manual_evidence,
         app_path=args.app,
         dmg_path=args.dmg,
+        updater_manifest=args.updater_manifest,
+        expected_version=args.expected_version,
         notes=args.notes,
     )
     write_evidence(args.out, evidence)

@@ -28,7 +28,7 @@ scripts/
 | Diagnose signing credentials | `signing_doctor.py` | Writes `artifacts/release-evidence/signing.json`; probes Developer ID private-key access and notarytool profile before signing |
 | Generate updater manifest | `generate_appcast.py` | Requires `--signing-key` for release manifests; use `--allow-unsigned` only for local smoke fixtures |
 | Validate updater evidence | `updater_evidence.py` | Requires updater config, signed latest.json, and optional artifact filename/hash checks |
-| Clean-machine release evidence | `clean_machine_evidence.py` | Writes `artifacts/release-evidence/clean-machine.json`; PASS requires signing plus structured manual evidence for first-run/crash/keyboard/updater checks |
+| Clean-machine release evidence | `clean_machine_evidence.py` | Writes `artifacts/release-evidence/clean-machine.json`; PASS requires signing, app/DMG/latest.json provenance, plus structured manual evidence for first-run/crash/keyboard/updater checks |
 | Seed Canvas sandbox | `seed_canvas_sandbox.py` | `--apply --students 6` to create + exercise |
 | Tear down sandbox | `seed_canvas_sandbox.py` | `--teardown --course-id 106 --apply` |
 | Understand Canvas API quirks | `seed_canvas_sandbox.py` | All 4 gotchas encoded in code comments |
@@ -55,8 +55,10 @@ scripts/
 - **`clean_machine_evidence.py`**: cannot prove a clean-machine pass by itself. Generate the
   tester runbook with `--print-manual-runbook` and the evidence template with
   `--print-manual-template`. Fill it on the clean Mac with `passed: true`, `performed_at`, `tester`,
-  notes, and existing screenshot/log paths, then run with `--manual-evidence ... --evidence-root ...`.
-  Manual flags without evidence are legacy-only and should not be used for release claims.
+  notes, and existing screenshot/log paths, then run with `--app ... --dmg ... --updater-manifest ...
+  --expected-version ... --manual-evidence ... --evidence-root ...` so the PASS records the exact
+  tested app/DMG/latest.json hashes. Manual flags without evidence are legacy-only and should not be
+  used for release claims.
 - Fake students use `ZZGraderTest` prefix + `.invalid` email domain (RFC 2606 — can never resolve)
 - Canvas credentials: env vars (`CANVAS_BASE_URL`, `CANVAS_API_TOKEN`) or canvas-pp-cli's `credentials.toml`
 

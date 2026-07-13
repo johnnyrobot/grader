@@ -44,6 +44,7 @@ CLEAN_MACHINE_REQUIRED_CHECKS = (
     "codesign_verify",
     "stapler_validate",
     "spctl_assess",
+    "release_provenance",
     "first_run_models",
     "crash_recovery",
     "keyboard_only_review",
