@@ -88,7 +88,8 @@ Confirmed in the current checkout:
   evidence. With current local artifacts, the report is `blocked`: the current-source local app/DMG
   signs, notarizes, staples, and passes macOS signature checks, but updater evidence blocks because
   the manifest is unsigned; clean-machine behavior evidence is still missing for first-run models,
-  crash recovery, keyboard-only review, Computer Use instructor sweep, and updater path.
+  crash recovery, and updater path. Local signed-app evidence now covers keyboard-only review and
+  the Computer Use instructor sweep.
 
 Public-beta blockers:
 
@@ -98,10 +99,9 @@ Public-beta blockers:
    separate evidence.
 3. Provide the Tauri updater private-key password through `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` so
    `latest.json` can be signed, then validate the signed/notarized DMG on a clean supported Mac,
-   including first-run model setup, crash recovery, keyboard-only review, Computer Use instructor
-   sweep, and updater behavior. The last signed-app Computer Use sweep was against an older signed
-   DMG and fails: after review approval it displayed both the approved message and
-   "Teacher changes not saved yet"; the sweep verifier now fails that capture set.
+   including first-run model setup, crash recovery, and updater behavior. The current local
+   signed-app Computer Use sweep and keyboard-only review path pass against `/Applications/Grader.app`
+   installed as `com.grader.app`; rerun them if the release bundle identity changes.
 4. Keep teacher-local validation separate until an instructor supplies authorized historical grading.
 5. Complete a supervised private pilot before opening enrollment publicly.
 
