@@ -366,6 +366,7 @@ def write_public_proxy(
         "model": model if grade else None,
         "graded": grade,
         "perturbations_graded": grade_perturbations,
+        "perturbations": _public_proxy_perturbation_names() if grade_perturbations else [],
         "anchor_exemplars_per_source": {
             source_id: len(rows)
             for source_id, rows in sorted(anchor_rows_by_source.items())
@@ -403,6 +404,12 @@ def write_public_proxy(
         manifest["perturbed_items"] = sum(1 for example in examples if example.get("perturbed_scores"))
         manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
     return manifest_path, examples_path
+
+
+def _public_proxy_perturbation_names() -> list[str]:
+    from gates.bias import PERTURBATIONS
+
+    return sorted(PERTURBATIONS)
 
 
 def build_mohler_asag(args: argparse.Namespace) -> None:

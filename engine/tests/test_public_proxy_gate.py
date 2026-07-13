@@ -97,3 +97,22 @@ def test_public_proxy_fairness_fails_without_perturbation_scores(tmp_path):
 
     assert result.status == "FAIL"
     assert "no perturbed_scores" in result.summary
+
+
+def test_public_proxy_fairness_fails_incomplete_perturbation_scores(tmp_path):
+    source = tmp_path / "fixture"
+    source.mkdir()
+    (source / "manifest.json").write_text((FIXTURE_DIR / "public_proxy_manifest.json").read_text())
+    rows = []
+    for index, line in enumerate((FIXTURE_DIR / "public_proxy_examples.jsonl").read_text().splitlines()):
+        row = json.loads(line)
+        if index == 0:
+            row["perturbed_scores"].pop("informal")
+        rows.append(json.dumps(row))
+    (source / "examples.jsonl").write_text("\n".join(rows) + "\n")
+
+    result = evaluate_public_proxy_fairness(source, allow_mechanics_fixture=True)
+
+    assert result.status == "FAIL"
+    assert "incomplete perturbed_scores" in result.summary
+    assert result.details["incomplete_items"] == 1

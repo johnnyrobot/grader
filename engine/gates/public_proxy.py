@@ -350,6 +350,35 @@ def evaluate_public_proxy_fairness(
             {"tier": "public_proxy", "items": 0},
         )
 
+    expected_perturbations = set(manifest.get("perturbations") or [])
+    if not expected_perturbations:
+        for example in scored:
+            expected_perturbations.update(example.perturbed_scores)
+    if not expected_perturbations:
+        return FairnessResult(
+            "FAIL",
+            "public proxy examples have no perturbed_scores; run the builder with --grade-perturbations",
+            {"tier": "public_proxy", "items": len(scored)},
+        )
+
+    incomplete = [
+        example.id
+        for example in scored
+        if set(example.perturbed_scores) != expected_perturbations
+    ]
+    if incomplete:
+        return FairnessResult(
+            "FAIL",
+            "public proxy examples have incomplete perturbed_scores; resume the builder with --grade-perturbations",
+            {
+                "tier": "public_proxy",
+                "items": len(scored),
+                "expected_perturbations": sorted(expected_perturbations),
+                "incomplete_items": len(incomplete),
+                "sample_incomplete_ids": incomplete[:5],
+            },
+        )
+
     deltas: dict[str, list[float]] = {}
     source_deltas: dict[str, dict[str, list[float]]] = {}
     within_one_band: dict[str, list[bool]] = {}
@@ -363,13 +392,6 @@ def evaluate_public_proxy_fairness(
             deltas.setdefault(name, []).append(delta)
             within_one_band.setdefault(name, []).append(abs(delta) <= 1.0)
             source_deltas.setdefault(name, {}).setdefault(example.source, []).append(delta)
-
-    if not deltas:
-        return FairnessResult(
-            "FAIL",
-            "public proxy examples have no perturbed_scores; run the builder with --grade-perturbations",
-            {"tier": "public_proxy", "items": len(scored)},
-        )
 
     perturbations: dict[str, dict[str, Any]] = {}
     failures: list[str] = []
