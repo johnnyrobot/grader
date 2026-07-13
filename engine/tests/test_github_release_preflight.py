@@ -46,12 +46,17 @@ def _write_workflow(path: Path, *, contents_write: bool = True) -> None:
 def _write_versions(root: Path, version: str) -> None:
     (root / "app" / "src-tauri").mkdir(parents=True)
     (root / "app").mkdir(exist_ok=True)
+    (root / "scripts").mkdir(exist_ok=True)
     (root / "app" / "src-tauri" / "tauri.conf.json").write_text(json.dumps({"version": version}))
     (root / "app" / "src-tauri" / "Cargo.toml").write_text(
         f'[package]\nname = "grader-app"\nversion = "{version}"\n'
     )
     (root / "app" / "package.json").write_text(json.dumps({"version": version}))
     (root / "pyproject.toml").write_text(f'[project]\nname = "grader"\nversion = "{version}"\n')
+    (root / "scripts" / "start_engine.sh").write_text(f'export GRADER_APP_VERSION="{version}"\n')
+    (root / "scripts" / "dev_mock_engine.py").write_text(
+        f'self._send_json({{"current_version": "{version}"}})\n'
+    )
 
 
 def test_github_release_preflight_passes_with_repo_secrets_and_candidate(tmp_path, monkeypatch):

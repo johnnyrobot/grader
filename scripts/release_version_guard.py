@@ -4,9 +4,8 @@
 The Tauri updater compares the installed app version with the version advertised
 by the signed updater manifest. A GitHub release tagged vN+1 while the app
 bundle still reports N can create a release channel that looks newer but
-relaunches to the old version. This guard keeps tag, Tauri config, Rust crate,
-frontend package, and Python project versions aligned before release assets are
-published.
+relaunches to the old version. This guard keeps tag, package metadata, and
+runtime update-reporting versions aligned before release assets are published.
 """
 
 from __future__ import annotations
@@ -25,6 +24,8 @@ DEFAULT_VERSION_FILES = {
     "tauri_cargo": Path("app/src-tauri/Cargo.toml"),
     "frontend_package": Path("app/package.json"),
     "python_project": Path("pyproject.toml"),
+    "engine_launcher": Path("scripts/start_engine.sh"),
+    "dev_mock_update_fixture": Path("scripts/dev_mock_engine.py"),
 }
 
 
@@ -49,6 +50,13 @@ def _read_toml_version(path: Path) -> str | None:
     return str(version) if version else None
 
 
+def _read_regex_version(path: Path, pattern: str) -> str | None:
+    import re
+
+    match = re.search(pattern, path.read_text(), flags=re.MULTILINE)
+    return match.group("version") if match else None
+
+
 def _read_version(label: str, path: Path) -> str | None:
     if not path.exists():
         return None
@@ -56,6 +64,10 @@ def _read_version(label: str, path: Path) -> str | None:
         return _read_json_version(path)
     if path.suffix == ".toml":
         return _read_toml_version(path)
+    if label == "engine_launcher":
+        return _read_regex_version(path, r'^export GRADER_APP_VERSION="(?P<version>[^"]+)"')
+    if label == "dev_mock_update_fixture":
+        return _read_regex_version(path, r'"current_version":\s*"(?P<version>[^"]+)"')
     raise ValueError(f"unsupported version file for {label}: {path}")
 
 

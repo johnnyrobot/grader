@@ -59,3 +59,25 @@ def test_release_version_guard_blocks_missing_expected_version(tmp_path):
 
     assert result["status"] == "BLOCKED_RELEASE_VERSION"
     assert "expected release version is missing; pass --tag or --expected-version" in result["failures"]
+
+
+def test_release_version_guard_checks_runtime_version_surfaces(tmp_path):
+    engine_launcher = tmp_path / "start_engine.sh"
+    dev_mock = tmp_path / "dev_mock_engine.py"
+    engine_launcher.write_text('export GRADER_APP_VERSION="0.1.0"\n')
+    dev_mock.write_text('self._send_json({"current_version": "0.1.0"})\n')
+
+    result = collect(
+        tag="v0.1.1",
+        version_files={
+            "engine_launcher": engine_launcher,
+            "dev_mock_update_fixture": dev_mock,
+        },
+    )
+
+    assert result["status"] == "BLOCKED_RELEASE_VERSION"
+    assert "engine_launcher version '0.1.0' does not match expected '0.1.1'" in result["failures"]
+    assert (
+        "dev_mock_update_fixture version '0.1.0' does not match expected '0.1.1'"
+        in result["failures"]
+    )

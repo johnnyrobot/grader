@@ -41,7 +41,7 @@ three you gave 4s"), and it ships zero per-teacher model artifacts. LoRA fine-tu
 | **P2** App shell + UX | 🟢 **Implemented and evidence-backed.** Neuroinclusive light-first UI covers onboarding, queue, review, settings, and model manager. Frontend evidence passes with 14 component tests, 4 Playwright E2E tests, 16 visual-sweep screens, 47 required controls, and 167 visible controls. |
 | **P3** Canvas round-trip | 🟢 **Score/comment beta scope passes.** Guarded live app E2E on `canvas.johnnyrobot.ai` course `106`, assignment `2841`, Canvas user `9`: import → teacher override/approval → post → Progress completed → score/comment read-back. Rubric-assessment posting remains disabled until local criteria map to real Canvas criterion IDs; attachment write-back still needs separate release evidence. |
 | **P4** Documents & citations | 🟡 **Built; citations are experimental.** parse.py, handwriting.py, writeback.py, citations.py built. Citation fixture rerun is 20/29 (69%), 0 false positives, 3/3 retractions caught; acceptable only when visibly labeled experimental until enabled-mode accuracy reaches >=90%. |
-| **P5** Hardening & release | 🟡 **Blocked by GitHub release preflight + updater release-channel + clean-machine updater path.** Public-proxy quality/fairness pass on the anchored Mohler ASAG artifact; privacy, performance, frontend, Rust, release-version, updater-manifest, signing/notarization all pass locally. Current `scripts/release_readiness.py` verdict is `blocked` with three blockers: `github_release=BLOCKED_GITHUB_RELEASE_PREFLIGHT` because required GitHub Actions release secrets are missing, `updater_channel=BLOCKED_UPDATER_CHANNEL` because GitHub `latest.json` returns HTTP 404, and `clean_machine=BLOCKED_CLEAN_MACHINE_EVIDENCE` missing `updater_path`. |
+| **P5** Hardening & release | 🟡 **Blocked by GitHub release preflight + updater release-channel + clean-machine updater path.** Public-proxy quality/fairness pass on the anchored Mohler ASAG artifact; privacy, performance, frontend, Rust, release-version, updater-manifest, signing/notarization all pass locally. Current `scripts/release_readiness.py` verdict is `blocked` with three blockers: `github_release=BLOCKED_GITHUB_RELEASE_PREFLIGHT` because required GitHub Actions release secrets are missing and the N+1 candidate version metadata has not been applied yet, `updater_channel=BLOCKED_UPDATER_CHANNEL` because GitHub `latest.json` returns HTTP 404, and `clean_machine=BLOCKED_CLEAN_MACHINE_EVIDENCE` missing `updater_path`. |
 
 ### The very next command
 
@@ -49,13 +49,16 @@ three you gave 4s"), and it ships zero per-teacher model artifacts. LoRA fine-tu
 cd /Users/laccd/code/grader
 uv run python scripts/updater_channel_preflight.py --current-version 0.1.0 --out artifacts/release-evidence/updater-channel-current.json
 uv run python scripts/github_release_secrets.py --print-runbook > github-release-secrets-runbook.md
+uv run python scripts/bump_release_version.py --target-version 0.1.1 --out artifacts/release-evidence/version-bump-plan.json
 uv run python scripts/github_release_preflight.py --candidate-tag v0.1.1 --out artifacts/release-evidence/github-release-preflight-current.json --no-fail
 ```
 
 Today `scripts/github_release_secrets.py` should print a private-shell runbook for configuring the
-Developer ID `.p12`, Apple notarization credentials, and Tauri updater key. The GitHub release
-preflight should return `BLOCKED_GITHUB_RELEASE_PREFLIGHT` until those required Actions secrets are
-configured, and the updater-channel preflight should return
+Developer ID `.p12`, Apple notarization credentials, and Tauri updater key.
+`scripts/bump_release_version.py` should be run dry first, then with `--apply` only in the deliberate
+N+1 release-prep commit. The GitHub release preflight should return
+`BLOCKED_GITHUB_RELEASE_PREFLIGHT` until those required Actions secrets are configured and the N+1
+version metadata has been applied, and the updater-channel preflight should return
 `BLOCKED_UPDATER_CHANNEL` until a signed N+1 GitHub release publishes `latest.json` and the
 reachable signed `Grader.dmg` asset. After both pass, run the clean-machine in-app `Install update
 and restart` path and record `updater_path` evidence. Do **not** claim public beta readiness until

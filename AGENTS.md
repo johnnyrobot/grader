@@ -37,7 +37,8 @@ grader/
 │   ├── start_engine.sh          # desktop engine launcher
 │   ├── sign_and_notarize.sh     # macOS release signing pipeline
 │   ├── signing_doctor.py        # signing/notary credential preflight + evidence
-│   ├── release_version_guard.py # tag/app/package version consistency gate
+│   ├── bump_release_version.py  # dry-run-first N+1 version metadata updater
+│   ├── release_version_guard.py # tag/app/runtime version consistency gate
 │   ├── github_release_secrets.py # guarded GitHub Actions release-secret setup
 │   ├── github_release_preflight.py # read-only GitHub release publication readiness
 │   ├── frontend_evidence.py     # frontend component/build/E2E/visual-sweep artifact
@@ -68,7 +69,7 @@ Nested guidance exists in `engine/AGENTS.md`, `engine/grader/AGENTS.md`,
 | Desktop ↔ engine boundary | `app/src/api.ts`, `engine/api.py` | Dynamic loopback HTTP port + per-launch bearer token; dev fallback remains `127.0.0.1:8756` |
 | Engine process lifecycle | `app/src-tauri/src/engine.rs`, `lib.rs`, `scripts/start_engine.sh` | Starts/stops uvicorn with the Tauri app |
 | Updater release evidence | `scripts/generate_appcast.py`, `scripts/updater_evidence.py`, `app/src-tauri/tauri.conf.json` | Requires signed `latest.json` and signed artifact |
-| GitHub release publication | `scripts/github_release_secrets.py`, `scripts/github_release_preflight.py`, `.github/workflows/release.yml` | Guarded secret setup plus read-only check for repo access, updater endpoint, release workflow, Actions secrets, and optional N+1 tag availability |
+| GitHub release publication | `scripts/bump_release_version.py`, `scripts/github_release_secrets.py`, `scripts/github_release_preflight.py`, `.github/workflows/release.yml` | Dry-run-first N+1 version prep, guarded secret setup, and read-only check for repo access, updater endpoint, release workflow, Actions secrets, candidate version consistency, and optional N+1 tag availability |
 | Canvas round-trip | `engine/grader/canvas.py`, Canvas routes in `engine/api.py` | Live sandbox helper is `scripts/seed_canvas_sandbox.py` |
 | Document/handwriting | `engine/grader/parse.py`, `handwriting.py` | Vision transcribes; the text model grades |
 | Citation verification | `engine/grader/citations.py`, `engine/verify_citations.py` | Network-dependent result artifact; rerun before quoting accuracy |
@@ -203,6 +204,7 @@ uv run python scripts/signing_doctor.py --print-repair-runbook > signing-repair-
 uv run python scripts/release_version_guard.py --tag v0.1.0 --out artifacts/release-evidence/release-version.json
 uv run python scripts/github_release_secrets.py --print-runbook > github-release-secrets-runbook.md
 uv run python scripts/github_release_secrets.py --out artifacts/release-evidence/github-release-secrets-current.json  # dry-run inventory; use --apply only in a private release shell
+uv run python scripts/bump_release_version.py --target-version 0.1.1 --out artifacts/release-evidence/version-bump-plan.json  # dry-run; use --apply only in the N+1 release-prep commit
 uv run python scripts/github_release_preflight.py --candidate-tag v0.1.1 --out artifacts/release-evidence/github-release-preflight-current.json --no-fail
 export TAURI_SIGNING_PRIVATE_KEY_PASSWORD='<updater-key-password>'  # required for encrypted updater keys
 uv run python scripts/updater_key_doctor.py --signing-key /path/to/tauri-updater-key.pem --out artifacts/release-evidence/updater-key-current.json
@@ -265,13 +267,15 @@ package is a clean-Mac handoff bundle only; do not treat it as passing clean-mac
   UI has a native Tauri install/restart update action. The release-readiness JSON/Markdown now
   includes an end-to-end public-beta matrix that maps requirements to evidence. Teacher-local
   validation still requires authorized instructor data, the GitHub release preflight is blocked on
-  missing Actions secrets, and the updater-path check still needs release validation.
-- **Coverage:** Python collects 178 cases (166 pass, 12 skip). Frontend has 14 passing component
+  missing Actions secrets and unapplied N+1 candidate version metadata, and the updater-path check
+  still needs release validation.
+- **Coverage:** Python collects 185 cases (173 pass, 12 skip). Frontend has 14 passing component
   tests plus four passing Playwright E2E tests.
 - **Public beta verdict:** not ready for unattended public testing with real student work. Limit
   current use to a developer-assisted alpha with synthetic or institution-approved test data.
 - **Highest-value next action:** add the required GitHub Actions release secrets with
-  `scripts/github_release_secrets.py` in a private shell, require
+  `scripts/github_release_secrets.py` in a private shell, run/apply
+  `scripts/bump_release_version.py --target-version <N+1>` in the release-prep commit, require
   `scripts/github_release_preflight.py --candidate-tag v<N+1>` to pass, publish a real N+1 updater
   test artifact to the configured `github.com/johnnyrobot/grader` release channel, exercise the
   in-app updater path on a clean supported Mac, then add structured `updater_path` manual evidence

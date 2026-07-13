@@ -12,7 +12,8 @@ scripts/
 ├── build_public_proxy.py       # build gitignored Mohler ASAG public-proxy evidence
 ├── dev_mock_engine.py          # synthetic loopback engine for safe local UI/Computer Use inspection
 ├── frontend_evidence.py        # collect component/build/E2E/visual-sweep release artifact
-├── release_version_guard.py    # fail closed when tag/app/package versions drift
+├── bump_release_version.py     # dry-run-first N+1 version metadata updater
+├── release_version_guard.py    # fail closed when tag/app/runtime versions drift
 ├── github_release_secrets.py   # guarded GitHub Actions release-secret setup
 ├── github_release_preflight.py # read-only GitHub release publication readiness
 ├── signing_doctor.py           # diagnose Developer ID private-key and notarytool readiness
@@ -34,7 +35,8 @@ scripts/
 | Build public-proxy evidence | `build_public_proxy.py` | Writes Mohler ASAG artifacts under `artifacts/public_proxy/`; optional local grading |
 | Inspect UI safely | `dev_mock_engine.py` | Serves synthetic queue/settings/models/rubric responses on loopback for local browser/Computer Use inspection only |
 | Collect frontend release evidence | `frontend_evidence.py` | Runs component tests, production build, managed Playwright E2E, and validates visual-sweep screenshots/control coverage |
-| Guard release version | `release_version_guard.py` | Requires the release tag/version to match Tauri config, Rust crate, frontend package, and Python project before publishing assets |
+| Prepare N+1 version | `bump_release_version.py` | Dry-run-first helper that moves Tauri config, Rust crate, frontend package, Python project, engine launcher, and dev mock update fixture together |
+| Guard release version | `release_version_guard.py` | Requires the release tag/version to match Tauri config, Rust crate, frontend package, Python project, engine launcher, and dev mock update fixture before publishing assets |
 | Set GitHub release secrets | `github_release_secrets.py` | Dry-run inventory and explicit `--apply` path for Developer ID certificate, Apple notarization, and Tauri updater secrets; never prints secret values |
 | Preflight GitHub release publication | `github_release_preflight.py` | Read-only check for GitHub repo access, updater endpoint, release workflow, required Actions secrets, and optional N+1 tag/release availability |
 | Diagnose signing credentials | `signing_doctor.py` | Writes `artifacts/release-evidence/signing.json`; probes Developer ID private-key access and notarytool profile before signing; `--print-repair-runbook` emits secret-free local recovery steps |
@@ -65,15 +67,21 @@ scripts/
   `clean_machine_evidence.py`.
 - **`release_version_guard.py`**: run before signing/publishing release assets:
   `uv run python scripts/release_version_guard.py --tag v0.1.0 --out artifacts/release-evidence/release-version.json`.
-  It prevents tag/app metadata drift across `tauri.conf.json`, `Cargo.toml`, `package.json`, and
-  `pyproject.toml`. The GitHub release workflow runs it before building so a tag such as `v0.1.1`
-  cannot publish an app bundle still reporting `0.1.0`.
+  It prevents tag/app/runtime metadata drift across `tauri.conf.json`, `Cargo.toml`,
+  `package.json`, `pyproject.toml`, `scripts/start_engine.sh`, and
+  `scripts/dev_mock_engine.py`. The GitHub release workflow runs it before building so a tag such
+  as `v0.1.1` cannot publish an app bundle or update-check path still reporting `0.1.0`.
+- **`bump_release_version.py`**: run before the N+1 release-prep commit:
+  `uv run python scripts/bump_release_version.py --target-version <N+1>` for a dry run, then add
+  `--apply` only when deliberately preparing the release commit. It performs no git, tag, GitHub,
+  signing, or publishing operations.
 - **`github_release_preflight.py`**: run before creating or pushing the N+1 release tag:
   `uv run python scripts/github_release_preflight.py --candidate-tag v<N+1>`.
   It is read-only: it checks `gh` access, the configured updater endpoint, release workflow
   presence, release upload permission (`contents: write`), publish-time Python/frontend/Rust/Tauri
-  checks, required Actions secrets, recent releases, and optional candidate tag/release availability
-  without creating tags, releases, assets, or secrets. A stale inactive GitHub account
+  checks, required Actions secrets, release-version consistency, recent releases, and optional
+  candidate tag/release availability without creating tags, releases, assets, or secrets. A stale
+  inactive GitHub account
   can be a warning if the active account can read the target repo, but missing release secrets block
   public beta.
 - **`github_release_secrets.py`**: use this before the preflight when GitHub Actions secrets are

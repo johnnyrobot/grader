@@ -67,7 +67,7 @@ beta with real student work.
 
 Confirmed in the current checkout:
 
-- Python tests: 166 passed, 12 intentionally skipped.
+- Python tests: 173 passed, 12 intentionally skipped.
 - Frontend tests: 14 passed; TypeScript/Vite production build and Rust `cargo check` pass.
 - The complete mocked desktop workflow passes in Playwright across onboarding, queue, review,
   settings, model management, and local-engine recovery. The visual sweep now fail-closes unless it
@@ -91,8 +91,9 @@ Confirmed in the current checkout:
   notarizes, staples, and passes macOS signature checks; signed updater manifest/release provenance
   passes; and local signed-app evidence covers fresh-profile first-run model reconciliation, crash
   recovery, keyboard-only review, and the Computer Use instructor sweep. The remaining release
-  blockers are the missing GitHub Actions release secrets, the missing live GitHub updater channel
-  (`latest.json` currently 404s), and the clean-machine in-app updater N→N+1 path.
+  blockers are the missing GitHub Actions release secrets, unapplied N+1 version metadata for the
+  candidate release, the missing live GitHub updater channel (`latest.json` currently 404s), and the
+  clean-machine in-app updater N→N+1 path.
 
 Public-beta blockers:
 
@@ -103,6 +104,7 @@ Public-beta blockers:
 3. Add the required GitHub Actions release secrets with
    `scripts/github_release_secrets.py` in a private shell, including the Developer ID certificate
    `.p12` export and Tauri updater key, then require
+   `scripts/bump_release_version.py --target-version <N+1> --apply` and
    `scripts/github_release_preflight.py --candidate-tag v<N+1>` to pass before tagging/publishing.
 4. Publish a signed N+1 GitHub updater channel whose `latest.json` advertises reachable signed
    `Grader.dmg` release assets, then validate the updater N→N+1 path on a clean supported Mac
@@ -165,6 +167,7 @@ uv run python scripts/signing_doctor.py --print-repair-runbook > signing-repair-
 uv run python scripts/release_version_guard.py --tag v0.1.0 --out artifacts/release-evidence/release-version.json
 uv run python scripts/github_release_secrets.py --print-runbook > github-release-secrets-runbook.md
 uv run python scripts/github_release_secrets.py --out artifacts/release-evidence/github-release-secrets-current.json  # dry-run inventory; use --apply only in a private release shell
+uv run python scripts/bump_release_version.py --target-version 0.1.1 --out artifacts/release-evidence/version-bump-plan.json  # dry-run; use --apply only when preparing the N+1 release commit
 uv run python scripts/github_release_preflight.py --candidate-tag v0.1.1 --out artifacts/release-evidence/github-release-preflight-current.json --no-fail
 export TAURI_SIGNING_PRIVATE_KEY_PASSWORD='<updater-key-password>'  # required for encrypted updater keys
 uv run python scripts/updater_key_doctor.py --signing-key /path/to/tauri-updater-key.pem --out artifacts/release-evidence/updater-key-current.json
@@ -218,17 +221,22 @@ Tauri updater signing key is provided; set `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` 
 keys in non-interactive release runs. `--allow-unsigned` is only for local smoke fixtures.
 `scripts/release_readiness.py --expected-version ...` records artifact path/mtime/SHA-256 metadata
 and fails PASS updater or clean-machine artifacts that do not match the evaluated app version.
-`scripts/release_version_guard.py` fails release tags whose app/package metadata still reports a
-different version. The app is still not public-beta ready until GitHub release publication,
-signed-updater-channel, and clean-machine release behavior evidence pass. Use
+`scripts/release_version_guard.py` fails release tags whose app/package/runtime-update metadata still
+reports a different version. `scripts/bump_release_version.py` is the dry-run-first helper for
+moving those six surfaces together before an N+1 release commit: Tauri config, Rust crate, frontend
+package, Python project, engine launcher `GRADER_APP_VERSION`, and the dev mock update fixture. The
+app is still not public-beta ready until GitHub release publication, signed-updater-channel, and
+clean-machine release behavior evidence pass. Use
 `scripts/github_release_secrets.py --print-runbook` to prepare the Developer ID certificate and
 release secrets without exposing values, then use
+`scripts/bump_release_version.py --target-version <N+1> --apply` in the release-prep commit and
 `scripts/github_release_preflight.py --candidate-tag v<N+1>` before creating the release tag so
-missing Actions secrets, missing release publish permissions, missing publish-time tests, or stale
-tag/release state are caught without writing to GitHub. The GitHub release workflow runs Python
-tests, frontend component tests, Rust `cargo check`, and the Tauri build before importing the
-Developer ID `.p12` into a temporary runner keychain for signing. It also requests `contents: write`
-for release asset upload; a local signing identity name alone is not enough on `macos-latest`. Use
+missing Actions secrets, version drift, missing release publish permissions, missing publish-time
+tests, or stale tag/release state are caught without writing to GitHub. The GitHub release workflow
+runs Python tests, frontend component tests, Rust `cargo check`, and the Tauri build before
+importing the Developer ID `.p12` into a temporary runner keychain for signing. It also requests
+`contents: write` for release asset upload; a local signing identity name alone is not enough on
+`macos-latest`. Use
 `scripts/updater_key_doctor.py` to verify the updater key/password before regenerating
 `latest.json`, and use `scripts/updater_channel_preflight.py` after publishing N+1 to confirm the
 live release channel advertises a signed newer, reachable `Grader.dmg` before clean-machine updater

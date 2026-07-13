@@ -120,15 +120,17 @@ Current readiness verdict: `{summary.get('readiness_verdict', 'unknown')}`
 ## Tester workflow
 
 1. Install the signed/notarized N release DMG from `release-artifacts/` on a clean supported Mac.
-2. Before publishing N+1, require `scripts/release_version_guard.py --tag v<N+1>` to pass so the
-   tag, app bundle, Rust crate, frontend package, and Python project agree on the release version.
+2. Before publishing N+1, dry-run `scripts/bump_release_version.py --target-version <N+1>`, apply
+   it only in the release-prep commit, then require `scripts/release_version_guard.py --tag v<N+1>`
+   to pass so the tag, app bundle, Rust crate, frontend package, Python project, engine launcher,
+   and dev mock update fixture agree on the release version.
 3. Configure GitHub Actions release secrets in a private shell with
    `scripts/github_release_secrets.py`. The workflow imports the Developer ID `.p12` into a
    temporary runner keychain before signing.
 4. Run `scripts/github_release_preflight.py --candidate-tag v<N+1>` and require `status=PASS`
    before creating the tag or publishing assets. This verifies GitHub auth, the configured updater
-   endpoint, release workflow, required Actions secrets, and tag/release availability without
-   writing to GitHub.
+   endpoint, release workflow, required Actions secrets, candidate version consistency, and
+   tag/release availability without writing to GitHub.
 5. Publish a signed N+1 DMG and signed `latest.json` to the configured GitHub release channel:
    `https://github.com/johnnyrobot/grader/releases/latest/download/latest.json`.
    The private release operator should set `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` only in the release
