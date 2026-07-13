@@ -61,5 +61,7 @@ describe("SplitView", () => {
       "Strong claim. Add one more cited example.",
     ));
     expect(await screen.findByText("Your changes are approved. Score updated from 7 to 8.")).toBeInTheDocument();
+    expect(screen.queryByText("Teacher changes not saved yet.")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Approve AI draft" })).toHaveTextContent("Approved");
   });
 });

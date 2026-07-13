@@ -30,22 +30,28 @@ export function SplitView({ item, onBack }: Props) {
   const initialScores = item.teacher_scores || item.ai_scores || {};
   const initialFeedback = item.teacher_feedback || item.ai_feedback || "";
   const [scores, setScores] = useState<Record<string, number>>(initialScores);
+  const [savedScores, setSavedScores] = useState<Record<string, number>>(initialScores);
   const [feedback, setFeedback] = useState(initialFeedback);
+  const [savedFeedback, setSavedFeedback] = useState(initialFeedback);
   const [approved, setApproved] = useState(item.approved);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [feedbackFocused, setFeedbackFocused] = useState(false);
 
   useEffect(() => {
-    setScores(item.teacher_scores || item.ai_scores || {});
-    setFeedback(item.teacher_feedback || item.ai_feedback || "");
+    const nextScores = item.teacher_scores || item.ai_scores || {};
+    const nextFeedback = item.teacher_feedback || item.ai_feedback || "";
+    setScores(nextScores);
+    setSavedScores(nextScores);
+    setFeedback(nextFeedback);
+    setSavedFeedback(nextFeedback);
     setApproved(item.approved);
     setMessage("");
   }, [item]);
 
   const changed = useMemo(
-    () => JSON.stringify(scores) !== JSON.stringify(initialScores) || feedback !== initialFeedback,
-    [scores, feedback, initialScores, initialFeedback],
+    () => JSON.stringify(scores) !== JSON.stringify(savedScores) || feedback !== savedFeedback,
+    [scores, feedback, savedScores, savedFeedback],
   );
 
   const handleApprove = useCallback(async () => {
@@ -68,6 +74,8 @@ export function SplitView({ item, onBack }: Props) {
     try {
       const result = await overrideGrade(item.id, scores, feedback);
       setApproved(true);
+      setSavedScores(scores);
+      setSavedFeedback(feedback);
       if (result.refinement_proposals?.length > 0) {
         setMessage(`Your changes are approved. ${result.refinement_proposals.length} rubric refinement proposal${result.refinement_proposals.length === 1 ? " is" : "s are"} ready to review.`);
       } else {

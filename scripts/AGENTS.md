@@ -10,6 +10,7 @@ guards.
 scripts/
 ├── make_models.sh              # bake context-capped Ollama variants (CRITICAL for 16 GB tier)
 ├── build_public_proxy.py       # build gitignored Mohler ASAG public-proxy evidence
+├── dev_mock_engine.py          # synthetic loopback engine for safe local UI/Computer Use inspection
 ├── frontend_evidence.py        # collect component/build/E2E/visual-sweep release artifact
 ├── signing_doctor.py           # diagnose Developer ID private-key and notarytool readiness
 ├── generate_appcast.py         # generate signed Tauri updater latest.json manifests
@@ -24,6 +25,7 @@ scripts/
 |------|----------|-------|
 | Fix OOM on 16 GB machines | `make_models.sh` | Caps `num_ctx=16384`, sets `temperature=0` |
 | Build public-proxy evidence | `build_public_proxy.py` | Writes Mohler ASAG artifacts under `artifacts/public_proxy/`; optional local grading |
+| Inspect UI safely | `dev_mock_engine.py` | Serves synthetic queue/settings/models/rubric responses on loopback for local browser/Computer Use inspection only |
 | Collect frontend release evidence | `frontend_evidence.py` | Runs component tests, production build, managed Playwright E2E, and validates visual-sweep screenshots/control coverage |
 | Diagnose signing credentials | `signing_doctor.py` | Writes `artifacts/release-evidence/signing.json`; probes Developer ID private-key access and notarytool profile before signing |
 | Generate updater manifest | `generate_appcast.py` | Requires `--signing-key` for release manifests; use `--allow-unsigned` only for local smoke fixtures |
@@ -44,6 +46,9 @@ scripts/
   stale visual-sweep JSON before E2E and fail-closes unless the new sweep has every required
   instructor screen, screenshot, and core control label. If it fails on port 5173, check for a stale
   dev server before rerunning.
+- **`dev_mock_engine.py`**: safe for local/manual/Computer Use UI inspection. It uses synthetic
+  fixture data only and is not release evidence by itself; signed clean-machine claims still require
+  `clean_machine_evidence.py`.
 - **`updater_evidence.py`**: blocks public beta when `latest.json` is missing or any platform
   signature is empty. It does not replace the clean-machine N→N+1 update test.
 - **`generate_appcast.py`**: despite the historical name, this creates Tauri `latest.json`

@@ -114,6 +114,7 @@ test("complete neuroinclusive grading workflow", async ({ page }, testInfo) => {
   await feedback.fill("Strong claim. Add one more cited example.");
   await page.getByRole("button", { name: "Save changes and approve" }).click();
   await expect(page.getByText("Your changes are approved. Score updated from 7 to 8.")).toBeVisible();
+  await expect(page.getByText("Teacher changes not saved yet.")).toBeHidden();
   await expectNoSeriousAccessibilityViolations(page);
   await page.evaluate(() => window.scrollTo(0, 0));
   await page.screenshot({ path: testInfo.outputPath("review-light.png"), fullPage: true });
@@ -196,6 +197,7 @@ test("instructor exercises every core control surface", async ({ page }, testInf
   await expect(page.getByText("Teacher changes not saved yet.")).toBeVisible();
   await page.keyboard.press("Control+Enter");
   await expect(page.getByText("Your changes are approved. Score updated from 6 to 7.")).toBeVisible();
+  await expect(page.getByText("Teacher changes not saved yet.")).toBeHidden();
   await page.getByRole("button", { name: /Back to queue/ }).click();
 
   await page.getByRole("button", { name: "Settings" }).click();
