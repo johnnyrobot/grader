@@ -88,8 +88,8 @@ work.
 - Performance: PASS, 38.3 seconds for a 1,500-word essay.
 - Public-proxy quality/fairness: command profiles exist and pass on tiny mechanics fixtures only.
 - Teacher-local quality/fairness: unvalidated until authorized instructor data exists.
-- Citations: FAIL for enabled mode, 20/29 correct (69%) and 0/3 retractions caught; artifact mode
-  is experimental.
+- Citations: FAIL for enabled mode, 20/29 correct (69%) and 3/3 retractions caught; artifact mode
+  remains experimental because accuracy is below 90%.
 - Release readiness: local report currently returns `blocked` without live Canvas, clean-machine,
   and complete citation evidence.
 

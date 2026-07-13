@@ -201,8 +201,8 @@ uv run python scripts/release_readiness.py --profile public_beta --out artifacts
 - **P3 in progress:** Canvas client/API/offline queue exist and sandbox mechanics were verified;
   run the app-level import → approve → post → read-back path before calling it complete.
 - **P4 in progress:** parse/transcribe/write-back/citation modules exist. The 2026-07-12 citation
-  rerun scored 20/29 (69%), with 0/3 retractions caught; this fails the >=90% phase goal and is
-  now reported as experimental by the citation mode artifact.
+  rerun scored 20/29 (69%), with 3/3 retractions caught; this still fails the >=90% phase goal and
+  is reported as experimental by the citation mode artifact.
 - **P5 in progress:** privacy passes in isolation (3/3 captured connections allowlisted) and the
   performance gate passes at 38.3s per 1,500-word essay. Public-proxy quality/fairness profiles
   pass on tiny committed mechanics fixtures only; teacher-local validation still requires

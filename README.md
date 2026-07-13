@@ -46,7 +46,7 @@ validation.
 | UI verification | 🟢 11 component tests + full Playwright workflow; no serious/critical axe findings |
 | Canvas integration | 🟡 Built — import, post grades, offline queue; app-level live round trip still required |
 | Document parsing + handwriting | 🟡 Built — Docling + Apple Vision + grader-vision |
-| Citation verification | 🔴 20/29 correct (69%); retraction check 0/3; labeled experimental until the gate passes |
+| Citation verification | 🔴 20/29 correct (69%); retraction check 3/3; labeled experimental until accuracy reaches the gate |
 | CI gates | 🟡 Privacy PASS; perf PASS; public-proxy quality/fairness profiles added; teacher-local still unvalidated |
 | Signing + notarization | ⬜ Pipeline exists; clean-machine signed DMG install is unverified |
 | Updates | 🟡 Tauri updater integrated, manifest generator built |
@@ -79,8 +79,8 @@ Public-beta blockers:
 
 1. Run the public-proxy quality/fairness gates on open human-scored data, then keep teacher-local
    validation separate until an instructor supplies authorized historical grading.
-2. Raise citation verification from 69% to at least 90% and fix retraction detection, or clearly
-   disable/label citation checking as experimental for the beta.
+2. Raise citation verification from 69% to at least 90%, or keep citation checking clearly
+   disabled/labeled experimental for the beta.
 3. Complete the app-level Canvas import -> grade -> approve -> post -> read-back path in the
    guarded `ZZ-GRADER-TEST` course.
 4. Validate a signed/notarized DMG on a clean supported Mac, including first-run model setup,

@@ -40,7 +40,7 @@ three you gave 4s"), and it ships zero per-teacher model artifacts. LoRA fine-tu
 | **P1** Calibration core | 🟢 **Complete.** 5 experiments run. Anchors lift QWK +0.127/+0.135 at k=6 (the sweet spot). Context capping has zero quality impact. k≥8 HURTS (too many anchors from a small pool). Override loop, rubric ingestion, refinement, health panel, cold-start rule all built. P5 ship gate blocked on teacher's own graded work. |
 | **P2** App shell + UX | 🟡 **In progress.** FastAPI engine (18 routes), Tauri scaffold, Queue + SplitView + ModelManager screens, SQLite WAL persistence + audit log all built. tsc + vite + cargo check all pass. Sidecar wiring and signing remain. |
 | **P3** Canvas round-trip | 🟡 **In progress.** `canvas.py` + API endpoints (import, post, flush queue) built. Approval enforced. |
-| **P4** Documents & citations | 🟡 **In progress.** parse.py, handwriting.py, writeback.py, citations.py built. 69% citation accuracy, 0 false positives. |
+| **P4** Documents & citations | 🟡 **In progress.** parse.py, handwriting.py, writeback.py, citations.py built. 69% citation accuracy, 0 false positives, 3/3 retractions caught. |
 | **P5** Hardening & release | 🟡 **In progress.** 4 CI gates (quality, bias, egress, perf). Egress + perf PASS, quality + bias SKIP (need golden set). Golden set collector, signing/notarize scripts, Tauri updater integration, release CI workflow, beta rollout docs all built. FERPA, rubric guide, CONTRIBUTING, LICENSE, issue templates done. Remaining: real golden set (100 items), Apple Developer cert, beta tester recruitment. |
 
 ### The very next command

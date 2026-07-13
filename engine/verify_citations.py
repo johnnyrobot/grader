@@ -199,7 +199,9 @@ def main() -> None:
         print("\n✗ SOME CHECKS FAILED")
 
     if args.output:
-        Path(args.output).write_text(json.dumps(summary, indent=2))
+        output_path = Path(args.output)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(json.dumps(summary, indent=2))
         print(f"\nResults written to {args.output}")
 
     sys.exit(0 if passed else 1)

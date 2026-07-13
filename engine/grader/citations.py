@@ -550,14 +550,58 @@ def _check_retracted_crossref(doi: str) -> bool:
             if r.status_code != 200:
                 return False
             data = r.json().get("message", {})
-            updates = data.get("updated-by", {})
-            if updates:
-                update_type = updates.get("type", "")
-                if "retraction" in update_type.lower():
-                    return True
+            return _crossref_record_has_retraction(data)
     except Exception:
         pass
     return False
+
+
+def _crossref_record_has_retraction(message: dict) -> bool:
+    """Return True when Crossref update metadata marks a work as retracted.
+
+    Crossref can expose update records as either a single object or a list of
+    objects under fields such as ``updated-by`` and ``update-to``. Retraction
+    Watch-backed records use values like ``{"type": "retraction"}``, so parse
+    the records structurally instead of looking for a single hard-coded shape.
+    """
+    for key in ("updated-by", "update-to"):
+        for record in _iter_crossref_update_records(message.get(key)):
+            if _record_mentions_retraction(record):
+                return True
+
+    relation = message.get("relation")
+    if isinstance(relation, dict):
+        for key, value in relation.items():
+            if "retract" in str(key).lower():
+                return True
+            for record in _iter_crossref_update_records(value):
+                if _record_mentions_retraction(record):
+                    return True
+
+    return False
+
+
+def _iter_crossref_update_records(value: Any):
+    """Yield Crossref update records from dict/list/string variants."""
+    if isinstance(value, dict):
+        yield value
+        for nested in value.values():
+            if isinstance(nested, (dict, list, tuple)):
+                yield from _iter_crossref_update_records(nested)
+    elif isinstance(value, (list, tuple)):
+        for item in value:
+            yield from _iter_crossref_update_records(item)
+
+
+def _record_mentions_retraction(record: dict) -> bool:
+    """Detect explicit Crossref/Retraction Watch retraction update records."""
+    fields = (
+        record.get("type"),
+        record.get("label"),
+        record.get("source"),
+        record.get("id-type"),
+    )
+    return any("retract" in str(field).lower() for field in fields if field)
 
 
 def _load_retraction_watch() -> set[str]:
