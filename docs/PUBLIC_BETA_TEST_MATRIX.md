@@ -30,7 +30,7 @@ misrepresented as grading accuracy.
 | Performance | 1,500-word essay under 90 seconds on target memory floor | `engine/gates/perf.py --memory-floor 16` | PASS: 37.8 seconds in latest run | PASS artifact must be supplied to readiness report |
 | Desktop build | React build, unit tests, E2E workflow, Rust check pass | `scripts/frontend_evidence.py`, `cargo check` | PASS: 14 component tests, 4 E2E tests, build, and Rust check; frontend artifact records 16 visual-sweep screens and 167 controls | PASS artifact must be supplied to readiness report |
 | Accessibility | No serious/critical WCAG violations, 200% text scaling, keyboard-only loop | Playwright axe + visual inspection | PASS on synthetic fixture; visual sweep covers 16 screens and 167 visible controls | PASS mechanics; still requires clean-machine app check |
-| Computer Use instructor sweep | Signed app is inspected as an instructor using Computer Use, with screenshots/accessibility-tree notes for every visible screen and safe control path | `scripts/computer_use_sweep_evidence.py`, then `scripts/clean_machine_evidence.py` manual evidence | FAIL_STALE_ARTIFACT for the last signed-app sweep: Computer Use inspected 20 states from an older signed DMG and `computer_use_sweep_evidence.py` fails the captures because the review screen can show both "Your changes are approved" and "Teacher changes not saved yet"; the current-source local app/DMG is now signed/notarized but still needs a new signed-app sweep | Required for public beta; rerun the signed-app sweep on a clean machine and include a PASS verifier JSON in clean-machine evidence |
+| Computer Use instructor sweep | Signed app is inspected as an instructor using Computer Use, with screenshots/accessibility-tree notes for every visible screen and safe control path | `scripts/computer_use_sweep_evidence.py`, then `scripts/clean_machine_evidence.py` manual evidence | BLOCKED_COMPUTER_USE_TARGET: the current-source app/DMG is rebuilt, signed, notarized, stapled, and installed as `ai.johnnyrobot.grader`, but the local Computer Use runtime still resolves `Grader` to stale `com.grader.app` records and rejects direct `ai.johnnyrobot.grader` targeting; the prior accepted-looking sweep remains invalid because it inspected an older signed DMG and failed stale approved/unsaved state checks | Required for public beta; rerun the signed-app sweep on a clean machine or fix Computer Use target resolution, then include a PASS verifier JSON in clean-machine evidence |
 | Updater evidence | Signed updater manifest references the signed artifact and current version, passes macOS signature/notarization checks, and is fresh relative to the current source commit | `scripts/generate_appcast.py --signing-key ...`, then `scripts/updater_evidence.py` | BLOCKED_UPDATER_EVIDENCE: current-source signed/notarized DMG is fresh, but the local updater manifest is unsigned because `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` is not available in this non-interactive run | Required before clean-machine updater path |
 | Signing/notarization | Signed/notarized app or DMG passes codesign, stapler, spctl | `scripts/signing_doctor.py`, release script, clean Mac | PASS locally: current-source app/DMG signed, notarized, stapled, and passed `codesign`/`stapler`/`spctl`; `sign_and_notarize.sh` runs the doctor before mutating the app bundle | Clean-machine behavior remains separate |
 | Clean-machine | First launch, model setup, crash recovery, keyboard review, Computer Use instructor sweep, updater N->N+1 | `scripts/clean_machine_evidence.py --print-manual-runbook`, then JSON from a clean Mac/VM with structured manual evidence notes, files, and release artifact hashes | BLOCKED: codesign/stapler/spctl checks now pass for the current-source app/DMG, but release provenance still fails because the updater manifest is unsigned; first-run models, crash recovery, keyboard-only review, Computer Use instructor sweep, and updater path are still missing | Required for public beta |
@@ -55,9 +55,12 @@ The latest Playwright sweep is `PASS`. A local Computer Use sweep against an old
 was performed and is `FAIL_STALE_ARTIFACT`: the app could be inspected through onboarding, queue,
 settings, model manager, and review, but the packaged review screen still showed the old contradictory
 approved/unsaved state. That evidence is not accepted for public beta. The current-source local app
-and DMG now sign, notarize, staple, and pass macOS signature checks, so the next step is rerunning
-the signed-app Computer Use sweep on a clean machine and validating the captures with
-`scripts/computer_use_sweep_evidence.py` before marking `computer_use_instructor_sweep` complete.
+and DMG now sign, notarize, staple, and pass macOS signature checks; however, the local Computer Use
+runtime cannot currently target the current bundle because `Grader` resolves to stale `com.grader.app`
+records while direct `ai.johnnyrobot.grader` targeting returns `Invalid app`. Treat the signed-app
+Computer Use sweep as blocked until it passes on a clean machine or target resolution is fixed, then
+validate the captures with `scripts/computer_use_sweep_evidence.py` before marking
+`computer_use_instructor_sweep` complete.
 For clean-machine evidence, each manual check must also set all check-specific `assertions` to
 `true`; generic screenshots or notes alone no longer satisfy the public-beta gate.
 
@@ -68,12 +71,14 @@ Mohler ASAG, Canvas app-level score/comment round-trip passes, and citations are
 visibly experimental beta mode. The current-source local app/DMG is signed/notarized and passes
 macOS signature checks, but updater evidence is blocked because the local manifest is unsigned. The
 last signed-app Computer Use sweep also fails because it was captured from an older signed DMG with a
-stale review-state bug. The remaining public-beta blockers are a signed updater manifest plus
-clean-machine behavioral evidence: first-run model setup, crash recovery, keyboard-only review,
-Computer Use instructor sweep, and updater N→N+1. Set `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` before
-generating the release `latest.json`, run `scripts/updater_key_doctor.py` to verify the updater
-key/password, refresh the local signing diagnostic artifact before release attempts, and generate
-`clean-machine-runbook.md` with `scripts/clean_machine_evidence.py --print-manual-runbook` before
+stale review-state bug, and the current installed bundle is blocked locally by Computer Use target
+resolution (`Grader` -> stale `com.grader.app`; direct `ai.johnnyrobot.grader` rejected). The remaining
+public-beta blockers are a signed updater manifest plus clean-machine behavioral evidence: first-run
+model setup, crash recovery, keyboard-only review, Computer Use instructor sweep, and updater N→N+1.
+Set `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` before generating the release `latest.json`, run
+`scripts/updater_key_doctor.py` to verify the updater key/password, refresh the local signing
+diagnostic artifact before release attempts, and generate `clean-machine-runbook.md` with
+`scripts/clean_machine_evidence.py --print-manual-runbook` before
 clean-Mac testing. `scripts/release_evidence_package.py` can assemble the signed DMG/latest.json,
 current evidence JSON, runbook, and manual template into one clean-machine tester handoff folder, but
 the package is not itself passing evidence. Canvas rubric-assessment

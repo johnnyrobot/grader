@@ -240,18 +240,21 @@ package is a clean-Mac handoff bundle only; do not treat it as passing clean-mac
   rejects the tiny committed mechanics fixtures. The local anchored 40-item Mohler ASAG public-proxy
   artifact passes quality at QWK 0.845 and passes fairness across all five perturbation families.
   Updater/DMG/app evidence now fails closed when artifacts predate the current git commit. The current
-  local app/DMG build signs, notarizes, staples, and passes macOS signature checks; updater evidence
-  now blocks only because the local `latest.json` smoke manifest is unsigned. The last local signed-app
-  Computer Use sweep used an older signed DMG and failed because review approval still showed both an
-  approved state and "Teacher changes not saved yet"; `scripts/computer_use_sweep_evidence.py` now
-  fails that capture set and clean-machine evidence requires a PASS sweep JSON. The remaining updater
-  blocker is providing `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` for encrypted updater-key signing; run
+  local app/DMG build signs, notarizes, staples, installs to `/Applications/Grader.app` as
+  `ai.johnnyrobot.grader`, and passes macOS signature checks; updater evidence now blocks only because
+  the local `latest.json` smoke manifest is unsigned. The last local signed-app Computer Use sweep used
+  an older signed DMG and failed because review approval still showed both an approved state and
+  "Teacher changes not saved yet"; the current installed bundle is also blocked locally because
+  Computer Use resolves `Grader` to stale `com.grader.app` records and rejects direct
+  `ai.johnnyrobot.grader` targeting. `scripts/computer_use_sweep_evidence.py` fails stale capture sets
+  and clean-machine evidence requires a PASS sweep JSON. The remaining updater blocker is providing
+  `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` for encrypted updater-key signing; run
   `scripts/signing_doctor.py` to refresh the fail-closed credential diagnostic before release signing,
   or `scripts/signing_doctor.py --print-repair-runbook` for local-only recovery commands if it
   regresses. The release-readiness JSON/Markdown now includes an end-to-end public-beta matrix that
   maps requirements to evidence. Teacher-local validation still requires authorized instructor data,
   and clean-machine behavioral checks still need release validation.
-- **Coverage:** Python collects 142 cases (130 pass, 12 skip). Frontend has 13 passing component
+- **Coverage:** Python collects 142 cases (130 pass, 12 skip). Frontend has 14 passing component
   tests plus four passing Playwright E2E tests.
 - **Public beta verdict:** not ready for unattended public testing with real student work. Limit
   current use to a developer-assisted alpha with synthetic or institution-approved test data.
