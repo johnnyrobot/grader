@@ -40,6 +40,7 @@ Runner = Callable[..., subprocess.CompletedProcess[str]]
 SECRET_RE = re.compile(
     r"(?i)\b([A-Z0-9_]*(TOKEN|PASSWORD|SECRET|PRIVATE_KEY|API_KEY)[A-Z0-9_]*)=([^\s]+)"
 )
+TEAM_ID_RE = re.compile(r"\(([A-Z0-9]{10})\)\s*$")
 
 
 def redact_secrets(value: str) -> str:
@@ -66,6 +67,16 @@ def _first_env(env: dict[str, str], *names: str) -> tuple[str | None, str]:
         if value:
             return value, f"env:{name}"
     return None, ""
+
+
+def _team_id_from_signing_identity(signing_identity: str | None) -> str | None:
+    """Extract the Apple Team ID from a Developer ID identity string, if present."""
+    if not signing_identity:
+        return None
+    match = TEAM_ID_RE.search(signing_identity.strip())
+    if not match:
+        return None
+    return match.group(1)
 
 
 def _keychain_password(
@@ -164,6 +175,9 @@ def _collect_secret_values_and_diagnostics(
     values.append(SecretValue("APPLE_APP_SPECIFIC_PASSWORD", app_password, app_password_source))
 
     team_id, team_id_source = _first_env(env, "APPLE_TEAM_ID")
+    if team_id is None:
+        team_id = _team_id_from_signing_identity(identity)
+        team_id_source = "derived:APPLE_SIGNING_IDENTITY" if team_id else ""
     values.append(SecretValue("APPLE_TEAM_ID", team_id, team_id_source))
 
     updater_key, updater_key_source = _first_env(env, "TAURI_SIGNING_KEY")
@@ -298,7 +312,8 @@ Required GitHub Actions secrets:
 - APPLE_SIGNING_IDENTITY: Developer ID Application identity string.
 - APPLE_ID: Apple ID used for notarization.
 - APPLE_APP_SPECIFIC_PASSWORD: Apple app-specific password for notarization.
-- APPLE_TEAM_ID: Apple Developer Team ID.
+- APPLE_TEAM_ID: Apple Developer Team ID. The inventory can derive this from
+  `APPLE_SIGNING_IDENTITY` when the identity ends with `(TEAMID)`.
 - TAURI_SIGNING_KEY: contents of the Tauri updater private key PEM.
 - TAURI_SIGNING_PRIVATE_KEY_PASSWORD: password for the encrypted updater private key.
 
@@ -333,6 +348,7 @@ Apply to GitHub after the dry-run reports no missing values:
 export APPLE_CERTIFICATE_PASSWORD='<p12-password>'
 export APPLE_ID='<apple-id>'
 export APPLE_APP_SPECIFIC_PASSWORD='<app-specific-password>'
+# Optional when --signing-identity ends with `(TEAMID)`.
 export APPLE_TEAM_ID='<team-id>'
 export TAURI_SIGNING_PRIVATE_KEY_PASSWORD='<updater-key-password>'
 

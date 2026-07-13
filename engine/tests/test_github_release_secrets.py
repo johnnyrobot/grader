@@ -60,6 +60,54 @@ def test_collect_blocks_when_required_values_are_missing():
     assert result["applied"] is False
 
 
+def test_collect_derives_team_id_from_signing_identity_when_env_absent(tmp_path):
+    cert = tmp_path / "cert.p12"
+    key = tmp_path / "tauri.pem"
+    cert.write_bytes(b"fake-p12")
+    key.write_text("private updater key")
+    env = {
+        "APPLE_CERTIFICATE_PASSWORD": "cert-pass",
+        "APPLE_ID": "teacher@example.edu",
+        "APPLE_APP_SPECIFIC_PASSWORD": "app-pass",
+        "TAURI_SIGNING_PRIVATE_KEY_PASSWORD": "updater-pass",
+    }
+
+    result = collect(
+        env=env,
+        certificate_p12=cert,
+        tauri_signing_key=key,
+        signing_identity="Developer ID Application: Example (TEAMID1234)",
+    )
+
+    assert result["status"] == "PASS"
+    assert result["available"]["APPLE_TEAM_ID"]["present"] is True
+    assert result["available"]["APPLE_TEAM_ID"]["source"] == "derived:APPLE_SIGNING_IDENTITY"
+
+
+def test_collect_prefers_env_team_id_over_signing_identity(tmp_path):
+    cert = tmp_path / "cert.p12"
+    key = tmp_path / "tauri.pem"
+    cert.write_bytes(b"fake-p12")
+    key.write_text("private updater key")
+    env = {
+        "APPLE_CERTIFICATE_PASSWORD": "cert-pass",
+        "APPLE_ID": "teacher@example.edu",
+        "APPLE_APP_SPECIFIC_PASSWORD": "app-pass",
+        "APPLE_TEAM_ID": "ENVTEAM123",
+        "TAURI_SIGNING_PRIVATE_KEY_PASSWORD": "updater-pass",
+    }
+
+    result = collect(
+        env=env,
+        certificate_p12=cert,
+        tauri_signing_key=key,
+        signing_identity="Developer ID Application: Example (TEAMID1234)",
+    )
+
+    assert result["status"] == "PASS"
+    assert result["available"]["APPLE_TEAM_ID"]["source"] == "env:APPLE_TEAM_ID"
+
+
 def test_collect_secret_values_reads_updater_password_from_keychain(tmp_path):
     cert = tmp_path / "cert.p12"
     key = tmp_path / "tauri.pem"
