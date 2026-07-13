@@ -735,12 +735,21 @@ def canvas_post(req: CanvasPostReq) -> dict:
     skipped: list[str] = []
 
     for gid in req.grade_ids:
-        row = db.execute("SELECT * FROM grade_records WHERE id = ?", (gid,)).fetchone()
+        row = db.execute(
+            "SELECT gr.*, s.student_ref AS canvas_user_id "
+            "FROM grade_records gr "
+            "LEFT JOIN submissions s ON s.id = gr.submission_id "
+            "WHERE gr.id = ?",
+            (gid,),
+        ).fetchone()
         if not row:
             skipped.append(f"{gid}: not found")
             continue
         if not row["approved_at"]:
             skipped.append(f"{gid}: not approved — WILL NOT POST")
+            continue
+        if not row["canvas_user_id"]:
+            skipped.append(f"{gid}: missing Canvas user id — WILL NOT POST")
             continue
 
         teacher_scores = json.loads(row["teacher_scores_json"]) if row["teacher_scores_json"] else {}
@@ -748,7 +757,7 @@ def canvas_post(req: CanvasPostReq) -> dict:
         scores = teacher_scores or ai_scores
         total = sum(scores.values()) if scores else 0.0
 
-        grade_data[str(row["submission_id"])] = {
+        grade_data[str(row["canvas_user_id"])] = {
             "posted_grade": total,
             "rubric_assessment": {
                 cid: {"points": score, "comments": ""}

@@ -207,7 +207,7 @@ uv run python scripts/release_readiness.py --profile public_beta --out artifacts
   performance gate passes at 38.3s per 1,500-word essay. Public-proxy quality/fairness profiles
   pass on tiny committed mechanics fixtures only; teacher-local validation still requires
   authorized instructor data. Signing/notarization still needs clean-machine release validation.
-- **Coverage:** Python collects 59 cases (47 pass, 12 skip). Frontend has 11 passing component
+- **Coverage:** Python collects 61 cases (49 pass, 12 skip). Frontend has 11 passing component
   tests plus two passing full-workflow Playwright tests.
 - **Public beta verdict:** not ready for unattended public testing with real student work. Limit
   current use to a developer-assisted alpha with synthetic or institution-approved test data.

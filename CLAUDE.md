@@ -82,7 +82,7 @@ As of 2026-07-12, Grader is suitable only for a developer-assisted alpha using s
 institution-approved test data. It is not ready for an unattended public beta with real student
 work.
 
-- Python: 47 passed, 12 skipped.
+- Python: 49 passed, 12 skipped.
 - Frontend: 11 component tests and two full-workflow Playwright tests pass.
 - Privacy: PASS in isolation, 3/3 captured connections allowlisted.
 - Performance: PASS, 38.3 seconds for a 1,500-word essay.
