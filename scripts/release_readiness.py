@@ -409,6 +409,123 @@ def summarize_e2e_matrix(matrix: list[dict[str, str | bool]]) -> dict[str, int]:
     return summary
 
 
+def build_next_actions(evidence: dict[str, Any]) -> list[dict[str, Any]]:
+    """Return secret-safe, command-oriented next actions for blocking release gates."""
+    expected_version = str(evidence.get("expected_version") or _app_version_from_config())
+    actions: list[dict[str, Any]] = []
+
+    def blocked(gate: str) -> bool:
+        return not _status_is_passing(_gate_status(evidence, gate))
+
+    if blocked("github_release"):
+        actions.append({
+            "gate": "github_release",
+            "title": "Configure and verify GitHub Actions release secrets in a private shell.",
+            "commands": [
+                "uv run python scripts/github_release_secrets.py --print-runbook > github-release-secrets-runbook.md",
+                (
+                    "uv run python scripts/github_release_secrets.py "
+                    "--tauri-signing-key tauri-updater-key.pem "
+                    "--updater-password-keychain-service TAURI_SIGNING_PRIVATE_KEY_PASSWORD "
+                    "--updater-password-keychain-account grader-updater "
+                    "--out artifacts/release-evidence/github-release-secrets-current.json"
+                ),
+                (
+                    f"uv run python scripts/github_release_preflight.py --candidate-tag v{expected_version} "
+                    "--out artifacts/release-evidence/github-release-preflight-current.json --no-fail"
+                ),
+            ],
+            "notes": [
+                "Do not paste Apple passwords, .p12 passwords, updater-key passwords, or private keys into chat.",
+                "Use --apply for github_release_secrets.py only after the dry-run reports no missing values.",
+            ],
+        })
+
+    if blocked("updater"):
+        actions.append({
+            "gate": "updater",
+            "title": "Regenerate signed updater manifest evidence for the evaluated release version.",
+            "commands": [
+                "uv run python scripts/updater_key_doctor.py --print-private-runbook > updater-key-private-runbook.md",
+                (
+                    "uv run python scripts/updater_key_doctor.py "
+                    "--signing-key tauri-updater-key.pem "
+                    "--password-keychain-service TAURI_SIGNING_PRIVATE_KEY_PASSWORD "
+                    "--password-keychain-account grader-updater "
+                    "--out artifacts/release-evidence/updater-key-current.json --no-fail"
+                ),
+                (
+                    f"uv run python scripts/generate_appcast.py "
+                    "--dmg app/src-tauri/target/release/bundle/dmg/Grader.dmg"
+                    f" --version {expected_version}"
+                    " --signing-key tauri-updater-key.pem"
+                    " --password-keychain-service TAURI_SIGNING_PRIVATE_KEY_PASSWORD"
+                    " --password-keychain-account grader-updater"
+                    " --output latest.json"
+                ),
+                (
+                    f"uv run python scripts/updater_evidence.py --manifest latest.json "
+                    " --artifact app/src-tauri/target/release/bundle/dmg/Grader.dmg"
+                    f" --version {expected_version}"
+                    " --out artifacts/release-evidence/updater-current.json"
+                ),
+            ],
+            "notes": [
+                "The current blocker is expected while latest.json is stale or the updater-key password is unavailable.",
+                "The updater-key password must come from a private shell, CI secret, or named macOS Keychain item.",
+            ],
+        })
+
+    if blocked("updater_channel"):
+        actions.append({
+            "gate": "updater_channel",
+            "title": "Publish the signed release assets and preflight the live updater channel.",
+            "commands": [
+                (
+                    "uv run python scripts/updater_channel_preflight.py "
+                    "--current-version <installed-N-version> "
+                    "--out artifacts/release-evidence/updater-channel-current.json --no-fail"
+                ),
+            ],
+            "notes": [
+                "Run this only after the GitHub release exposes latest.json and the signed Grader.dmg asset.",
+                "This is a preflight for, not a replacement for, the clean-machine in-app N→N+1 update test.",
+            ],
+        })
+
+    if blocked("clean_machine"):
+        actions.append({
+            "gate": "clean_machine",
+            "title": "Collect final clean-machine install, Computer Use, and updater N→N+1 evidence.",
+            "commands": [
+                (
+                    "uv run python scripts/release_evidence_package.py "
+                    "--out-dir artifacts/release-evidence/clean-machine-handoff "
+                    "--github-release-evidence artifacts/release-evidence/github-release-preflight-current.json "
+                    "--updater-channel-evidence artifacts/release-evidence/updater-channel-current.json "
+                    "--updater-key-evidence artifacts/release-evidence/updater-key-current.json "
+                    "--github-release-secrets-evidence artifacts/release-evidence/github-release-secrets-current.json"
+                ),
+                (
+                    "uv run python scripts/clean_machine_evidence.py "
+                    "--app /Applications/Grader.app "
+                    "--dmg app/src-tauri/target/release/bundle/dmg/Grader.dmg "
+                    "--updater-manifest latest.json "
+                    f"--expected-version {expected_version} "
+                    "--manual-evidence clean-machine-manual-evidence.json "
+                    "--evidence-root <clean-machine-evidence-root> "
+                    "--out artifacts/release-evidence/clean-machine.json"
+                ),
+            ],
+            "notes": [
+                "The updater_path manual check must use the in-app Install update and restart flow, not manual app replacement.",
+                "Never include student work, Canvas tokens, Apple credentials, private keys, or passwords in the handoff package.",
+            ],
+        })
+
+    return actions
+
+
 def redact_secrets(value: str) -> str:
     redacted = SECRET_RE.sub(lambda match: f"{match.group(1)}=<redacted>", value)
     return BEARER_RE.sub("Bearer <redacted>", redacted)
@@ -703,6 +820,7 @@ def collect_evidence(args: argparse.Namespace) -> dict[str, Any]:
     evidence["blockers"] = summarize_blockers(evidence)
     evidence["e2e_matrix"] = build_e2e_matrix(evidence)
     evidence["e2e_matrix_summary"] = summarize_e2e_matrix(evidence["e2e_matrix"])
+    evidence["next_actions"] = build_next_actions(evidence)
     return evidence
 
 
@@ -753,6 +871,21 @@ def write_reports(evidence: dict[str, Any], out_dir: Path) -> tuple[Path, Path]:
         for blocker in blockers:
             suffix = f" — {blocker['summary']}" if blocker.get("summary") else ""
             lines.append(f"- `{blocker['gate']}`: `{blocker['status']}`{suffix}")
+    next_actions = evidence.get("next_actions") or build_next_actions(evidence)
+    if next_actions:
+        lines.extend(["", "## Next Actions", ""])
+        for action in next_actions:
+            lines.append(f"### {action.get('gate', 'unknown')}: {action.get('title', '')}")
+            lines.append("")
+            commands = action.get("commands") or []
+            if commands:
+                lines.append("```bash")
+                lines.extend(str(command) for command in commands)
+                lines.append("```")
+            notes = action.get("notes") or []
+            for note in notes:
+                lines.append(f"- {note}")
+            lines.append("")
     lines.extend(
         [
             "",

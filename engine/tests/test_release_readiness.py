@@ -14,6 +14,7 @@ from scripts.release_readiness import (
     _normalize_updater_key_artifact,
     _signing_preflight,
     build_e2e_matrix,
+    build_next_actions,
     decide_verdict,
     redact_secrets,
     summarize_blockers,
@@ -482,7 +483,15 @@ def test_redact_secrets_masks_tokens():
 
 
 def test_write_reports(tmp_path):
-    json_path, md_path = write_reports({"verdict": "alpha", "quality": {"status": "SKIP"}}, tmp_path)
+    json_path, md_path = write_reports({
+        "verdict": "alpha",
+        "expected_version": "0.1.1",
+        "quality": {"status": "SKIP"},
+        "github_release": {"status": "BLOCKED_GITHUB_RELEASE_PREFLIGHT"},
+        "updater": {"status": "BLOCKED_UPDATER_EVIDENCE"},
+        "updater_channel": {"status": "BLOCKED_UPDATER_CHANNEL"},
+        "clean_machine": {"status": "BLOCKED_CLEAN_MACHINE_EVIDENCE"},
+    }, tmp_path)
     assert json.loads(json_path.read_text())["verdict"] == "alpha"
     markdown = md_path.read_text()
     assert "alpha" in markdown
@@ -490,6 +499,27 @@ def test_write_reports(tmp_path):
     assert "quality-public-proxy-qwk" not in markdown
     assert "Open human-scored public-proxy quality gate" in markdown
     assert "Blocking Items" in markdown
+    assert "Next Actions" in markdown
+    assert "github_release_secrets.py --print-runbook" in markdown
+    assert "--updater-password-keychain-service" in markdown
+
+
+def test_build_next_actions_maps_release_blockers_to_secret_safe_commands():
+    actions = build_next_actions({
+        "expected_version": "0.1.1",
+        "github_release": {"status": "BLOCKED_GITHUB_RELEASE_PREFLIGHT"},
+        "updater": {"status": "BLOCKED_UPDATER_EVIDENCE"},
+        "updater_channel": {"status": "BLOCKED_UPDATER_CHANNEL"},
+        "clean_machine": {"status": "BLOCKED_CLEAN_MACHINE_EVIDENCE"},
+    })
+
+    by_gate = {action["gate"]: action for action in actions}
+    assert set(by_gate) == {"github_release", "updater", "updater_channel", "clean_machine"}
+    assert any("--candidate-tag v0.1.1" in command for command in by_gate["github_release"]["commands"])
+    assert any("--password-keychain-service TAURI_SIGNING_PRIVATE_KEY_PASSWORD" in command for command in by_gate["updater"]["commands"])
+    assert any("updater_channel_preflight.py" in command for command in by_gate["updater_channel"]["commands"])
+    assert any("release_evidence_package.py" in command for command in by_gate["clean_machine"]["commands"])
+    assert "manual app replacement" in " ".join(by_gate["clean_machine"]["notes"])
 
 
 def test_summarize_blockers_includes_fail_skip_and_blocked_reasons():
