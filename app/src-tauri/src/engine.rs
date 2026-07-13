@@ -1,6 +1,7 @@
 use std::process::{Child, Command};
 use std::sync::Mutex;
 use std::path::PathBuf;
+use std::net::TcpListener;
 
 struct EngineState {
     child: Option<Child>,
@@ -48,6 +49,13 @@ fn find_uv() -> Option<PathBuf> {
     which::which("uv").ok()
 }
 
+fn find_free_port() -> Result<u16, String> {
+    let listener = TcpListener::bind("127.0.0.1:0").map_err(|e| format!("failed to reserve engine port: {e}"))?;
+    let port = listener.local_addr().map_err(|e| format!("failed to read engine port: {e}"))?.port();
+    drop(listener);
+    Ok(port)
+}
+
 pub fn start_engine() -> Result<(String, u16), String> {
     let mut state = ENGINE.lock().map_err(|e| e.to_string())?;
     if state.is_none() {
@@ -64,12 +72,12 @@ pub fn start_engine() -> Result<(String, u16), String> {
     let _uv = find_uv().ok_or("uv not found. Install: curl -LsSf https://astral.sh/uv/install.sh | sh")?;
 
     let token = uuid::Uuid::new_v4().to_string();
-    let port = 8756u16;
+    let port = find_free_port()?;
 
     let script = project_root.join("scripts/start_engine.sh");
     let mut cmd = Command::new("sh");
     cmd.arg("-c");
-    cmd.arg(format!("exec {} {}", script.display(), token));
+    cmd.arg(format!("exec {} {} {}", script.display(), token, port));
     cmd.current_dir(&project_root);
 
     let child = cmd.spawn().map_err(|e| format!("failed to start engine: {e}"))?;

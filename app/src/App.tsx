@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { checkHealth, setToken, fetchQueue, GradeItem, QueueData, connectWebSocket } from "./api";
+import { checkHealth, setBaseUrl, setToken, fetchQueue, GradeItem, QueueData, connectWebSocket } from "./api";
 import { QueueScreen } from "./screens/Queue";
 import { SplitView } from "./screens/SplitView";
 import { FirstRunWizard } from "./screens/FirstRun";
@@ -8,18 +8,24 @@ import { SettingsScreen } from "./screens/Settings";
 
 type Screen = "wizard" | "queue" | "split" | "models" | "settings";
 
-async function getEngineToken(): Promise<string | null> {
+async function getEngineInfo(): Promise<{ token: string | null; port: string | null }> {
   try {
     const tauri = await import("@tauri-apps/api/core");
     const info = await tauri.invoke("get_engine_info") as Record<string, string>;
+    if (info.port && info.port !== "undefined") {
+      localStorage.setItem("grader_engine_port", info.port);
+      setBaseUrl(`http://127.0.0.1:${info.port}`);
+    }
     if (info.token && info.token !== "undefined") {
       localStorage.setItem("grader_engine_token", info.token);
-      return info.token;
+      return { token: info.token, port: info.port ?? null };
     }
   } catch {
     // Browser/dev mode — no Tauri runtime
   }
-  return localStorage.getItem("grader_engine_token");
+  const storedPort = localStorage.getItem("grader_engine_port");
+  if (storedPort) setBaseUrl(`http://127.0.0.1:${storedPort}`);
+  return { token: localStorage.getItem("grader_engine_token"), port: storedPort };
 }
 
 export default function App() {
@@ -32,8 +38,8 @@ export default function App() {
   const [selectedLane, setSelectedLane] = useState<string | undefined>(undefined);
 
   const checkEngine = useCallback(async () => {
-    const t = await getEngineToken();
-    if (t) setToken(t);
+    const info = await getEngineInfo();
+    if (info.token) setToken(info.token);
 
     for (let i = 0; i < 10; i++) {
       const ok = await checkHealth();
@@ -46,16 +52,6 @@ export default function App() {
     }
   }, []);
 
-  useEffect(() => {
-    checkEngine();
-    const ws = connectWebSocket((msg) => {
-      if (msg.type === "job_done" || msg.type === "job_progress") {
-        refreshQueue();
-      }
-    });
-    return () => ws.close();
-  }, []);
-
   const refreshQueue = useCallback(async () => {
     try {
       const data = await fetchQueue(assignmentId, selectedLane);
@@ -66,12 +62,26 @@ export default function App() {
   }, [assignmentId, selectedLane]);
 
   useEffect(() => {
+    checkEngine();
+  }, []);
+
+  useEffect(() => {
+    if (!engineReady) return;
+    const ws = connectWebSocket((msg) => {
+      if (msg.type === "job_done" || msg.type === "job_progress") {
+        refreshQueue();
+      }
+    });
+    return () => ws.close();
+  }, [engineReady, refreshQueue]);
+
+  useEffect(() => {
     if (engineReady) refreshQueue();
   }, [engineReady, refreshQueue]);
 
   const handleWizardComplete = async (t: string) => {
-    const engineT = await getEngineToken();
-    setToken(engineT || t);
+    const info = await getEngineInfo();
+    setToken(info.token || t);
     localStorage.setItem("grader_onboarding_complete", "true");
     setEngineReady(true);
     setScreen("queue");

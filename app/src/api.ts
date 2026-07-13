@@ -1,9 +1,13 @@
-const BASE = "http://127.0.0.1:8756";
+let base = "http://127.0.0.1:8756";
 
 let token: string | null = null;
 
 export function setToken(t: string) {
   token = t;
+}
+
+export function setBaseUrl(url: string) {
+  base = url.replace(/\/$/, "");
 }
 
 function headers(): HeadersInit {
@@ -37,7 +41,7 @@ export interface QueueData {
 
 export async function checkHealth(): Promise<boolean> {
   try {
-    const r = await fetch(`${BASE}/health`);
+    const r = await fetch(`${base}/health`);
     return r.ok;
   } catch {
     return false;
@@ -48,13 +52,13 @@ export async function fetchQueue(assignmentId?: string, lane?: string): Promise<
   const params = new URLSearchParams();
   if (assignmentId) params.set("assignment_id", assignmentId);
   if (lane) params.set("lane", lane);
-  const r = await fetch(`${BASE}/api/queue?${params}`, { headers: headers() });
+  const r = await fetch(`${base}/api/queue?${params}`, { headers: headers() });
   if (!r.ok) throw new Error(`queue: ${r.status}`);
   return r.json();
 }
 
 export async function approveGrade(gradeId: string): Promise<void> {
-  const r = await fetch(`${BASE}/api/grades/${gradeId}/approve`, {
+  const r = await fetch(`${base}/api/grades/${gradeId}/approve`, {
     method: "POST",
     headers: { ...headers(), "Content-Type": "application/json" },
   });
@@ -66,7 +70,7 @@ export async function overrideGrade(
   teacherScores: Record<string, number>,
   teacherFeedback: string
 ): Promise<any> {
-  const r = await fetch(`${BASE}/api/grades/${gradeId}/override`, {
+  const r = await fetch(`${base}/api/grades/${gradeId}/override`, {
     method: "POST",
     headers: { ...headers(), "Content-Type": "application/json" },
     body: JSON.stringify({ teacher_scores: teacherScores, teacher_feedback: teacherFeedback }),
@@ -79,7 +83,7 @@ export async function importSubmissions(
   assignmentId: string,
   submissions: { student_ref: string; text: string }[]
 ): Promise<number> {
-  const r = await fetch(`${BASE}/api/import`, {
+  const r = await fetch(`${base}/api/import`, {
     method: "POST",
     headers: { ...headers(), "Content-Type": "application/json" },
     body: JSON.stringify({ assignment_id: assignmentId, submissions }),
@@ -89,7 +93,7 @@ export async function importSubmissions(
 }
 
 export async function createRubric(rubricText: string, title?: string): Promise<any> {
-  const r = await fetch(`${BASE}/api/rubrics`, {
+  const r = await fetch(`${base}/api/rubrics`, {
     method: "POST",
     headers: { ...headers(), "Content-Type": "application/json" },
     body: JSON.stringify({ rubric_text: rubricText, title }),
@@ -99,19 +103,19 @@ export async function createRubric(rubricText: string, title?: string): Promise<
 }
 
 export async function getRubric(title: string): Promise<any> {
-  const r = await fetch(`${BASE}/api/rubrics/${encodeURIComponent(title)}`, { headers: headers() });
+  const r = await fetch(`${base}/api/rubrics/${encodeURIComponent(title)}`, { headers: headers() });
   if (!r.ok) throw new Error(`get rubric: ${r.status}`);
   return r.json();
 }
 
 export async function listRubrics(): Promise<any[]> {
-  const r = await fetch(`${BASE}/api/rubrics`, { headers: headers() });
+  const r = await fetch(`${base}/api/rubrics`, { headers: headers() });
   if (!r.ok) throw new Error(`list rubrics: ${r.status}`);
   return r.json();
 }
 
 export async function gradeBatch(assignmentId: string, model?: string): Promise<{ job_id: string; total: number }> {
-  const r = await fetch(`${BASE}/api/grade/batch`, {
+  const r = await fetch(`${base}/api/grade/batch`, {
     method: "POST",
     headers: { ...headers(), "Content-Type": "application/json" },
     body: JSON.stringify({ assignment_id: assignmentId, model: model || "grader-text:8b" }),
@@ -121,19 +125,19 @@ export async function gradeBatch(assignmentId: string, model?: string): Promise<
 }
 
 export async function fetchCalibration(assignmentId: string): Promise<any> {
-  const r = await fetch(`${BASE}/api/calibration/${assignmentId}`, { headers: headers() });
+  const r = await fetch(`${base}/api/calibration/${assignmentId}`, { headers: headers() });
   if (!r.ok) throw new Error(`calibration: ${r.status}`);
   return r.json();
 }
 
 export async function fetchModels(): Promise<{ available: any[]; ollama_running: boolean }> {
-  const r = await fetch(`${BASE}/api/models`, { headers: headers() });
+  const r = await fetch(`${base}/api/models`, { headers: headers() });
   if (!r.ok) throw new Error(`models: ${r.status}`);
   return r.json();
 }
 
 export async function installModel(modelName: string): Promise<{ success: boolean; error?: string }> {
-  const r = await fetch(`${BASE}/api/models/install`, {
+  const r = await fetch(`${base}/api/models/install`, {
     method: "POST",
     headers: { ...headers(), "Content-Type": "application/json" },
     body: JSON.stringify({ model_name: modelName }),
@@ -143,7 +147,7 @@ export async function installModel(modelName: string): Promise<{ success: boolea
 }
 
 export function connectWebSocket(onMessage: (msg: any) => void): WebSocket {
-  const ws = new WebSocket(`${BASE.replace("http", "ws")}/ws/jobs`);
+  const ws = new WebSocket(`${base.replace("http", "ws")}/ws/jobs`);
   ws.onmessage = (e) => onMessage(JSON.parse(e.data));
   return ws;
 }
@@ -155,19 +159,19 @@ export async function checkUpdates(): Promise<{
   notes?: string;
   error?: string;
 }> {
-  const r = await fetch(`${BASE}/api/updates/check`, { headers: headers() });
+  const r = await fetch(`${base}/api/updates/check`, { headers: headers() });
   if (!r.ok) throw new Error(`updates: ${r.status}`);
   return r.json();
 }
 
 export async function getSettings(): Promise<Record<string, string | number>> {
-  const r = await fetch(`${BASE}/api/settings`, { headers: headers() });
+  const r = await fetch(`${base}/api/settings`, { headers: headers() });
   if (!r.ok) throw new Error(`settings: ${r.status}`);
   return r.json();
 }
 
 export async function updateSettings(settings: Record<string, string | number>): Promise<{ success: boolean }> {
-  const r = await fetch(`${BASE}/api/settings`, {
+  const r = await fetch(`${base}/api/settings`, {
     method: "PUT",
     headers: { ...headers(), "Content-Type": "application/json" },
     body: JSON.stringify(settings),
@@ -177,7 +181,7 @@ export async function updateSettings(settings: Record<string, string | number>):
 }
 
 export async function saveRubric(rubricData: any): Promise<{ id: number }> {
-  const r = await fetch(`${BASE}/api/rubrics`, {
+  const r = await fetch(`${base}/api/rubrics`, {
     method: "POST",
     headers: { ...headers(), "Content-Type": "application/json" },
     body: JSON.stringify(rubricData),
