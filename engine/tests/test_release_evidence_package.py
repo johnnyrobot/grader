@@ -15,6 +15,7 @@ def test_build_package_copies_artifacts_and_writes_runbook_template(tmp_path):
     readiness = tmp_path / "release-readiness.json"
     signing = tmp_path / "signing.json"
     release_version = tmp_path / "release-version.json"
+    updater_channel = tmp_path / "updater-channel-current.json"
     updater_key = tmp_path / "updater-key.json"
     dmg.write_bytes(b"signed dmg")
     manifest.write_text('{"version":"0.1.0","platforms":{"darwin-aarch64":{"signature":""}}}')
@@ -34,6 +35,7 @@ def test_build_package_copies_artifacts_and_writes_runbook_template(tmp_path):
     }))
     signing.write_text(json.dumps({"status": "PASS"}))
     release_version.write_text(json.dumps({"status": "PASS"}))
+    updater_channel.write_text(json.dumps({"status": "BLOCKED_UPDATER_CHANNEL"}))
     updater_key.write_text(json.dumps({"status": "BLOCKED_UPDATER_KEY"}))
 
     out = tmp_path / "handoff"
@@ -46,6 +48,7 @@ def test_build_package_copies_artifacts_and_writes_runbook_template(tmp_path):
         readiness_report=readiness,
         signing_evidence=signing,
         release_version_evidence=release_version,
+        updater_channel_evidence=updater_channel,
         updater_key_evidence=updater_key,
     )
 
@@ -56,6 +59,7 @@ def test_build_package_copies_artifacts_and_writes_runbook_template(tmp_path):
     assert (out / "release-artifacts" / "latest.json").exists()
     assert (out / "evidence" / "updater.json").exists()
     assert (out / "evidence" / "release-version.json").exists()
+    assert (out / "evidence" / "updater-channel-current.json").exists()
     assert (out / "evidence" / "updater-key.json").exists()
     assert "first_run_models" in (out / "clean-machine-runbook.md").read_text()
     template = json.loads((out / "clean-machine-manual-evidence.json").read_text())

@@ -65,6 +65,28 @@ def test_decide_verdict_blocked_when_signing_blocked():
     assert decide_verdict(evidence) == "blocked"
 
 
+def test_decide_verdict_blocked_when_updater_channel_blocked():
+    evidence = {
+        "quality": {"status": "PASS"},
+        "fairness": {"status": "PASS"},
+        "citations": {"status": "PASS_EXPERIMENTAL", "mode": "experimental"},
+        "canvas": {"status": "PASS"},
+        "privacy": {"status": "PASS"},
+        "performance": {"status": "PASS"},
+        "frontend": {"status": "PASS"},
+        "rust": {"status": "PASS"},
+        "release_version": {"status": "PASS"},
+        "updater": {"status": "PASS"},
+        "updater_channel": {"status": "BLOCKED_UPDATER_CHANNEL"},
+        "signing": {"status": "PASS"},
+        "clean_machine": {"status": "PASS"},
+    }
+
+    assert decide_verdict(evidence) == "blocked"
+    blockers = summarize_blockers(evidence)
+    assert any(blocker["gate"] == "updater_channel" for blocker in blockers)
+
+
 def test_build_e2e_matrix_maps_public_beta_requirements_to_evidence():
     evidence = {
         "quality": {"status": "PASS", "output": "quality ok"},

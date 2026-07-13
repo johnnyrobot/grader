@@ -38,6 +38,7 @@ REQUIRED_GATES = (
     "rust",
     "release_version",
     "updater",
+    "updater_channel",
     "signing",
     "clean_machine",
 )

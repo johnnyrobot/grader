@@ -153,6 +153,7 @@ def build_package(
     readiness_report: Path | None = None,
     signing_evidence: Path | None = None,
     release_version_evidence: Path | None = None,
+    updater_channel_evidence: Path | None = None,
     updater_key_evidence: Path | None = None,
     copy_artifacts: bool = True,
 ) -> dict[str, Any]:
@@ -177,6 +178,7 @@ def build_package(
         "readiness_report": _safe_copy(readiness_report, evidence_dir, copy_artifacts=True),
         "signing_evidence": _safe_copy(signing_evidence, evidence_dir, copy_artifacts=True),
         "release_version_evidence": _safe_copy(release_version_evidence, evidence_dir, copy_artifacts=True),
+        "updater_channel_evidence": _safe_copy(updater_channel_evidence, evidence_dir, copy_artifacts=True),
         "updater_key_evidence": _safe_copy(updater_key_evidence, evidence_dir, copy_artifacts=True),
     }
 
@@ -218,6 +220,7 @@ def main() -> None:
     parser.add_argument("--readiness-report", type=Path, default=Path("artifacts/release-readiness/release-readiness.json"))
     parser.add_argument("--signing-evidence", type=Path, default=Path("artifacts/release-evidence/signing-current.json"))
     parser.add_argument("--release-version-evidence", type=Path, default=Path("artifacts/release-evidence/release-version.json"))
+    parser.add_argument("--updater-channel-evidence", type=Path, default=Path("artifacts/release-evidence/updater-channel-current.json"))
     parser.add_argument("--updater-key-evidence", type=Path, default=Path("artifacts/release-evidence/updater-key.json"))
     parser.add_argument("--no-copy-release-artifacts", action="store_true",
                         help="Write metadata only for DMG/latest.json instead of copying them into the package")
@@ -232,6 +235,7 @@ def main() -> None:
         readiness_report=args.readiness_report,
         signing_evidence=args.signing_evidence,
         release_version_evidence=args.release_version_evidence,
+        updater_channel_evidence=args.updater_channel_evidence,
         updater_key_evidence=args.updater_key_evidence,
         copy_artifacts=not args.no_copy_release_artifacts,
     )
