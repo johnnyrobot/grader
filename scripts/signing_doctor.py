@@ -128,6 +128,90 @@ def _remediation(require_notary: bool) -> list[str]:
     return steps
 
 
+def _shell_single_quote(value: str) -> str:
+    return "'" + value.replace("'", "'\"'\"'") + "'"
+
+
+def signing_repair_runbook(
+    *,
+    keychain_profile: str = "grader",
+    signing_identity: str = "",
+    require_notary: bool = True,
+) -> str:
+    """Return a secret-free runbook for repairing local signing credentials."""
+    identity_export = ""
+    if signing_identity:
+        identity_export = f"export SIGNING_IDENTITY={_shell_single_quote(signing_identity)}\n"
+
+    lines = [
+        "# Grader macOS signing credential repair runbook",
+        "",
+        "Use this on the Mac that will produce the release artifact. Do not paste Apple passwords,",
+        "app-specific passwords, private keys, or keychain passwords into chat or commit them.",
+        "",
+        "## 1. Confirm the visible Developer ID identity",
+        "",
+        "```bash",
+        "security find-identity -v -p codesigning",
+        "```",
+        "",
+        "Expected: one valid `Developer ID Application` identity with an attached private key in Keychain Access.",
+        "",
+        "## 2. Unlock the login keychain",
+        "",
+        "```bash",
+        "security unlock-keychain ~/Library/Keychains/login.keychain-db",
+        "```",
+        "",
+        "## 3. Repair codesign private-key access control",
+        "",
+        "Run this locally. Replace the placeholder with your macOS login keychain password when prompted",
+        "or when running in a private shell history-safe context.",
+        "",
+        "```bash",
+        "security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k '<login-keychain-password>' ~/Library/Keychains/login.keychain-db",
+        "```",
+        "",
+        "Then rerun the sign-only probe:",
+        "",
+        "```bash",
+        f"{identity_export}uv run python scripts/signing_doctor.py --skip-notary --no-fail --out artifacts/release-evidence/signing-sign-only.json",
+        "```",
+    ]
+    if require_notary:
+        lines.extend([
+            "",
+            "## 4. Store notarization credentials",
+            "",
+            "Create an Apple app-specific password first, then store the notary profile locally:",
+            "",
+            "```bash",
+            f"xcrun notarytool store-credentials {_shell_single_quote(keychain_profile)} --apple-id '<apple-id>' --team-id '<team-id>' --password '<app-specific-password>'",
+            "```",
+            "",
+            "## 5. Verify full signing + notarization preflight",
+            "",
+            "```bash",
+            f"{identity_export}KEYCHAIN_PROFILE={_shell_single_quote(keychain_profile)} uv run python scripts/signing_doctor.py --no-fail --out artifacts/release-evidence/signing.json",
+            "```",
+        ])
+    else:
+        lines.extend([
+            "",
+            "## 4. Verify sign-only release preflight",
+            "",
+            "```bash",
+            f"{identity_export}uv run python scripts/signing_doctor.py --skip-notary --no-fail --out artifacts/release-evidence/signing.json",
+            "```",
+        ])
+    lines.extend([
+        "",
+        "Only after the doctor reports `PASS`, rebuild/re-sign/notarize the release artifact, regenerate",
+        "`latest.json`, rerun updater evidence, and rerun clean-machine evidence.",
+    ])
+    return "\n".join(lines).rstrip() + "\n"
+
+
 def collect_signing_diagnostics(
     *,
     config_path: Path = Path("app/src-tauri/tauri.conf.json"),
@@ -240,7 +324,17 @@ def main() -> None:
     parser.add_argument("--skip-notary", action="store_true", help="Do not require notarytool profile access")
     parser.add_argument("--out", type=Path, default=None, help="Optional JSON evidence path to write")
     parser.add_argument("--no-fail", action="store_true", help="Write diagnostics but exit 0 when blocked")
+    parser.add_argument("--print-repair-runbook", action="store_true",
+                        help="Print a secret-free local repair runbook for codesign/notary credentials")
     args = parser.parse_args()
+
+    if args.print_repair_runbook:
+        print(signing_repair_runbook(
+            keychain_profile=args.keychain_profile,
+            signing_identity=args.signing_identity,
+            require_notary=not args.skip_notary,
+        ), end="")
+        return
 
     result = collect_signing_diagnostics(
         config_path=args.config,

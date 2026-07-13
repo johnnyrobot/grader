@@ -4,7 +4,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parents[2]))
 
-from scripts.signing_doctor import collect_signing_diagnostics, redact_secrets
+from scripts.signing_doctor import collect_signing_diagnostics, redact_secrets, signing_repair_runbook
 
 
 class Proc:
@@ -144,3 +144,17 @@ def test_redact_secrets_masks_env_and_bearer_values():
     assert "secret" not in redacted
     assert "abc" not in redacted
     assert "long.token" not in redacted
+
+
+def test_signing_repair_runbook_is_secret_free_and_actionable():
+    runbook = signing_repair_runbook(
+        keychain_profile="grader",
+        signing_identity="Developer ID Application: Example O'Name (TEAMID)",
+    )
+
+    assert "security set-key-partition-list" in runbook
+    assert "xcrun notarytool store-credentials 'grader'" in runbook
+    assert "Developer ID Application: Example O'\"'\"'Name (TEAMID)" in runbook
+    assert "<login-keychain-password>" in runbook
+    assert "<app-specific-password>" in runbook
+    assert "secret" not in runbook.lower()

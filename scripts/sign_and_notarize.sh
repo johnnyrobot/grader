@@ -76,14 +76,14 @@ fi
 SIDECAR="$APP_PATH/Contents/Resources/engine"
 if [[ -d "$SIDECAR" ]]; then
     echo "  Signing sidecar: engine/"
-    find "$SIDECAR" -type f -name "*.py" -o -name "*.so" -o -type f -perm +111 | while read -r f; do
+    find "$SIDECAR" -type f \( -name "*.py" -o -name "*.so" -o -perm +111 \) | while read -r f; do
         codesign --force --sign "$SIGNING_IDENTITY" --options runtime "$f" 2>/dev/null || true
     done
 fi
 
 # Sign all dylibs/frameworks first (deep, inside-out)
 echo "  Signing frameworks and libraries..."
-find "$APP_PATH" -type f -name "*.dylib" -o -name "*.framework" | while read -r f; do
+find "$APP_PATH" \( -type f -name "*.dylib" -o -type d -name "*.framework" \) | while read -r f; do
     codesign --force --sign "$SIGNING_IDENTITY" --options runtime "$f" 2>/dev/null || true
 done
 

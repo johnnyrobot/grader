@@ -193,6 +193,7 @@ uv run python engine/gates/bias.py --profile public_proxy --public-proxy-dir fix
 uv run python engine/verify_citations.py --fixtures fixtures/citations/citation_fixtures.json --output artifacts/citation-results.json
 uv run python scripts/frontend_evidence.py --out artifacts/release-evidence/frontend.json
 uv run python scripts/signing_doctor.py --out artifacts/release-evidence/signing.json --no-fail
+uv run python scripts/signing_doctor.py --print-repair-runbook > signing-repair-runbook.md
 uv run python scripts/generate_appcast.py --dmg /path/to/Grader.dmg --version 0.1.0 --signing-key /path/to/tauri-updater-key.pem --output latest.json
 uv run python scripts/updater_evidence.py --manifest latest.json --artifact /path/to/Grader.dmg --out artifacts/release-evidence/updater.json  # fails if artifacts predate current git commit
 uv run python scripts/live_canvas_e2e.py --dry-run
@@ -233,9 +234,10 @@ uv run python scripts/release_readiness.py --profile public_beta --expected-vers
   both an approved state and "Teacher changes not saved yet." Fresh local signing/notarization is
   currently blocked: `codesign` returns `errSecInternalComponent` and notarytool profile `grader` is
   unavailable; run `scripts/signing_doctor.py` to refresh the fail-closed credential diagnostic before
-  release signing. The release-readiness JSON/Markdown now includes an end-to-end public-beta matrix
-  that maps requirements to evidence. Teacher-local validation still requires authorized instructor
-  data, and clean-machine behavioral checks still need release validation.
+  release signing, or `scripts/signing_doctor.py --print-repair-runbook` for local-only recovery
+  commands. The release-readiness JSON/Markdown now includes an end-to-end public-beta matrix that
+  maps requirements to evidence. Teacher-local validation still requires authorized instructor data,
+  and clean-machine behavioral checks still need release validation.
 - **Coverage:** Python collects 133 cases (121 pass, 12 skip). Frontend has 12 passing component
   tests plus four passing Playwright E2E tests.
 - **Public beta verdict:** not ready for unattended public testing with real student work. Limit

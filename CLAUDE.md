@@ -107,9 +107,10 @@ work.
   app states and found the existing DMG stale: after review approval it still displayed both the
   approved message and "Teacher changes not saved yet." Fresh local signing/notarization is blocked
   because `codesign` returns `errSecInternalComponent` and notarytool profile `grader` is unavailable;
-  after credentials are restored, rebuild/re-sign/notarize from current source, then rerun clean-machine
-  first-run models, crash recovery, keyboard-only review, Computer Use instructor sweep, and updater
-  path with structured manual evidence notes plus screenshot/log paths.
+  run `uv run python scripts/signing_doctor.py --print-repair-runbook` for local-only recovery steps.
+  After credentials are restored, rebuild/re-sign/notarize from current source, then rerun
+  clean-machine first-run models, crash recovery, keyboard-only review, Computer Use instructor
+  sweep, and updater path with structured manual evidence notes plus screenshot/log paths.
 
 Before public beta: keep citation checks visibly experimental unless accuracy improves, restore
 signing/notarization credentials, regenerate release artifacts from the current source commit, and

@@ -27,7 +27,7 @@ scripts/
 | Build public-proxy evidence | `build_public_proxy.py` | Writes Mohler ASAG artifacts under `artifacts/public_proxy/`; optional local grading |
 | Inspect UI safely | `dev_mock_engine.py` | Serves synthetic queue/settings/models/rubric responses on loopback for local browser/Computer Use inspection only |
 | Collect frontend release evidence | `frontend_evidence.py` | Runs component tests, production build, managed Playwright E2E, and validates visual-sweep screenshots/control coverage |
-| Diagnose signing credentials | `signing_doctor.py` | Writes `artifacts/release-evidence/signing.json`; probes Developer ID private-key access and notarytool profile before signing |
+| Diagnose signing credentials | `signing_doctor.py` | Writes `artifacts/release-evidence/signing.json`; probes Developer ID private-key access and notarytool profile before signing; `--print-repair-runbook` emits secret-free local recovery steps |
 | Generate updater manifest | `generate_appcast.py` | Requires `--signing-key` for release manifests; use `--allow-unsigned` only for local smoke fixtures |
 | Validate updater evidence | `updater_evidence.py` | Requires updater config, signed latest.json, artifact filename/hash/source-freshness checks, and local artifact signature/notarization checks |
 | Clean-machine release evidence | `clean_machine_evidence.py` | Writes `artifacts/release-evidence/clean-machine.json`; PASS requires signing, app/DMG/latest.json provenance, current-source freshness, plus structured manual evidence for first-run/crash/keyboard/Computer Use/updater checks |
@@ -60,7 +60,9 @@ scripts/
   before signing the updater artifact.
 - **`signing_doctor.py`**: run before `sign_and_notarize.sh`. It fail-closes on missing Developer
   ID certificates, inaccessible private keys, invalid notarytool profiles, and missing hardened
-  runtime/updater config. Use `--skip-notary` only for explicit sign-only testing.
+  runtime/updater config. Use `--print-repair-runbook` to generate local-only recovery commands for
+  keychain private-key ACLs and notarytool profile setup; do not commit filled credentials or paste
+  secrets into chat. Use `--skip-notary` only for explicit sign-only testing.
 - **`seed_canvas_sandbox.py`**: dry-run by default. `--apply` to write. Refuses courses without `ZZ-GRADER-TEST` marker.
 - **`clean_machine_evidence.py`**: cannot prove a clean-machine pass by itself. Generate the
   tester runbook with `--print-manual-runbook` and the evidence template with

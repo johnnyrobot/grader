@@ -148,6 +148,7 @@ uv run python engine/verify_citations.py --fixtures fixtures/citations/citation_
 uv run python scripts/frontend_evidence.py --out artifacts/release-evidence/frontend.json
 uv run python scripts/dev_mock_engine.py  # optional: safe synthetic backend for local UI/Computer Use inspection
 uv run python scripts/signing_doctor.py --out artifacts/release-evidence/signing.json --no-fail
+uv run python scripts/signing_doctor.py --print-repair-runbook > signing-repair-runbook.md  # local-only recovery steps if the doctor blocks
 uv run python scripts/generate_appcast.py --dmg /path/to/Grader.dmg --version 0.1.0 --signing-key /path/to/tauri-updater-key.pem --output latest.json
 uv run python scripts/updater_evidence.py --manifest latest.json --artifact /path/to/Grader.dmg --out artifacts/release-evidence/updater.json  # fails if local artifacts predate the current git commit
 uv run python scripts/live_canvas_e2e.py --dry-run
@@ -180,7 +181,10 @@ report agreement against the *human ceiling* rather than against an arbitrary ta
 anchored 40-item Mohler public-proxy scoring run produced 40 scored rows and passes the quality
 gate at QWK 0.845 against a 0.623 adjusted floor, and the matching fairness perturbation run
 passes. Use `scripts/signing_doctor.py` before `scripts/sign_and_notarize.sh` to verify the
-Developer ID private key and notarytool profile before mutating a release bundle. `scripts/generate_appcast.py`
+Developer ID private key and notarytool profile before mutating a release bundle. If it blocks on
+`errSecInternalComponent` or a missing notary profile, generate the local-only repair runbook with
+`uv run python scripts/signing_doctor.py --print-repair-runbook`; do not paste Apple credentials or
+keychain passwords into chat or commit them. `scripts/generate_appcast.py`
 now fails closed unless a Tauri updater signing key is provided; `--allow-unsigned` is only for local
 smoke fixtures. `scripts/release_readiness.py --expected-version ...` records artifact path/mtime/SHA-256
 metadata and fails PASS updater or clean-machine artifacts that do not match the evaluated app
