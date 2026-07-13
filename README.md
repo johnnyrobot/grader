@@ -35,8 +35,9 @@ per-teacher model to train.
 🚧 **Developer-assisted alpha; not ready for an unattended public beta.** The engine and desktop
 review workflow work, including the neuroinclusive light-first interface and the tiered
 release-gate machinery. Public-proxy quality/fairness pass and Canvas score/comment round-trip is
-validated, but public beta is currently blocked by fresh signing/notarization credentials and
-clean-machine behavioral validation.
+validated, and a current-source local app/DMG now signs, notarizes, staples, and passes macOS
+signature checks. Public beta is still blocked by signed updater-manifest evidence and clean-machine
+behavioral validation.
 
 | | |
 |---|---|
@@ -48,8 +49,8 @@ clean-machine behavioral validation.
 | Document parsing + handwriting | 🟡 Built — Docling + Apple Vision + grader-vision |
 | Citation verification | 🟡 20/29 correct (69%); retraction check 3/3; accepted only as visibly experimental until accuracy reaches the enabled-mode gate |
 | CI gates | 🟢 Privacy PASS; perf PASS; public-proxy quality/fairness PASS; teacher-local still unvalidated |
-| Updater evidence | 🔴 Current-source local artifact exists, but updater evidence blocks because the manifest is unsigned and the app is not Developer ID signed |
-| Signing + notarization | 🔴 Fresh local signing/notarization is blocked: `codesign` returns `errSecInternalComponent` and notarytool profile `grader` is unavailable |
+| Updater evidence | 🔴 Current-source signed/notarized DMG exists, but updater evidence blocks because the manifest is unsigned |
+| Signing + notarization | 🟢 Current-source local app/DMG signed, notarized, stapled, and passed `codesign`/`stapler`/`spctl` checks |
 | Updates | 🟡 Tauri updater integrated, manifest generator built |
 | Beta rollout | ⬜ Blocked until release-readiness report returns `supervised_public_beta` |
 
@@ -85,10 +86,9 @@ Confirmed in the current checkout:
 - `scripts/release_readiness.py` writes a consolidated JSON/Markdown verdict with blocker
   summaries plus an end-to-end testing and evaluation matrix that maps public-beta requirements to
   evidence. With current local artifacts, the report is `blocked`: the current-source local app/DMG
-  build is fresh, but updater evidence blocks because the manifest is unsigned and the app is not
-  Developer ID signed; local signing credentials are still unavailable; and clean-machine behavior
-  evidence is still missing for first-run models, crash recovery, keyboard-only review, Computer Use
-  instructor sweep, and updater path.
+  signs, notarizes, staples, and passes macOS signature checks, but updater evidence blocks because
+  the manifest is unsigned; clean-machine behavior evidence is still missing for first-run models,
+  crash recovery, keyboard-only review, Computer Use instructor sweep, and updater path.
 
 Public-beta blockers:
 
@@ -96,12 +96,12 @@ Public-beta blockers:
 2. Keep Canvas rubric-assessment posting disabled until local rubric criteria can be mapped to real
    Canvas criterion IDs; score/comment round-trip is validated, attachment write-back still needs
    separate evidence.
-3. Restore local release signing/notarization credentials, rebuild/re-sign/notarize from the current
-   source commit, then validate the signed/notarized DMG on a clean supported Mac, including first-run
-   model setup, crash recovery, keyboard-only review, Computer Use instructor sweep, and updater
-   behavior. The last signed-app Computer Use sweep was against an older signed DMG and fails: after
-   review approval it displayed both the approved message and "Teacher changes not saved yet"; the
-   sweep verifier now fails that capture set.
+3. Provide the Tauri updater private-key password through `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` so
+   `latest.json` can be signed, then validate the signed/notarized DMG on a clean supported Mac,
+   including first-run model setup, crash recovery, keyboard-only review, Computer Use instructor
+   sweep, and updater behavior. The last signed-app Computer Use sweep was against an older signed
+   DMG and fails: after review approval it displayed both the approved message and
+   "Teacher changes not saved yet"; the sweep verifier now fails that capture set.
 4. Keep teacher-local validation separate until an instructor supplies authorized historical grading.
 5. Complete a supervised private pilot before opening enrollment publicly.
 
@@ -153,6 +153,7 @@ uv run python scripts/frontend_evidence.py --out artifacts/release-evidence/fron
 uv run python scripts/dev_mock_engine.py  # optional: safe synthetic backend for local UI/Computer Use inspection
 uv run python scripts/signing_doctor.py --out artifacts/release-evidence/signing.json --no-fail
 uv run python scripts/signing_doctor.py --print-repair-runbook > signing-repair-runbook.md  # local-only recovery steps if the doctor blocks
+export TAURI_SIGNING_PRIVATE_KEY_PASSWORD='<updater-key-password>'  # required for encrypted updater keys
 uv run python scripts/generate_appcast.py --dmg /path/to/Grader.dmg --version 0.1.0 --signing-key /path/to/tauri-updater-key.pem --output latest.json
 uv run python scripts/updater_evidence.py --manifest latest.json --artifact /path/to/Grader.dmg --out artifacts/release-evidence/updater.json  # fails if local artifacts predate the current git commit
 uv run python scripts/live_canvas_e2e.py --dry-run
@@ -194,12 +195,13 @@ passes. Use `scripts/signing_doctor.py` before `scripts/sign_and_notarize.sh` to
 Developer ID private key and notarytool profile before mutating a release bundle. If it blocks on
 `errSecInternalComponent` or a missing notary profile, generate the local-only repair runbook with
 `uv run python scripts/signing_doctor.py --print-repair-runbook`; do not paste Apple credentials or
-keychain passwords into chat or commit them. `scripts/generate_appcast.py`
-now fails closed unless a Tauri updater signing key is provided; `--allow-unsigned` is only for local
-smoke fixtures. `scripts/release_readiness.py --expected-version ...` records artifact path/mtime/SHA-256
-metadata and fails PASS updater or clean-machine artifacts that do not match the evaluated app
-version. The app is still not public-beta ready until updater, signing/notarization credentials, and
-clean-machine release evidence pass.
+keychain passwords into chat or commit them. `scripts/generate_appcast.py` now fails closed unless a
+Tauri updater signing key is provided; set `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` for encrypted updater
+keys in non-interactive release runs. `--allow-unsigned` is only for local smoke fixtures.
+`scripts/release_readiness.py --expected-version ...` records artifact path/mtime/SHA-256 metadata
+and fails PASS updater or clean-machine artifacts that do not match the evaluated app version. The app
+is still not public-beta ready until signed updater evidence and clean-machine release behavior
+evidence pass.
 
 ## Docs
 

@@ -195,6 +195,7 @@ uv run python engine/verify_citations.py --fixtures fixtures/citations/citation_
 uv run python scripts/frontend_evidence.py --out artifacts/release-evidence/frontend.json
 uv run python scripts/signing_doctor.py --out artifacts/release-evidence/signing.json --no-fail
 uv run python scripts/signing_doctor.py --print-repair-runbook > signing-repair-runbook.md
+export TAURI_SIGNING_PRIVATE_KEY_PASSWORD='<updater-key-password>'  # required for encrypted updater keys
 uv run python scripts/generate_appcast.py --dmg /path/to/Grader.dmg --version 0.1.0 --signing-key /path/to/tauri-updater-key.pem --output latest.json
 uv run python scripts/updater_evidence.py --manifest latest.json --artifact /path/to/Grader.dmg --out artifacts/release-evidence/updater.json  # fails if artifacts predate current git commit
 uv run python scripts/live_canvas_e2e.py --dry-run
@@ -236,24 +237,24 @@ row also needs a PASS JSON from `scripts/computer_use_sweep_evidence.py`.
   rejects the tiny committed mechanics fixtures. The local anchored 40-item Mohler ASAG public-proxy
   artifact passes quality at QWK 0.845 and passes fairness across all five perturbation families.
   Updater/DMG/app evidence now fails closed when artifacts predate the current git commit. The current
-  local app/DMG build is fresh but unsigned; updater evidence blocks on missing manifest signatures
-  plus app codesign/spctl failures. The last local signed-app Computer Use sweep used an older signed
-  DMG and failed because review approval still showed both an approved state and "Teacher changes not
-  saved yet"; `scripts/computer_use_sweep_evidence.py` now fails that capture set and clean-machine
-  evidence requires a PASS sweep JSON. Fresh local signing/notarization is currently blocked:
-  `codesign` returns `errSecInternalComponent` and notarytool profile `grader` is unavailable; run
+  local app/DMG build signs, notarizes, staples, and passes macOS signature checks; updater evidence
+  now blocks only because the local `latest.json` smoke manifest is unsigned. The last local signed-app
+  Computer Use sweep used an older signed DMG and failed because review approval still showed both an
+  approved state and "Teacher changes not saved yet"; `scripts/computer_use_sweep_evidence.py` now
+  fails that capture set and clean-machine evidence requires a PASS sweep JSON. The remaining updater
+  blocker is providing `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` for encrypted updater-key signing; run
   `scripts/signing_doctor.py` to refresh the fail-closed credential diagnostic before release signing,
-  or `scripts/signing_doctor.py --print-repair-runbook` for local-only recovery commands. The
-  release-readiness JSON/Markdown now includes an end-to-end public-beta matrix that maps requirements
-  to evidence. Teacher-local validation still requires authorized instructor data, and clean-machine
-  behavioral checks still need release validation.
+  or `scripts/signing_doctor.py --print-repair-runbook` for local-only recovery commands if it
+  regresses. The release-readiness JSON/Markdown now includes an end-to-end public-beta matrix that
+  maps requirements to evidence. Teacher-local validation still requires authorized instructor data,
+  and clean-machine behavioral checks still need release validation.
 - **Coverage:** Python collects 142 cases (130 pass, 12 skip). Frontend has 13 passing component
   tests plus four passing Playwright E2E tests.
 - **Public beta verdict:** not ready for unattended public testing with real student work. Limit
   current use to a developer-assisted alpha with synthetic or institution-approved test data.
-- **Highest-value next action:** restore signing/notarization credentials, rebuild/re-sign/notarize
-  from the current source commit, rerun updater and clean-machine evidence, then collect
-  clean-machine first-run model setup, crash recovery, keyboard-only review, Computer Use instructor
-  sweep, and updater-path evidence before broadening beta claims.
+- **Highest-value next action:** set `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` and generate a signed
+  updater manifest for the current-source signed/notarized DMG, rerun updater and clean-machine
+  evidence, then collect clean-machine first-run model setup, crash recovery, keyboard-only review,
+  Computer Use instructor sweep, and updater-path evidence before broadening beta claims.
 - The existing modification under `.omo/run-continuation/` is unrelated operational state; do not
   overwrite or commit it unless explicitly requested.

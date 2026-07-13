@@ -30,11 +30,11 @@ misrepresented as grading accuracy.
 | Performance | 1,500-word essay under 90 seconds on target memory floor | `engine/gates/perf.py --memory-floor 16` | PASS: 37.8 seconds in latest run | PASS artifact must be supplied to readiness report |
 | Desktop build | React build, unit tests, E2E workflow, Rust check pass | `scripts/frontend_evidence.py`, `cargo check` | PASS: 13 component tests, 4 E2E tests, build, and Rust check; frontend artifact records 16 visual-sweep screens and 167 controls | PASS artifact must be supplied to readiness report |
 | Accessibility | No serious/critical WCAG violations, 200% text scaling, keyboard-only loop | Playwright axe + visual inspection | PASS on synthetic fixture; visual sweep covers 16 screens and 167 visible controls | PASS mechanics; still requires clean-machine app check |
-| Computer Use instructor sweep | Signed app is inspected as an instructor using Computer Use, with screenshots/accessibility-tree notes for every visible screen and safe control path | `scripts/computer_use_sweep_evidence.py`, then `scripts/clean_machine_evidence.py` manual evidence | FAIL_STALE_ARTIFACT for the last signed-app sweep: Computer Use inspected 20 states from an older signed DMG and `computer_use_sweep_evidence.py` fails the captures because the review screen can show both "Your changes are approved" and "Teacher changes not saved yet"; the current-source local app/DMG build is fresh but unsigned and still needs a new signed-app sweep | Required for public beta; sign/notarize from current source, rerun the signed-app sweep on a clean machine, and include a PASS verifier JSON in clean-machine evidence |
-| Updater evidence | Signed updater manifest references the signed artifact and current version, passes macOS signature/notarization checks, and is fresh relative to the current source commit | `scripts/generate_appcast.py --signing-key ...`, then `scripts/updater_evidence.py` | BLOCKED_UPDATER_EVIDENCE: current-source local updater artifact is fresh, but the manifest is unsigned and the app artifact fails codesign/spctl because release signing credentials are unavailable | Required before clean-machine updater path |
-| Signing/notarization | Signed/notarized app or DMG passes codesign, stapler, spctl | `scripts/signing_doctor.py`, release script, clean Mac | BLOCKED: fresh local signing fails with `errSecInternalComponent`, and notarytool profile `grader` is unavailable; `sign_and_notarize.sh` now runs the doctor before mutating the app bundle; `signing_doctor.py --print-repair-runbook` emits local-only repair steps | PASS automated signing/notarization evidence; clean-machine behavior remains separate |
-| Clean-machine | First launch, model setup, crash recovery, keyboard review, Computer Use instructor sweep, updater N->N+1 | `scripts/clean_machine_evidence.py --print-manual-runbook`, then JSON from a clean Mac/VM with structured manual evidence notes, files, and release artifact hashes | BLOCKED: current-source local app/DMG/updater manifest are fresh, but release provenance still fails because the updater manifest is unsigned and the app/DMG are not signed/notarized; first-run models, crash recovery, keyboard-only review, Computer Use instructor sweep, and updater path are still missing | Required for public beta |
-| Release report | Consolidated verdict is `supervised_public_beta` | `scripts/release_readiness.py` | BLOCKED: signing credentials and clean-machine evidence are incomplete | Final release gate |
+| Computer Use instructor sweep | Signed app is inspected as an instructor using Computer Use, with screenshots/accessibility-tree notes for every visible screen and safe control path | `scripts/computer_use_sweep_evidence.py`, then `scripts/clean_machine_evidence.py` manual evidence | FAIL_STALE_ARTIFACT for the last signed-app sweep: Computer Use inspected 20 states from an older signed DMG and `computer_use_sweep_evidence.py` fails the captures because the review screen can show both "Your changes are approved" and "Teacher changes not saved yet"; the current-source local app/DMG is now signed/notarized but still needs a new signed-app sweep | Required for public beta; rerun the signed-app sweep on a clean machine and include a PASS verifier JSON in clean-machine evidence |
+| Updater evidence | Signed updater manifest references the signed artifact and current version, passes macOS signature/notarization checks, and is fresh relative to the current source commit | `scripts/generate_appcast.py --signing-key ...`, then `scripts/updater_evidence.py` | BLOCKED_UPDATER_EVIDENCE: current-source signed/notarized DMG is fresh, but the local updater manifest is unsigned because `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` is not available in this non-interactive run | Required before clean-machine updater path |
+| Signing/notarization | Signed/notarized app or DMG passes codesign, stapler, spctl | `scripts/signing_doctor.py`, release script, clean Mac | PASS locally: current-source app/DMG signed, notarized, stapled, and passed `codesign`/`stapler`/`spctl`; `sign_and_notarize.sh` runs the doctor before mutating the app bundle | Clean-machine behavior remains separate |
+| Clean-machine | First launch, model setup, crash recovery, keyboard review, Computer Use instructor sweep, updater N->N+1 | `scripts/clean_machine_evidence.py --print-manual-runbook`, then JSON from a clean Mac/VM with structured manual evidence notes, files, and release artifact hashes | BLOCKED: codesign/stapler/spctl checks now pass for the current-source app/DMG, but release provenance still fails because the updater manifest is unsigned; first-run models, crash recovery, keyboard-only review, Computer Use instructor sweep, and updater path are still missing | Required for public beta |
+| Release report | Consolidated verdict is `supervised_public_beta` | `scripts/release_readiness.py` | BLOCKED: signed updater manifest and clean-machine behavior evidence are incomplete | Final release gate |
 
 ## Required Manual Visual Sweep
 
@@ -55,8 +55,8 @@ The latest Playwright sweep is `PASS`. A local Computer Use sweep against an old
 was performed and is `FAIL_STALE_ARTIFACT`: the app could be inspected through onboarding, queue,
 settings, model manager, and review, but the packaged review screen still showed the old contradictory
 approved/unsaved state. That evidence is not accepted for public beta. The current-source local app
-and DMG have been rebuilt unsigned, so the next step is signing/notarizing from current source, rerunning
-the signed-app Computer Use sweep on a clean machine, and validating the captures with
+and DMG now sign, notarize, staple, and pass macOS signature checks, so the next step is rerunning
+the signed-app Computer Use sweep on a clean machine and validating the captures with
 `scripts/computer_use_sweep_evidence.py` before marking `computer_use_instructor_sweep` complete.
 For clean-machine evidence, each manual check must also set all check-specific `assertions` to
 `true`; generic screenshots or notes alone no longer satisfy the public-beta gate.
@@ -65,14 +65,14 @@ For clean-machine evidence, each manual check must also set all check-specific `
 
 Not public beta ready. The current anchored real-data public-proxy quality and fairness runs pass on
 Mohler ASAG, Canvas app-level score/comment round-trip passes, and citations are acceptable only in
-visibly experimental beta mode. The current-source local app/DMG build is fresh but unsigned, and
-updater evidence is blocked because the manifest is unsigned and the app fails codesign/spctl. The last
-signed-app Computer Use sweep also fails because it was captured from an older signed DMG with a stale
-review-state bug. The remaining public-beta blockers are working signing/notarization credentials, a
-signed/notarized artifact from current source, and clean-machine behavioral evidence: first-run model
-setup, crash recovery, keyboard-only review, Computer Use instructor sweep, and updater N→N+1. Run
-`uv run python scripts/signing_doctor.py --out artifacts/release-evidence/signing.json --no-fail`
-to refresh the local signing diagnostic artifact before a release attempt, and generate
+visibly experimental beta mode. The current-source local app/DMG is signed/notarized and passes
+macOS signature checks, but updater evidence is blocked because the local manifest is unsigned. The
+last signed-app Computer Use sweep also fails because it was captured from an older signed DMG with a
+stale review-state bug. The remaining public-beta blockers are a signed updater manifest plus
+clean-machine behavioral evidence: first-run model setup, crash recovery, keyboard-only review,
+Computer Use instructor sweep, and updater N→N+1. Set `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` before
+generating the release `latest.json`, refresh the local signing diagnostic artifact before release
+attempts, and generate
 `clean-machine-runbook.md` with `scripts/clean_machine_evidence.py --print-manual-runbook` before
 clean-Mac testing. Canvas rubric-assessment
 posting is intentionally disabled until real Canvas criterion IDs can be mapped, and attachment

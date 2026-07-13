@@ -10,9 +10,9 @@ from scripts import generate_appcast
 
 
 class Proc:
-    def __init__(self, stdout: str):
+    def __init__(self, stdout: str, stderr: str = ""):
         self.stdout = stdout
-        self.stderr = ""
+        self.stderr = stderr
 
 
 def test_generate_manifest_requires_signing_key_for_release(tmp_path):
@@ -59,6 +59,26 @@ def test_sign_file_uses_tauri_v2_private_key_path_command(tmp_path, monkeypatch)
         str(key),
         str(artifact),
     ]]
+
+
+def test_sign_file_hints_when_private_key_password_missing(tmp_path, monkeypatch, capsys):
+    artifact = tmp_path / "Grader.dmg"
+    key = tmp_path / "tauri-key.pem"
+    artifact.write_bytes(b"signed dmg")
+    key.write_text("fake key")
+
+    def fake_run(command, **_kwargs):
+        raise generate_appcast.subprocess.CalledProcessError(
+            returncode=1,
+            cmd=command,
+            stderr="incorrect updater private key password: Device not configured",
+        )
+
+    monkeypatch.setattr(generate_appcast.subprocess, "run", fake_run)
+
+    assert generate_appcast._sign_file(artifact, key) is None
+    output = capsys.readouterr().out
+    assert "TAURI_SIGNING_PRIVATE_KEY_PASSWORD" in output
 
 
 def test_generate_manifest_writes_signed_platform_manifest(tmp_path, monkeypatch):

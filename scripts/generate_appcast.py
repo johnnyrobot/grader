@@ -97,6 +97,11 @@ def _sign_file(path: Path, key_path: Path) -> str | None:
         return None
     except subprocess.CalledProcessError as e:
         print(f"WARN: signing failed: {e.stderr}")
+        if "password" in (e.stderr or "").lower():
+            print(
+                "  Hint: set TAURI_SIGNING_PRIVATE_KEY_PASSWORD for non-interactive release signing, "
+                "or pass --password when running `cargo tauri signer sign` manually."
+            )
         return None
 
 

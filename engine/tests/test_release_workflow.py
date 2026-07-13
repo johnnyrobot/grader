@@ -28,3 +28,17 @@ def test_release_workflow_uses_app_version_without_tag_prefix():
     assert 'VERSION="${GITHUB_REF_NAME#v}"' in text
     assert '--version "$VERSION"' in text
     assert "--version ${{ github.ref_name }}" not in text
+
+
+def test_release_workflow_materializes_updater_key_secret_as_file():
+    text = WORKFLOW.read_text()
+
+    assert "TAURI_SIGNING_KEY: ${{ secrets.TAURI_SIGNING_KEY }}" in text
+    assert (
+        "TAURI_SIGNING_PRIVATE_KEY_PASSWORD: "
+        "${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}"
+    ) in text
+    assert 'UPDATER_KEY_PATH="$RUNNER_TEMP/tauri-updater-key.pem"' in text
+    assert 'printf \'%s\' "$TAURI_SIGNING_KEY" > "$UPDATER_KEY_PATH"' in text
+    assert '--signing-key "$UPDATER_KEY_PATH"' in text
+    assert "--signing-key ${{ secrets.TAURI_SIGNING_KEY }}" not in text

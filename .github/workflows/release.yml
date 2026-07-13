@@ -47,13 +47,19 @@ jobs:
             --app-path app/src-tauri/target/release/bundle/macos/Grader.app
 
       - name: Generate updater manifest
+        env:
+          TAURI_SIGNING_KEY: ${{ secrets.TAURI_SIGNING_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
+          UPDATER_KEY_PATH="$RUNNER_TEMP/tauri-updater-key.pem"
+          printf '%s' "$TAURI_SIGNING_KEY" > "$UPDATER_KEY_PATH"
+          chmod 600 "$UPDATER_KEY_PATH"
           uv run python scripts/generate_appcast.py \
             --dmg app/src-tauri/target/release/bundle/dmg/Grader.dmg \
             --version "$VERSION" \
             --output latest.json \
-            --signing-key ${{ secrets.TAURI_SIGNING_KEY }} \
+            --signing-key "$UPDATER_KEY_PATH" \
             --release-url "https://github.com/laccd/grader/releases/download/${{ github.ref_name }}/Grader.dmg"
 
       - name: Create GitHub Release

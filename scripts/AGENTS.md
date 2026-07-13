@@ -58,8 +58,9 @@ scripts/
   codesign and spctl. It does not replace the clean-machine N→N+1 update test.
 - **`generate_appcast.py`**: despite the historical name, this creates Tauri `latest.json`
   manifests, not Sparkle XML. It fails closed without a Tauri updater signing key unless
-  `--allow-unsigned` is supplied for a non-release smoke fixture. `--app` zips the `.app` bundle
-  before signing the updater artifact.
+  `--allow-unsigned` is supplied for a non-release smoke fixture. Encrypted updater keys also need
+  `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` in non-interactive release runs. `--app` zips the `.app`
+  bundle before signing the updater artifact.
 - **`signing_doctor.py`**: run before `sign_and_notarize.sh`. It fail-closes on missing Developer
   ID certificates, inaccessible private keys, invalid notarytool profiles, and missing hardened
   runtime/updater config. Use `--print-repair-runbook` to generate local-only recovery commands for

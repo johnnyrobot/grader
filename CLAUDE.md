@@ -100,26 +100,23 @@ work.
 - Canvas: guarded live app-level E2E passes on `canvas.johnnyrobot.ai` course `106`, assignment
   `2841`: import, targeted grade for Canvas user `9`, teacher override/approval, post, Progress
   completed, score `2`, and one teacher feedback comment read back.
-- Release readiness: local report currently returns `blocked` for signing credentials, unsigned
-  updater/app artifacts, and clean-machine evidence. `scripts/updater_evidence.py` and
+- Release readiness: local report currently returns `blocked` for unsigned updater-manifest evidence
+  and clean-machine behavior evidence. `scripts/updater_evidence.py` and
   `scripts/clean_machine_evidence.py` now fail closed when the supplied `latest.json`, DMG, or app
-  predate the current git commit. The current local app/DMG build is fresh but unsigned; updater
-  evidence blocks on missing manifest signatures plus app codesign/spctl failures. The last signed-app
-  Computer Use sweep inspected 20 packaged app states from an older signed DMG and failed because
-  review approval still displayed both the approved message and "Teacher changes not saved yet."
-  `scripts/computer_use_sweep_evidence.py` turns signed-app Computer Use captures into PASS/FAIL
-  evidence and fails that stale capture set. Fresh local signing/notarization is blocked because
-  `codesign` returns `errSecInternalComponent` and notarytool profile `grader` is unavailable; run
-  `uv run python scripts/signing_doctor.py --print-repair-runbook` for local-only recovery steps.
-  After credentials are restored, rebuild/re-sign/notarize from current source, then rerun
+  predate the current git commit. The current local app/DMG build signs, notarizes, staples, and
+  passes macOS signature checks. Updater evidence now blocks only because the local `latest.json`
+  smoke manifest is unsigned; provide `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` for encrypted updater-key
+  signing. The last signed-app Computer Use sweep inspected 20 packaged app states from an older
+  signed DMG and failed because review approval still displayed both the approved message and
+  "Teacher changes not saved yet." `scripts/computer_use_sweep_evidence.py` turns signed-app
+  Computer Use captures into PASS/FAIL evidence and fails that stale capture set. Next rerun
   clean-machine first-run models, crash recovery, keyboard-only review, Computer Use instructor
   sweep, and updater path with structured manual evidence notes, screenshot/log paths, and all
   check-specific assertions set true. The Computer Use row must include a PASS sweep JSON.
 
-Before public beta: keep citation checks visibly experimental unless accuracy improves, restore
-signing/notarization credentials, regenerate release artifacts from the current source commit, and
-complete a signed/notarized clean-machine install plus first-run, crash-recovery, keyboard-only,
-Computer Use instructor-sweep, and updater tests. Canvas
+Before public beta: keep citation checks visibly experimental unless accuracy improves, sign the
+Tauri updater manifest, and complete a signed/notarized clean-machine install plus first-run,
+crash-recovery, keyboard-only, Computer Use instructor-sweep, and updater tests. Canvas
 rubric-assessment posting remains disabled until local rubric criteria can be mapped to real Canvas
 criterion IDs; attachment write-back still needs separate evidence.
 
