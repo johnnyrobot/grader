@@ -12,6 +12,7 @@ from scripts.clean_machine_evidence import (
     build_evidence,
     collect_checks,
     manual_evidence_template,
+    manual_evidence_runbook,
     validate_manual_evidence,
 )
 
@@ -58,6 +59,8 @@ def test_validate_manual_evidence_requires_notes_and_files(tmp_path):
     evidence = {
         "crash_recovery": {
             "passed": True,
+            "performed_at": "2026-07-13T12:00:00Z",
+            "tester": "QA",
             "notes": "Killed the engine and used Restart local engine.",
             "evidence_files": ["crash-recovery.png"],
         }
@@ -75,6 +78,8 @@ def test_validate_manual_evidence_rejects_missing_files(tmp_path):
     evidence = {
         name: {
             "passed": True,
+            "performed_at": "2026-07-13T12:00:00Z",
+            "tester": "QA",
             "notes": f"{name} checked",
             "evidence_files": [f"{name}.png"],
         }
@@ -92,6 +97,38 @@ def test_manual_evidence_template_covers_every_manual_check():
 
     assert set(template) == set(MANUAL_CHECKS)
     for name, row in template.items():
+        assert row["title"]
+        assert row["objective"]
+        assert row["steps"]
+        assert row["expected_result"]
         assert row["passed"] is False
         assert row["notes"] == ""
         assert row["evidence_files"]
+
+
+def test_validate_manual_evidence_rejects_missing_tester_and_timestamp(tmp_path):
+    screenshot = tmp_path / "first-run.png"
+    screenshot.write_text("fake image bytes")
+    evidence = {
+        "first_run_models": {
+            "passed": True,
+            "notes": "First run completed.",
+            "evidence_files": ["first-run.png"],
+        }
+    }
+
+    passed, details = validate_manual_evidence(evidence, evidence_root=tmp_path)
+
+    assert "first_run_models" not in passed
+    assert details["first_run_models"]["ok"] is False
+    assert details["first_run_models"]["tester"] == ""
+    assert details["first_run_models"]["performed_at"] == ""
+
+
+def test_manual_evidence_runbook_includes_every_manual_check():
+    runbook = manual_evidence_runbook()
+
+    assert "Grader Clean-Machine Evidence Runbook" in runbook
+    for name in MANUAL_CHECKS:
+        assert f"### `{name}`" in runbook
+    assert "--print-manual-template" in runbook

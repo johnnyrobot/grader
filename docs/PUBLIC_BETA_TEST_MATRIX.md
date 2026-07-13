@@ -32,7 +32,7 @@ misrepresented as grading accuracy.
 | Accessibility | No serious/critical WCAG violations, 200% text scaling, keyboard-only loop | Playwright axe + visual inspection | PASS on synthetic fixture; visual sweep covers 16 screens and 167 visible controls | PASS mechanics; still requires clean-machine app check |
 | Updater evidence | Signed updater manifest references the signed artifact and current version | `scripts/generate_appcast.py --signing-key ...`, then `scripts/updater_evidence.py` | BLOCKED: no signed `latest.json` release manifest is available in the current checkout; manifest generation now fails closed unless a Tauri updater signing key is supplied | Required before clean-machine updater path |
 | Signing/notarization | Signed/notarized app or DMG passes codesign, stapler, spctl | `scripts/signing_doctor.py`, release script, clean Mac | BLOCKED: fresh local signing fails with `errSecInternalComponent`, and notarytool profile `grader` is unavailable; `sign_and_notarize.sh` now runs the doctor before mutating the app bundle | PASS automated signing/notarization evidence; clean-machine behavior remains separate |
-| Clean-machine | First launch, model setup, crash recovery, keyboard review, updater N->N+1 | `scripts/clean_machine_evidence.py` JSON from a clean Mac/VM with structured manual evidence notes and files | BLOCKED: current local evidence is missing codesign/spctl plus first-run models, crash recovery, keyboard-only review, and updater path | Required for public beta |
+| Clean-machine | First launch, model setup, crash recovery, keyboard review, updater N->N+1 | `scripts/clean_machine_evidence.py --print-manual-runbook`, then JSON from a clean Mac/VM with structured manual evidence notes and files | BLOCKED: current local evidence is missing codesign/spctl plus first-run models, crash recovery, keyboard-only review, and updater path; clean-machine manual evidence now requires tester, timestamp, notes, and existing screenshot/log paths | Required for public beta |
 | Release report | Consolidated verdict is `supervised_public_beta` | `scripts/release_readiness.py` | BLOCKED: updater evidence, signing credentials, and clean-machine evidence are incomplete | Final release gate |
 
 ## Required Manual Visual Sweep
@@ -61,6 +61,8 @@ visibly experimental beta mode. The remaining public-beta blockers are fresh sig
 credentials, signed updater manifest evidence, plus clean-machine behavioral evidence: first-run
 model setup, crash recovery, keyboard-only review, and updater N→N+1. Run
 `uv run python scripts/signing_doctor.py --out artifacts/release-evidence/signing.json --no-fail`
-to refresh the local signing diagnostic artifact before a release attempt. Canvas rubric-assessment
+to refresh the local signing diagnostic artifact before a release attempt, and generate
+`clean-machine-runbook.md` with `scripts/clean_machine_evidence.py --print-manual-runbook` before
+clean-Mac testing. Canvas rubric-assessment
 posting is intentionally disabled until real Canvas criterion IDs can be mapped, and attachment
 write-back still needs separate evidence.

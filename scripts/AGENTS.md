@@ -53,9 +53,10 @@ scripts/
   runtime/updater config. Use `--skip-notary` only for explicit sign-only testing.
 - **`seed_canvas_sandbox.py`**: dry-run by default. `--apply` to write. Refuses courses without `ZZ-GRADER-TEST` marker.
 - **`clean_machine_evidence.py`**: cannot prove a clean-machine pass by itself. Generate the
-  evidence template with `--print-manual-template`, fill it on the clean Mac with notes plus
-  screenshot/log paths, then run with `--manual-evidence ... --evidence-root ...`. Manual flags
-  without evidence are legacy-only and should not be used for release claims.
+  tester runbook with `--print-manual-runbook` and the evidence template with
+  `--print-manual-template`. Fill it on the clean Mac with `passed: true`, `performed_at`, `tester`,
+  notes, and existing screenshot/log paths, then run with `--manual-evidence ... --evidence-root ...`.
+  Manual flags without evidence are legacy-only and should not be used for release claims.
 - Fake students use `ZZGraderTest` prefix + `.invalid` email domain (RFC 2606 — can never resolve)
 - Canvas credentials: env vars (`CANVAS_BASE_URL`, `CANVAS_API_TOKEN`) or canvas-pp-cli's `credentials.toml`
 

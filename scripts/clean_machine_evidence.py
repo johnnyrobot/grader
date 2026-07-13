@@ -42,6 +42,61 @@ MANUAL_CHECKS = (
     "updater_path",
 )
 
+CHECK_DEFINITIONS: dict[str, dict[str, object]] = {
+    "first_run_models": {
+        "title": "First-run model setup",
+        "objective": "Install Grader on a clean supported Mac and verify the first-run model flow completes without hidden terminal help.",
+        "steps": [
+            "Start from a user account without existing Grader app data or preinstalled grader-text/grader-vision Ollama tags.",
+            "Install the signed/notarized release artifact.",
+            "Launch Grader from Finder.",
+            "Complete onboarding through model readiness.",
+            "Confirm the app either downloads/installs required models or gives a clear resumable action.",
+        ],
+        "expected_result": "The teacher can reach the queue/review workflow with required models ready, or a clear non-crashing resumable model setup state.",
+        "suggested_files": ["first_run_models.png", "first_run_models.log"],
+    },
+    "crash_recovery": {
+        "title": "Local engine crash recovery",
+        "objective": "Prove the desktop app detects a local engine failure and recovers without losing the review context.",
+        "steps": [
+            "Launch the signed app and enter the queue/review workflow.",
+            "Force-stop the local Grader engine process.",
+            "Observe the visible recovery alert.",
+            "Use the in-app restart/retry action.",
+            "Confirm the queue/review state returns and the app remains usable.",
+        ],
+        "expected_result": "The app shows a readable recovery path, restarts the local engine, and preserves or safely reloads teacher work.",
+        "suggested_files": ["crash_recovery.png", "crash_recovery.log"],
+    },
+    "keyboard_only_review": {
+        "title": "Keyboard-only review flow",
+        "objective": "Verify an instructor can review, edit, approve, and return to the queue without using a mouse.",
+        "steps": [
+            "Launch the signed app.",
+            "Navigate from queue to a review item with Tab/Shift+Tab/Enter/Space and documented shortcuts.",
+            "Edit at least one score or feedback field.",
+            "Save or approve the draft.",
+            "Return to the queue using the keyboard only.",
+        ],
+        "expected_result": "Focus indicators are visible, tab order is logical, no trap occurs, and approval/edit actions are reachable by keyboard.",
+        "suggested_files": ["keyboard_only_review.png", "keyboard_only_review.log"],
+    },
+    "updater_path": {
+        "title": "Updater N-to-N+1 path",
+        "objective": "Verify the signed app can discover, download, install, and relaunch into an N+1 update using the signed latest.json manifest.",
+        "steps": [
+            "Install the signed N release on the clean Mac.",
+            "Host or publish a signed N+1 release artifact plus latest.json.",
+            "Launch N and trigger the update check.",
+            "Download/install the update through the app.",
+            "Relaunch and confirm the app version is N+1.",
+        ],
+        "expected_result": "The app updates through the Tauri updater path without Gatekeeper warnings or manual file replacement.",
+        "suggested_files": ["updater_path.png", "updater_path.log"],
+    },
+}
+
 
 Runner = Callable[..., subprocess.CompletedProcess[str]]
 
@@ -77,6 +132,8 @@ def validate_manual_evidence(
 
       {
         "passed": true,
+        "performed_at": "2026-07-13T12:00:00Z",
+        "tester": "initials or name",
         "notes": "what was verified",
         "evidence_files": ["relative/or/absolute/path.png"]
       }
@@ -96,6 +153,8 @@ def validate_manual_evidence(
             details[name] = {"ok": False, "reason": "missing manual evidence entry"}
             continue
 
+        performed_at = str(raw.get("performed_at") or "").strip()
+        tester = str(raw.get("tester") or "").strip()
         notes = str(raw.get("notes") or "").strip()
         evidence_files = raw.get("evidence_files") or []
         if isinstance(evidence_files, str):
@@ -112,6 +171,8 @@ def validate_manual_evidence(
 
         ok = (
             raw.get("passed") is True
+            and bool(performed_at)
+            and bool(tester)
             and bool(notes)
             and (not require_files or bool(evidence_files))
             and not missing_files
@@ -119,6 +180,8 @@ def validate_manual_evidence(
         details[name] = {
             "ok": ok,
             "passed": raw.get("passed") is True,
+            "performed_at": performed_at,
+            "tester": tester,
             "notes": notes,
             "evidence_files": evidence_files,
             "missing_files": missing_files,
@@ -132,17 +195,62 @@ def validate_manual_evidence(
 def manual_evidence_template() -> dict[str, object]:
     return {
         name: {
+            "title": str(CHECK_DEFINITIONS[name]["title"]),
+            "objective": str(CHECK_DEFINITIONS[name]["objective"]),
+            "steps": CHECK_DEFINITIONS[name]["steps"],
+            "expected_result": str(CHECK_DEFINITIONS[name]["expected_result"]),
             "passed": False,
             "performed_at": datetime.now(timezone.utc).isoformat(),
             "tester": "",
             "notes": "",
-            "evidence_files": [
-                f"{name}.png",
-                f"{name}.log",
-            ],
+            "evidence_files": CHECK_DEFINITIONS[name]["suggested_files"],
         }
         for name in MANUAL_CHECKS
     }
+
+
+def manual_evidence_runbook() -> str:
+    lines = [
+        "# Grader Clean-Machine Evidence Runbook",
+        "",
+        "Use this on a clean supported Mac or VM after producing a signed/notarized app or DMG.",
+        "Do not include student data, tokens, private keys, or Apple credentials in screenshots or logs.",
+        "",
+        "## Evidence workflow",
+        "",
+        "```bash",
+        "uv run python scripts/clean_machine_evidence.py --print-manual-template > clean-machine-manual-evidence.json",
+        "mkdir -p clean-machine-evidence",
+        "# Fill clean-machine-manual-evidence.json after completing the checks below.",
+        "uv run python scripts/clean_machine_evidence.py --app /Applications/Grader.app --dmg /path/to/Grader.dmg --manual-evidence clean-machine-manual-evidence.json --evidence-root clean-machine-evidence --out artifacts/release-evidence/clean-machine.json",
+        "```",
+        "",
+        "Every manual check must include `passed: true`, `performed_at`, `tester`, non-empty `notes`, and at least one existing evidence file.",
+        "",
+        "## Manual checks",
+        "",
+    ]
+    for name in MANUAL_CHECKS:
+        spec = CHECK_DEFINITIONS[name]
+        lines.extend([
+            f"### `{name}` — {spec['title']}",
+            "",
+            str(spec["objective"]),
+            "",
+            "Steps:",
+        ])
+        for index, step in enumerate(spec["steps"], start=1):
+            lines.append(f"{index}. {step}")
+        lines.extend([
+            "",
+            f"Expected result: {spec['expected_result']}",
+            "",
+            "Suggested evidence files:",
+        ])
+        for file_name in spec["suggested_files"]:  # type: ignore[index]
+            lines.append(f"- `{file_name}`")
+        lines.append("")
+    return "\n".join(lines).rstrip() + "\n"
 
 
 def collect_checks(
@@ -229,6 +337,8 @@ def main() -> None:
                         help="Resolve relative manual evidence files against this directory")
     parser.add_argument("--print-manual-template", action="store_true",
                         help="Print a clean-machine manual evidence JSON template and exit")
+    parser.add_argument("--print-manual-runbook", action="store_true",
+                        help="Print a clean-machine Markdown runbook and exit")
     parser.add_argument("--allow-manual-flags-without-evidence", action="store_true",
                         help="Legacy mode: count manual --first-run/--crash/etc flags without evidence files")
     parser.add_argument("--first-run-models", action="store_true")
@@ -239,6 +349,9 @@ def main() -> None:
 
     if args.print_manual_template:
         print(json.dumps(manual_evidence_template(), indent=2, sort_keys=True))
+        return
+    if args.print_manual_runbook:
+        print(manual_evidence_runbook(), end="")
         return
 
     manual_evidence = load_manual_evidence(args.manual_evidence)
