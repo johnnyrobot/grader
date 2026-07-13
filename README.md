@@ -82,8 +82,8 @@ Confirmed in the current checkout:
 - `scripts/release_readiness.py` writes a consolidated JSON/Markdown verdict with blocker
   summaries plus an end-to-end testing and evaluation matrix that maps public-beta requirements to
   evidence. With current local artifacts, the report is `blocked` on signing credentials and
-  clean-machine evidence: missing clean-machine codesign/spctl, release provenance, first-run
-  models, crash recovery, keyboard-only review, Computer Use instructor sweep, and updater path.
+  clean-machine evidence: missing clean-machine app codesign/spctl, first-run models, crash
+  recovery, keyboard-only review, Computer Use instructor sweep, and updater path.
 
 Public-beta blockers:
 

@@ -240,7 +240,7 @@ uv run python scripts/release_readiness.py --profile public_beta --expected-vers
 - **Public beta verdict:** not ready for unattended public testing with real student work. Limit
   current use to a developer-assisted alpha with synthetic or institution-approved test data.
 - **Highest-value next action:** restore signing/notarization credentials, then collect
-  clean-machine release provenance, first-run model setup, crash recovery,
+  clean-machine app codesign/spctl, first-run model setup, crash recovery,
   keyboard-only review, Computer Use instructor sweep, and updater-path evidence before broadening
   beta claims.
 - The existing modification under `.omo/run-continuation/` is unrelated operational state; do not
