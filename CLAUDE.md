@@ -102,18 +102,18 @@ work.
   completed, score `2`, and one teacher feedback comment read back.
 - Release readiness: local report currently returns `blocked` for clean-machine evidence. `scripts/updater_evidence.py` and
   `scripts/clean_machine_evidence.py` now fail closed when the supplied `latest.json`, DMG, or app
-  predate the current git commit. The current local app/DMG build signs, notarizes, staples, and
-  passes macOS signature checks. Updater evidence now blocks only because the local `latest.json`
-  smoke manifest is unsigned; provide `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` for encrypted updater-key
-  signing. The current local signed-app Computer Use sweep targets `/Applications/Grader.app` as
-  `com.grader.app` and passes with 73 accessibility/screenshot capture pairs; local keyboard-only
-  review also passes. Next collect clean-machine first-run models, crash recovery, and updater path
-  with structured manual evidence notes, screenshot/log paths, and all check-specific assertions set
-  true.
+  predate the current git commit. The latest local app/DMG build signs, notarizes, staples, and
+  passes macOS signature checks, but the final release artifact must be rebuilt after the last
+  committed source change. Updater evidence blocks because the local `latest.json` smoke manifest is
+  unsigned; provide `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` for encrypted updater-key signing. The latest
+  local signed-app Computer Use sweep targets `/Applications/Grader.app` as `com.grader.app` and
+  passes with 73 accessibility/screenshot capture pairs; local keyboard-only review, crash recovery,
+  and fresh-profile first-run model reconciliation also pass. Next rebuild after the final commit,
+  collect a signed updater manifest, and collect updater path evidence with structured manual evidence
+  notes, screenshot/log paths, and all check-specific assertions set true.
 
-Before public beta: keep citation checks visibly experimental unless accuracy improves, sign the
-Tauri updater manifest, and complete a signed/notarized clean-machine install plus first-run,
-crash-recovery, and updater tests. Canvas
+Before public beta: keep citation checks visibly experimental unless accuracy improves, rebuild from
+the final committed source, sign the Tauri updater manifest, and complete the updater path test. Canvas
 rubric-assessment posting remains disabled until local rubric criteria can be mapped to real Canvas
 criterion IDs; attachment write-back still needs separate evidence.
 

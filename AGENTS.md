@@ -239,11 +239,15 @@ package is a clean-Mac handoff bundle only; do not treat it as passing clean-mac
   performance gate passes at 38.3s per 1,500-word essay. Public-proxy quality/fairness release mode
   rejects the tiny committed mechanics fixtures. The local anchored 40-item Mohler ASAG public-proxy
   artifact passes quality at QWK 0.845 and passes fairness across all five perturbation families.
-  Updater/DMG/app evidence now fails closed when artifacts predate the current git commit. The current
+  Updater/DMG/app evidence now fails closed when artifacts predate the current git commit. The latest
   local app/DMG build signs, notarizes, staples, installs to `/Applications/Grader.app` as
-  `com.grader.app`, and passes macOS signature checks. The local signed-app Computer Use sweep now
-  passes with 73 accessibility/screenshot capture pairs, and local keyboard-only review evidence
-  passes through Tab/Enter, `E`, text entry, Command+Enter, Shift+Tab, and Enter back to queue.
+  `com.grader.app`, and passes macOS signature checks, but the final release artifact must be rebuilt
+  after the last committed source change. The local signed-app Computer Use sweep now
+  passes with 73 accessibility/screenshot capture pairs, local keyboard-only review evidence
+  passes through Tab/Enter, `E`, text entry, Command+Enter, Shift+Tab, and Enter back to queue,
+  local crash recovery evidence passes by force-stopping the engine sidecar and restarting it
+  from the visible recovery alert, and local fresh-profile first-run evidence passes through
+  onboarding, engine readiness, queue reachability, and installed-model reconciliation.
   `scripts/computer_use_sweep_evidence.py` still fails stale capture sets and clean-machine evidence
   requires a PASS sweep JSON. The remaining updater blocker is providing
   `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` for encrypted updater-key signing; run
@@ -251,14 +255,14 @@ package is a clean-Mac handoff bundle only; do not treat it as passing clean-mac
   or `scripts/signing_doctor.py --print-repair-runbook` for local-only recovery commands if it
   regresses. The release-readiness JSON/Markdown now includes an end-to-end public-beta matrix that
   maps requirements to evidence. Teacher-local validation still requires authorized instructor data,
-  and clean-machine first-run, crash-recovery, and updater-path checks still need release validation.
+  and the signed updater manifest plus updater-path checks still need release validation.
 - **Coverage:** Python collects 142 cases (130 pass, 12 skip). Frontend has 14 passing component
   tests plus four passing Playwright E2E tests.
 - **Public beta verdict:** not ready for unattended public testing with real student work. Limit
   current use to a developer-assisted alpha with synthetic or institution-approved test data.
 - **Highest-value next action:** set `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`, run
-  `scripts/updater_key_doctor.py`, generate a signed updater manifest for the current-source
-  signed/notarized DMG, rerun updater and clean-machine evidence, then collect clean-machine first-run
-  model setup, crash recovery, and updater-path evidence before broadening beta claims.
+  `scripts/updater_key_doctor.py`, rebuild/sign/notarize the app and DMG after the final commit,
+  generate a signed updater manifest for that fresh signed/notarized DMG, rerun updater and
+  clean-machine evidence, then collect updater-path evidence before broadening beta claims.
 - The existing modification under `.omo/run-continuation/` is unrelated operational state; do not
   overwrite or commit it unless explicitly requested.

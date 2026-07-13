@@ -85,11 +85,11 @@ Confirmed in the current checkout:
   Progress completed → score `2` and one teacher feedback comment read back.
 - `scripts/release_readiness.py` writes a consolidated JSON/Markdown verdict with blocker
   summaries plus an end-to-end testing and evaluation matrix that maps public-beta requirements to
-  evidence. With current local artifacts, the report is `blocked`: the current-source local app/DMG
-  signs, notarizes, staples, and passes macOS signature checks, but updater evidence blocks because
-  the manifest is unsigned; clean-machine behavior evidence is still missing for first-run models,
-  crash recovery, and updater path. Local signed-app evidence now covers keyboard-only review and
-  the Computer Use instructor sweep.
+  evidence. With current local artifacts, the report is `blocked`: the latest local app/DMG signs,
+  notarizes, staples, and passes macOS signature checks, but release provenance still requires a
+  rebuild from the final committed source plus a signed updater manifest, and the updater N→N+1 path
+  is still missing. Local signed-app evidence now covers fresh-profile first-run model reconciliation,
+  crash recovery, keyboard-only review, and the Computer Use instructor sweep.
 
 Public-beta blockers:
 
@@ -97,11 +97,12 @@ Public-beta blockers:
 2. Keep Canvas rubric-assessment posting disabled until local rubric criteria can be mapped to real
    Canvas criterion IDs; score/comment round-trip is validated, attachment write-back still needs
    separate evidence.
-3. Provide the Tauri updater private-key password through `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` so
-   `latest.json` can be signed, then validate the signed/notarized DMG on a clean supported Mac,
-   including first-run model setup, crash recovery, and updater behavior. The current local
-   signed-app Computer Use sweep and keyboard-only review path pass against `/Applications/Grader.app`
-   installed as `com.grader.app`; rerun them if the release bundle identity changes.
+3. Provide the Tauri updater private-key password through `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`, rebuild
+   from the final committed source so app/DMG/latest.json evidence is fresh, sign `latest.json`, then
+   validate the signed/notarized DMG on a clean supported Mac, including updater behavior. The current
+   local signed-app fresh-profile first-run, crash recovery, Computer Use sweep, and keyboard-only
+   review path pass against `/Applications/Grader.app` installed as `com.grader.app`; rerun those
+   checks if the release bundle identity changes.
 4. Keep teacher-local validation separate until an instructor supplies authorized historical grading.
 5. Complete a supervised private pilot before opening enrollment publicly.
 
