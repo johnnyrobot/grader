@@ -89,17 +89,16 @@ class EgressResult:
 
 
 def _capture_connections(duration: float = 10.0) -> list[dict]:
-    """Capture network connections from Python processes.
+    """Capture network connections from this gate's Python process.
 
-    Uses lsof -i to capture all connections, then filters to processes that
-    belong to the current Python interpreter (by matching process name).
-    System processes (Chrome, Spotlight, iCloud) are excluded.
+    Uses lsof -i and filters by the current PID. Matching only the process
+    name is unsafe on shared CI runners because unrelated Python services can
+    create false FERPA violations.
     """
     connections: list[dict] = []
     seen: set[str] = set()
     deadline = time.monotonic() + duration
     my_pid = str(__import__("os").getpid())
-    python_names = {"python", "python3", "Python"}
 
     while time.monotonic() < deadline:
         try:
@@ -112,7 +111,8 @@ def _capture_connections(duration: float = 10.0) -> list[dict]:
                 if len(parts) < 9:
                     continue
                 name = parts[0]
-                if name not in python_names:
+                pid = parts[1]
+                if pid != my_pid:
                     continue
                 dest = parts[8] if len(parts) > 8 else ""
                 if "->" not in dest:
@@ -120,10 +120,10 @@ def _capture_connections(duration: float = 10.0) -> list[dict]:
                 dest = dest.split("->")[-1]
                 if not dest:
                     continue
-                key = f"{name}:{dest}"
+                key = f"{pid}:{dest}"
                 if key not in seen:
                     seen.add(key)
-                    connections.append({"process": name, "destination": dest})
+                    connections.append({"process": name, "pid": int(pid), "destination": dest})
         except Exception:
             continue
         time.sleep(0.5)
@@ -184,6 +184,7 @@ def _run_grading_batch(duration: float) -> list[dict]:
     Spawns network activity (citation verification + Ollama health check) in a
     background thread while capturing connections from the main process.
     """
+    import socket
     import threading
 
     def _generate_traffic() -> None:
@@ -203,12 +204,24 @@ def _run_grading_batch(duration: float) -> list[dict]:
         except Exception:
             pass
 
-    traffic_thread = threading.Thread(target=_generate_traffic, daemon=True)
-    traffic_thread.start()
-
-    connections = _capture_connections(duration)
-    traffic_thread.join(timeout=5)
-    return connections
+    # Keep one loopback connection open for the full capture window. This is a
+    # capture-health sentinel: without it, short HTTP requests can finish before
+    # the first lsof poll and a broken capture would be reported as SKIP.
+    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server.bind(("127.0.0.1", 0))
+    server.listen(1)
+    client = socket.create_connection(server.getsockname(), timeout=2)
+    accepted, _address = server.accept()
+    try:
+        traffic_thread = threading.Thread(target=_generate_traffic, daemon=True)
+        traffic_thread.start()
+        connections = _capture_connections(duration)
+        traffic_thread.join(timeout=5)
+        return connections
+    finally:
+        accepted.close()
+        client.close()
+        server.close()
 
 
 def run_egress_gate(
