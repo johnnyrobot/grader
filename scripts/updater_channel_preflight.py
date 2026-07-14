@@ -19,6 +19,7 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 import httpx
 
@@ -51,6 +52,14 @@ def _version_gt(candidate: str, current: str) -> bool:
 
 def _artifact_name_from_url(url: str) -> str:
     return url.rstrip("/").rsplit("/", 1)[-1]
+
+
+def _github_release_repo(url: str) -> str | None:
+    parsed = urlparse(url)
+    parts = [part for part in parsed.path.split("/") if part]
+    if parsed.netloc != "github.com" or len(parts) < 2:
+        return None
+    return f"{parts[0]}/{parts[1]}"
 
 
 def _content_length(headers: httpx.Headers) -> int | None:
@@ -120,6 +129,7 @@ def collect(
     updater = config.get("plugins", {}).get("updater", {})
     endpoints = updater.get("endpoints") or []
     url = manifest_url or (endpoints[0] if endpoints else "")
+    release_repo = _github_release_repo(url)
 
     failures: list[str] = []
     details: dict[str, Any] = {
@@ -128,6 +138,7 @@ def collect(
         "current_version": current,
         "configured_endpoints": endpoints,
         "manifest_url": url,
+        "release_repo": release_repo,
         "expected_artifact_name": expected_artifact_name,
         "probe_artifacts": probe_artifacts,
     }
@@ -135,6 +146,9 @@ def collect(
     if not url:
         failures.append("updater manifest URL is not configured")
         manifest: dict[str, Any] = {}
+    elif not release_repo:
+        failures.append("updater manifest URL is not a GitHub release channel")
+        manifest = {}
     else:
         try:
             response = httpx.get(url, timeout=timeout, follow_redirects=True)
@@ -183,8 +197,11 @@ def collect(
             failures.append(
                 f"manifest platform {platform} artifact {artifact_name!r} does not match expected {expected_artifact_name!r}"
             )
-        if "github.com/johnnyrobot/grader/releases/download/" not in artifact_url:
-            failures.append(f"manifest platform {platform} URL is not in the johnnyrobot/grader release channel")
+        expected_prefix = f"https://github.com/{release_repo}/releases/download/" if release_repo else ""
+        if not expected_prefix or expected_prefix not in artifact_url:
+            failures.append(
+                f"manifest platform {platform} URL is not in the configured {release_repo or 'GitHub'} release channel"
+            )
         if artifact_url and probe_artifacts:
             probe = _probe_artifact_url(artifact_url, timeout=timeout)
             platform_details[platform]["artifact_probe"] = probe

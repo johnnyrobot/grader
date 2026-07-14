@@ -1,16 +1,17 @@
-name: Release
+name: Release Source Verification
 
 on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  build:
-    name: Build + Sign + Notarize
+  verify:
+    name: Verify release source
     runs-on: macos-latest
     timeout-minutes: 45
     steps:
@@ -24,19 +25,20 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
-      - name: Install Python deps
+      - name: Install Python dependencies
         run: uv sync
 
-      - name: Verify release version
-        run: |
-          uv run python scripts/release_version_guard.py \
-            --tag "${GITHUB_REF_NAME}" \
-            --out artifacts/release-evidence/release-version.json
+      - name: Verify tag version
+        if: startsWith(github.ref, 'refs/tags/')
+        run: >-
+          uv run python scripts/release_version_guard.py
+          --tag "${GITHUB_REF_NAME}"
+          --out artifacts/release-evidence/release-version.json
 
       - name: Run Python tests
         run: uv run pytest engine/tests/ -q
 
-      - name: Install frontend deps
+      - name: Install frontend dependencies
         working-directory: app
         run: npm install
 
@@ -52,92 +54,7 @@ jobs:
         working-directory: app
         run: npx tauri build --bundles app --no-sign --ci
 
-      - name: Import Developer ID certificate
-        env:
-          APPLE_CERTIFICATE_P12_BASE64: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-        run: |
-          CERT_PATH="$RUNNER_TEMP/developer-id.p12"
-          KEYCHAIN_PATH="$RUNNER_TEMP/grader-signing.keychain-db"
-          KEYCHAIN_PASSWORD="$(openssl rand -hex 32)"
-
-          python3 -c 'import base64, os, sys; sys.stdout.buffer.write(base64.b64decode(os.environ["APPLE_CERTIFICATE_P12_BASE64"]))' > "$CERT_PATH"
-          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
-          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-          security import "$CERT_PATH" \
-            -P "$APPLE_CERTIFICATE_PASSWORD" \
-            -A \
-            -t cert \
-            -f pkcs12 \
-            -k "$KEYCHAIN_PATH"
-          security list-keychains -d user -s "$KEYCHAIN_PATH" login.keychain-db
-          security set-key-partition-list \
-            -S apple-tool:,apple:,codesign: \
-            -s \
-            -k "$KEYCHAIN_PASSWORD" \
-            "$KEYCHAIN_PATH"
-          rm -f "$CERT_PATH"
-
-      - name: Sign and notarize
-        env:
-          SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-          KEYCHAIN_PROFILE: grader
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        run: |
-          # Store notarytool credentials if not already stored
-          xcrun notarytool store-credentials "$KEYCHAIN_PROFILE" \
-            --apple-id "$APPLE_ID" \
-            --password "$APPLE_APP_SPECIFIC_PASSWORD" \
-            --team-id "$APPLE_TEAM_ID" || true
-
-          ./scripts/sign_and_notarize.sh --dmg \
-            --app-path app/src-tauri/target/release/bundle/macos/Grader.app
-
-      - name: Generate updater manifest
-        env:
-          TAURI_SIGNING_KEY: ${{ secrets.TAURI_SIGNING_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        run: |
-          VERSION="${GITHUB_REF_NAME#v}"
-          UPDATER_KEY_PATH="$RUNNER_TEMP/tauri-updater-key.pem"
-          printf '%s' "$TAURI_SIGNING_KEY" > "$UPDATER_KEY_PATH"
-          chmod 600 "$UPDATER_KEY_PATH"
-          uv run python scripts/generate_appcast.py \
-            --dmg app/src-tauri/target/release/bundle/dmg/Grader.dmg \
-            --version "$VERSION" \
-            --output latest.json \
-            --signing-key "$UPDATER_KEY_PATH" \
-            --release-url "https://github.com/johnnyrobot/grader/releases/download/${{ github.ref_name }}/Grader.dmg"
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: |
-            app/src-tauri/target/release/bundle/dmg/Grader.dmg
-            latest.json
-          draft: false
-          prerelease: ${{ contains(github.ref_name, 'beta') }}
-          body: |
-            ## Grader ${{ github.ref_name }}
-
-            ### Installation
-            1. Download Grader.dmg
-            2. Drag Grader.app to Applications
-            3. Launch — no Gatekeeper warning (signed + notarized)
-            4. Complete the first-run wizard (Canvas token + rubric)
-
-            ### System Requirements
-            - macOS 13+ (Ventura or later)
-            - 16 GB RAM minimum
-            - Ollama installed (`brew install ollama`)
-
-            ### What's included
-            - Full grading engine (Pydantic AI + Ollama)
-            - Canvas integration (import + post grades)
-            - Document parsing (PDF, DOCX, handwriting)
-            - Citation verification (4-layer ladder)
-            - Annotated feedback export
-            - Network egress audit (privacy gate)
+      - name: Explain release boundary
+        run: >-
+          echo "Apple signing/notarization and public asset publication run locally through
+          scripts/sign_and_notarize.sh and scripts/publish_local_release.py."

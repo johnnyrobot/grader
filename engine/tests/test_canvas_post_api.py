@@ -233,6 +233,6 @@ def test_updates_check_route_is_not_shadowed_by_audit_route(monkeypatch, api_mod
 
     result = api.check_updates()
 
-    assert captured["url"] == "https://github.com/johnnyrobot/grader/releases/latest/download/latest.json"
+    assert captured["url"] == "https://github.com/johnnyrobot/grader-releases/releases/latest/download/latest.json"
     assert result["update_available"] is True
     assert result["latest_version"] == "0.1.1"

@@ -41,26 +41,20 @@ three you gave 4s"), and it ships zero per-teacher model artifacts. LoRA fine-tu
 | **P2** App shell + UX | 🟢 **Implemented and evidence-backed.** Neuroinclusive light-first UI covers onboarding, queue, review, settings, and model manager. Frontend evidence passes with 15 component tests, 4 Playwright E2E tests, 16 visual-sweep screens, 47 required controls, and 167 visible controls. |
 | **P3** Canvas round-trip | 🟢 **Score/comment beta scope passes.** Guarded live app E2E on `canvas.johnnyrobot.ai` course `106`, assignment `2841`: import → teacher override/approval → post → Progress completed → score/comment read-back. Rubric-assessment posting remains disabled until local criteria map to real Canvas criterion IDs; attachment write-back still needs separate release evidence. |
 | **P4** Documents & citations | 🟡 **Built; citations are experimental.** parse.py, handwriting.py, writeback.py, citations.py built. Citation fixture rerun is 20/29 (69%), 0 false positives, 3/3 retractions caught; acceptable only when visibly labeled experimental until enabled-mode accuracy reaches >=90%. |
-| **P5** Hardening & release | 🟡 **Blocked by signing/notarization, GitHub release preflight, updater evidence/channel, and clean-machine updater path.** Public-proxy quality/fairness pass on the anchored Mohler ASAG artifact; privacy, performance, frontend, Rust, and release-version pass. Current `scripts/release_readiness.py` verdict is `blocked`: `signing=BLOCKED_SIGNING_CREDENTIALS` because Developer ID private-key access fails with `errSecInternalComponent` and notarytool profile `grader` is missing, `github_release=BLOCKED_GITHUB_RELEASE_PREFLIGHT` because required GitHub Actions release secrets are missing, `updater=BLOCKED_UPDATER_EVIDENCE` because `latest.json` is still 0.1.0/stale and the encrypted updater key password is unavailable, `updater_channel=BLOCKED_UPDATER_CHANNEL` because GitHub `latest.json` returns HTTP 404, and `clean_machine=BLOCKED_CLEAN_MACHINE_EVIDENCE` because release provenance/updater N→N+1 evidence is missing. |
+| **P5** Hardening & release | 🟡 **Blocked by fresh updater evidence/channel and clean-machine updater path.** Public-proxy quality/fairness, privacy, performance, frontend, Rust, release-version, local Apple signing/notarization, updater-key signing, and the private-source/public-assets GitHub preflight pass. The remaining blockers are stale `latest.json`, an empty public `johnnyrobot/grader-releases` channel, and missing clean-machine N→N+1 evidence. |
 
 ### The very next command
 
 ```bash
 cd /Users/laccd/code/grader
-uv run python scripts/updater_channel_preflight.py --current-version 0.1.0 --out artifacts/release-evidence/updater-channel-current.json
-uv run python scripts/github_release_secrets.py --print-runbook > github-release-secrets-runbook.md
 uv run python scripts/bump_release_version.py --target-version 0.1.1 --allow-same --out artifacts/release-evidence/version-bump-plan.json
-uv run python scripts/updater_key_doctor.py --print-private-runbook > updater-key-private-runbook.md
 uv run python scripts/github_release_preflight.py --candidate-tag v0.1.1 --out artifacts/release-evidence/github-release-preflight-current.json --no-fail
+uv run python scripts/updater_key_doctor.py --signing-key tauri-updater-key.pem --password-keychain-service TAURI_SIGNING_PRIVATE_KEY_PASSWORD --password-keychain-account grader-updater --out artifacts/release-evidence/updater-key-current.json
 ```
 
-Today `scripts/github_release_secrets.py` should print a private-shell runbook for configuring the
-Developer ID `.p12`, Apple notarization credentials, and Tauri updater key.
-`scripts/bump_release_version.py --allow-same` should now pass as an idempotency check for the
-prepared 0.1.1 metadata. The GitHub release preflight should return
-`BLOCKED_GITHUB_RELEASE_PREFLIGHT` until the required Actions secrets are configured, and the
-updater key private runbook gives both env-var and macOS Keychain paths for regenerating signed
-0.1.1 `latest.json` without exposing the updater password. The updater-channel preflight should return
+`scripts/bump_release_version.py --allow-same` should pass as an idempotency check for the prepared
+0.1.1 metadata. The GitHub release preflight and updater-key doctor now return `PASS` without Apple
+credentials in GitHub. The updater-channel preflight should return
 `BLOCKED_UPDATER_CHANNEL` until a signed N+1 GitHub release publishes `latest.json` and the
 reachable signed `Grader.dmg` asset. After both pass, run the clean-machine in-app `Install update
 and restart` path and record `updater_path` evidence. Do **not** claim public beta readiness until

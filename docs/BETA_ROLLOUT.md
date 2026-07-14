@@ -28,12 +28,13 @@
 - [ ] Models pulled: `grader-text:8b`, `nomic-embed-text`
 - [ ] `./scripts/make_models.sh` run (context-capped variants)
 - [ ] Grader.app launches without Gatekeeper warning
-- [ ] GitHub Actions release secrets are configured from a private shell:
-      `uv run python scripts/github_release_secrets.py --print-runbook`
+- [ ] Local Developer ID signing, stored `notarytool` profile, and updater Keychain probe pass;
+      no Apple certificate export or Apple password is stored in GitHub
 - [ ] N+1 version metadata is prepared in the release-prep commit:
       `uv run python scripts/bump_release_version.py --target-version <N+1> --apply`
 - [ ] GitHub release publication preflight passes before tagging/publishing N+1:
       `uv run python scripts/github_release_preflight.py --candidate-tag v<N+1>`
+- [ ] Locally signed assets publish through `scripts/publish_local_release.py --apply`
 - [ ] Release channel preflight passes:
       `uv run python scripts/updater_channel_preflight.py --current-version <installed-version>`
 - [ ] Clean-machine updater path evidence exists for in-app N→N+1 update and restart

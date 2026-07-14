@@ -14,7 +14,7 @@
 
 ### Download (when available)
 
-1. Download `Grader.dmg` from the [latest release](https://github.com/johnnyrobot/grader/releases)
+1. Download `Grader.dmg` from the [public releases channel](https://github.com/johnnyrobot/grader-releases/releases/latest)
 2. Open the DMG, drag Grader.app to Applications
 3. Launch Grader — no Gatekeeper warning (signed + notarized)
 

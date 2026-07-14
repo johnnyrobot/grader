@@ -35,13 +35,11 @@ per-teacher model to train.
 🚧 **Developer-assisted alpha; not ready for an unattended public beta.** The engine and desktop
 review workflow work, including the neuroinclusive light-first interface and the tiered
 release-gate machinery. Public-proxy quality/fairness pass and Canvas score/comment round-trip is
-validated. The current signing doctor blocks on Developer ID private-key access
-(`errSecInternalComponent`) and a missing notarytool keychain profile `grader`, so fresh
-codesigning/notarization/stapling is blocked until local Apple signing credentials are repaired.
-Signed updater-manifest regeneration is also blocked until the updater-key
-password is supplied in a private shell or Keychain. Public beta is still blocked by GitHub
-release-publication setup, the live updater channel, and clean-machine updater N→N+1 behavioral
-validation.
+validated. Local Developer ID signing/notarization passes, the updater key was rotated before any
+public release and its password is stored in macOS Keychain, and the read-only public-release
+preflight passes against the separate public `johnnyrobot/grader-releases` channel. Public beta is
+still blocked until fresh signed assets are published and the clean-machine updater N→N+1 behavior
+is validated.
 
 | | |
 |---|---|
@@ -53,9 +51,9 @@ validation.
 | Document parsing + handwriting | 🟡 Built — Docling + Apple Vision + grader-vision |
 | Citation verification | 🟡 20/29 correct (69%); retraction check 3/3; accepted only as visibly experimental until accuracy reaches the enabled-mode gate |
 | CI gates | 🟢 Privacy PASS; perf PASS; public-proxy quality/fairness PASS; teacher-local still unvalidated |
-| GitHub release preflight | 🔴 Missing required Actions secrets for signed/notarized updater releases |
-| Updater evidence | 🟡 Signed `latest.json` regeneration is blocked until the updater-key password is provided in a private shell or Keychain; current `latest.json` is stale/0.1.0 |
-| Signing + notarization | 🔴 Fresh signing/notarization preflight blocks on Developer ID private-key access and missing notarytool profile `grader` |
+| GitHub release preflight | 🟢 PASS — private source repo + public assets repo; no Apple `.p12` or hosted signing secrets required |
+| Updater evidence | 🟡 Updater key/password probe passes; current `latest.json` is stale/0.1.0 until the fresh bundle is generated |
+| Signing + notarization | 🟢 PASS — Developer ID private key and stored `grader` notarytool profile verified |
 | Updates | 🟡 Tauri updater integrated with signed manifest generation and in-app install/restart UI; real N→N+1 path still needs release-channel evidence |
 | Beta rollout | ⬜ Blocked until release-readiness report returns `supervised_public_beta` |
 
@@ -70,7 +68,7 @@ beta with real student work.
 
 Confirmed in the current checkout:
 
-- Python tests: 190 passed, 12 intentionally skipped.
+- Python tests: 191 passed, 12 intentionally skipped.
 - Frontend tests: 15 passed; TypeScript/Vite production build and Rust `cargo check` pass.
 - The complete mocked desktop workflow passes in Playwright across onboarding, queue, review,
   settings, model management, and local-engine recovery. The visual sweep now fail-closes unless it
@@ -90,14 +88,12 @@ Confirmed in the current checkout:
   least one teacher feedback comment read back.
 - `scripts/release_readiness.py` writes a consolidated JSON/Markdown verdict with blocker
   summaries plus an end-to-end testing and evaluation matrix that maps public-beta requirements to
-  evidence. With current local artifacts, the report is `blocked`: fresh signing/notarization
-  preflight is blocked by Developer ID private-key access and the missing `grader` notarytool
-  profile. Local signed-app
+  evidence. With current local artifacts, the report is `blocked`, although the signing doctor,
+  updater-key doctor, and public-release publication preflight now pass. Local signed-app
   evidence covers fresh-profile first-run model reconciliation, crash recovery, keyboard-only review,
-  and the Computer Use instructor sweep. The remaining release blockers are the missing GitHub
-  Actions release secrets, stale/missing signed updater evidence (`latest.json` is still 0.1.0), the
-  missing live GitHub updater channel (`latest.json` currently 404s), and the clean-machine in-app
-  updater N→N+1 path.
+  and the Computer Use instructor sweep. The remaining release blockers are stale/missing signed
+  updater evidence (`latest.json` is still 0.1.0), the empty public updater channel, and the
+  clean-machine in-app updater N→N+1 path.
 
 Public-beta blockers:
 
@@ -105,11 +101,10 @@ Public-beta blockers:
 2. Keep Canvas rubric-assessment posting disabled until local rubric criteria can be mapped to real
    Canvas criterion IDs; score/comment round-trip is validated, attachment write-back still needs
    separate evidence.
-3. Add the required GitHub Actions release secrets with
-   `scripts/github_release_secrets.py` in a private shell, including the Developer ID certificate
-   `.p12` export and Tauri updater key, then require
-   `scripts/bump_release_version.py --target-version <N+1> --apply` and
-   `scripts/github_release_preflight.py --candidate-tag v<N+1>` to pass before tagging/publishing.
+3. Keep Apple signing/notarization local using the verified Developer ID identity and `grader`
+   Keychain profile. Require `scripts/bump_release_version.py --target-version <N+1> --apply` and
+   `scripts/github_release_preflight.py --candidate-tag v<N+1>` to pass before publishing; no
+   certificate `.p12` export or Apple password belongs in GitHub.
 4. Publish a signed N+1 GitHub updater channel whose `latest.json` advertises reachable signed
    `Grader.dmg` release assets, then validate the updater N→N+1 path on a clean supported Mac
    against that signed `latest.json` and
@@ -171,17 +166,13 @@ uv run python scripts/dev_mock_engine.py  # optional: safe synthetic backend for
 uv run python scripts/signing_doctor.py --out artifacts/release-evidence/signing.json --no-fail
 uv run python scripts/signing_doctor.py --print-repair-runbook > signing-repair-runbook.md  # local-only recovery steps if the doctor blocks
 uv run python scripts/release_version_guard.py --tag v0.1.1 --out artifacts/release-evidence/release-version.json
-uv run python scripts/github_release_secrets.py --print-runbook > github-release-secrets-runbook.md
-uv run python scripts/github_release_secrets.py --out artifacts/release-evidence/github-release-secrets-current.json  # dry-run inventory; use --apply only in a private release shell
-# If the updater-key password is in macOS Keychain, add:
-#   --updater-password-keychain-service TAURI_SIGNING_PRIVATE_KEY_PASSWORD --updater-password-keychain-account grader-updater
 uv run python scripts/bump_release_version.py --target-version 0.1.1 --allow-same --out artifacts/release-evidence/version-bump-plan.json  # dry-run/idempotency check; use --apply only when preparing a future release commit
 uv run python scripts/github_release_preflight.py --candidate-tag v0.1.1 --out artifacts/release-evidence/github-release-preflight-current.json --no-fail
 uv run python scripts/updater_key_doctor.py --print-private-runbook > updater-key-private-runbook.md
-export TAURI_SIGNING_PRIVATE_KEY_PASSWORD='<updater-key-password>'  # private shell only; or use the Keychain commands from the runbook
-uv run python scripts/updater_key_doctor.py --signing-key /path/to/tauri-updater-key.pem --out artifacts/release-evidence/updater-key-current.json
-uv run python scripts/generate_appcast.py --dmg /path/to/Grader.dmg --version 0.1.1 --signing-key /path/to/tauri-updater-key.pem --output latest.json
+uv run python scripts/updater_key_doctor.py --signing-key tauri-updater-key.pem --password-keychain-service TAURI_SIGNING_PRIVATE_KEY_PASSWORD --password-keychain-account grader-updater --out artifacts/release-evidence/updater-key-current.json
+uv run python scripts/generate_appcast.py --dmg /path/to/Grader.dmg --version 0.1.1 --signing-key tauri-updater-key.pem --password-keychain-service TAURI_SIGNING_PRIVATE_KEY_PASSWORD --password-keychain-account grader-updater --output latest.json
 uv run python scripts/updater_evidence.py --manifest latest.json --artifact /path/to/Grader.dmg --out artifacts/release-evidence/updater-current.json  # fails if local artifacts predate the current git commit
+uv run python scripts/publish_local_release.py --dmg /path/to/Grader.dmg --manifest latest.json --version 0.1.1  # dry-run; add --apply only after all local evidence passes
 uv run python scripts/updater_channel_preflight.py --current-version 0.1.0 --out artifacts/release-evidence/updater-channel-current.json  # run after publishing 0.1.1 to test installed 0.1.0 -> 0.1.1
 uv run python scripts/live_canvas_e2e.py --apply --course-id 106 --assignment-id 2841 --course-name "ZZ-GRADER-TEST-SANDBOX (safe to delete)" --output artifacts/release-evidence/canvas-live-current.json
 uv run python scripts/clean_machine_evidence.py --print-manual-runbook > clean-machine-runbook.md
@@ -236,19 +227,15 @@ and fails PASS updater or clean-machine artifacts that do not match the evaluate
 reports a different version. `scripts/bump_release_version.py` is the dry-run-first helper for
 moving those eight surfaces together before an N+1 release commit: Tauri config, Rust crate and
 lockfile, frontend package and lockfile, Python project, engine launcher `GRADER_APP_VERSION`, and
-the dev mock update fixture. The
-app is still not public-beta ready until GitHub release publication, signed-updater-channel, and
-clean-machine release behavior evidence pass. Use
-`scripts/github_release_secrets.py --print-runbook` to prepare the Developer ID certificate and
-release secrets without exposing values, then use
+the dev mock update fixture. The app is still not public-beta ready until public release
+publication, signed-updater-channel, and clean-machine release behavior evidence pass. Use
 `scripts/bump_release_version.py --target-version <N+1> --apply` in the release-prep commit and
 `scripts/github_release_preflight.py --candidate-tag v<N+1>` before creating the release tag so
-missing Actions secrets, version drift, missing release publish permissions, missing publish-time
-tests, or stale tag/release state are caught without writing to GitHub. The GitHub release workflow
-runs Python tests, frontend component tests, Rust `cargo check`, and the Tauri build before
-importing the Developer ID `.p12` into a temporary runner keychain for signing. It also requests
-`contents: write` for release asset upload; a local signing identity name alone is not enough on
-`macos-latest`. Use
+private/public repository access, version drift, missing release-source tests, or stale tag/release
+state are caught without writing to GitHub. The GitHub workflow verifies Python tests, frontend
+component tests, Rust `cargo check`, and an unsigned Tauri build; Apple signing/notarization stays
+on the maintainer Mac. `scripts/publish_local_release.py --apply` uploads only the verified DMG,
+signed `latest.json`, checksums, and source provenance to the public assets repository. Use
 `scripts/updater_key_doctor.py` to verify the updater key/password before regenerating
 `latest.json`, and use `scripts/updater_channel_preflight.py` after publishing N+1 to confirm the
 live release channel advertises a signed newer, reachable `Grader.dmg` before clean-machine updater

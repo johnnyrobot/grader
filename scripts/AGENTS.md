@@ -14,8 +14,9 @@ scripts/
 ├── frontend_evidence.py        # collect component/build/E2E/visual-sweep release artifact
 ├── bump_release_version.py     # dry-run-first N+1 version metadata updater
 ├── release_version_guard.py    # fail closed when tag/app/runtime versions drift
-├── github_release_secrets.py   # guarded GitHub Actions release-secret setup
-├── github_release_preflight.py # read-only GitHub release publication readiness
+├── github_release_secrets.py   # optional legacy hosted-runner secret helper
+├── github_release_preflight.py # read-only local-sign/public-assets readiness
+├── publish_local_release.py    # guarded upload of verified public release assets
 ├── signing_doctor.py           # diagnose Developer ID private-key and notarytool readiness
 ├── updater_key_doctor.py       # diagnose Tauri updater private-key/password readiness
 ├── generate_appcast.py         # generate signed Tauri updater latest.json manifests
@@ -37,8 +38,9 @@ scripts/
 | Collect frontend release evidence | `frontend_evidence.py` | Runs component tests, production build, managed Playwright E2E, and validates visual-sweep screenshots/control coverage |
 | Prepare N+1 version | `bump_release_version.py` | Dry-run-first helper that moves Tauri config, Rust crate/lockfile, frontend package/lockfile, Python project, engine launcher, and dev mock update fixture together |
 | Guard release version | `release_version_guard.py` | Requires the release tag/version to match Tauri config, Rust crate/lockfile, frontend package/lockfile, Python project, engine launcher, and dev mock update fixture before publishing assets |
-| Set GitHub release secrets | `github_release_secrets.py` | Dry-run inventory and explicit `--apply` path for Developer ID certificate, Apple notarization, and Tauri updater secrets; never prints secret values |
-| Preflight GitHub release publication | `github_release_preflight.py` | Read-only check for GitHub repo access, updater endpoint, release workflow, required Actions secrets, and optional N+1 tag/release availability |
+| Optional hosted-runner secrets | `github_release_secrets.py` | Legacy/optional helper; the selected local-signing release path does not require a `.p12` export or Apple secrets in GitHub |
+| Preflight GitHub release publication | `github_release_preflight.py` | Read-only check for private source/public assets repo access, updater endpoint, release-source workflow, and optional N+1 tag/release availability |
+| Publish locally signed assets | `publish_local_release.py` | Dry-run by default; guarded `--apply` uploads DMG, signed `latest.json`, checksums, and source provenance to `johnnyrobot/grader-releases` |
 | Diagnose signing credentials | `signing_doctor.py` | Writes `artifacts/release-evidence/signing.json`; probes Developer ID private-key access and notarytool profile before signing; `--print-repair-runbook` emits secret-free local recovery steps |
 | Diagnose updater key | `updater_key_doctor.py` | Writes `artifacts/release-evidence/updater-key-current.json`; signs a tiny temp file to verify the Tauri updater key and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`, either from a private env var or a named macOS Keychain item |
 | Generate updater manifest | `generate_appcast.py` | Requires `--signing-key` for release manifests; can read encrypted-key password from a private env var or named macOS Keychain item; use `--allow-unsigned` only for local smoke fixtures |
@@ -78,24 +80,18 @@ scripts/
   signing, or publishing operations.
 - **`github_release_preflight.py`**: run before creating or pushing the N+1 release tag:
   `uv run python scripts/github_release_preflight.py --candidate-tag v<N+1>`.
-  It is read-only: it checks `gh` access, the configured updater endpoint, release workflow
-  presence, release upload permission (`contents: write`), publish-time Python/frontend/Rust/Tauri
-  checks, required Actions secrets, release-version consistency, recent releases, and optional
-  candidate tag/release availability without creating tags, releases, assets, or secrets. A stale
-  inactive GitHub account
-  can be a warning if the active account can read the target repo, but missing release secrets block
-  public beta.
-- **`github_release_secrets.py`**: use this before the preflight when GitHub Actions secrets are
-  missing. `--print-runbook` emits private-shell setup steps. Dry-run mode writes a secret-free JSON
-  inventory. `--apply` writes available values with `gh secret set` via stdin so values do not appear
-  in command arguments. Required secrets include the Developer ID `.p12` as base64, its password,
-  Apple notarization credentials, signing identity, and the encrypted Tauri updater key/password. It
-  can read `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` from a named macOS Keychain item with
-  `--updater-password-keychain-service TAURI_SIGNING_PRIVATE_KEY_PASSWORD --updater-password-keychain-account grader-updater`
-  so the updater-key password does not need to be exported or pasted. Never paste those values into
-  chat or commit generated runbooks containing filled values. When Keychain lookup is requested, the
-  generated JSON includes secret-free diagnostics such as service/account/return code so a wrong or
-  missing Keychain item is visible without printing the password.
+  It is read-only: it checks `gh` access, the configured public updater repository, source and
+  release repo access, release-source Python/frontend/Rust/Tauri checks, release-version
+  consistency, and optional candidate tag/release availability. Apple signing/notarization is local
+  and requires no GitHub Actions secrets. A stale inactive GitHub account can be a warning when the
+  active account can read both repositories.
+- **`publish_local_release.py`**: use after local signing, notarization, signed-manifest generation,
+  and updater evidence. It is dry-run by default and `--apply` fails closed unless `latest.json`
+  contains signed macOS entries targeting the exact public release tag. It uploads only the DMG,
+  manifest, SHA-256 checksums, and source provenance; never the updater private key or passwords.
+- **`github_release_secrets.py`**: retained only for a future hosted-runner signing design. It is not
+  part of the selected public-beta path and should not be used merely because a local `.p12`
+  password does not exist.
 - **`updater_evidence.py`**: blocks public beta when `latest.json` is missing, any platform
   signature is empty, the manifest does not reference the supplied artifact, the supplied
   manifest/artifact predates the current git commit, or the local artifact fails

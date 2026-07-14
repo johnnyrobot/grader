@@ -77,7 +77,7 @@ def test_build_package_copies_artifacts_and_writes_runbook_template(tmp_path):
     assert template["computer_use_instructor_sweep"]["assertions"]
     readme = (out / "README.md").read_text()
     assert "TAURI_SIGNING_PRIVATE_KEY_PASSWORD" in readme
-    assert "github-release-secrets-runbook.md" in readme
+    assert "publish_local_release.py" in readme
     assert "updater-key-private-runbook.md" in readme
     assert "release_version_guard.py" in readme
     assert "github_release_preflight.py" in readme

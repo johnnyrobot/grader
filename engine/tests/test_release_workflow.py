@@ -5,49 +5,31 @@ ROOT = Path(__file__).parents[2]
 WORKFLOW = ROOT / ".github" / "workflows" / "release.yml"
 
 
-def test_release_workflow_builds_tauri_bundle_before_signing():
+def test_release_workflow_verifies_source_without_apple_secrets():
     text = WORKFLOW.read_text()
 
-    assert "permissions:\n  contents: write" in text
+    assert "permissions:\n  contents: read" in text
     assert "run: uv sync" in text
     assert "run: uv run pytest engine/tests/ -q" in text
     assert "run: npm test -- --run" in text
     assert "run: cargo check" in text
     assert "npx tauri build --bundles app --no-sign --ci" in text
-    assert "working-directory: app/src-tauri\n        run: cargo build --release" not in text
+    assert "APPLE_CERTIFICATE_P12_BASE64" not in text
+    assert "APPLE_CERTIFICATE_PASSWORD" not in text
+    assert "APPLE_APP_SPECIFIC_PASSWORD" not in text
+    assert "softprops/action-gh-release" not in text
 
 
-def test_release_workflow_passes_signing_script_env_names():
+def test_release_workflow_runs_version_guard_for_tags():
     text = WORKFLOW.read_text()
 
-    assert "APPLE_CERTIFICATE_P12_BASE64: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}" in text
-    assert "APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}" in text
-    assert "security import \"$CERT_PATH\"" in text
-    assert "security set-key-partition-list" in text
-    assert "SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}" in text
-    assert "KEYCHAIN_PROFILE: grader" in text
-    assert "APPLE_SIGNING_IDENTITY:" not in text
-    assert "APPLE_KEYCHAIN_PROFILE:" not in text
-    assert 'store-credentials "$KEYCHAIN_PROFILE"' in text
+    assert "if: startsWith(github.ref, 'refs/tags/')" in text
+    assert 'scripts/release_version_guard.py' in text
+    assert '--tag "${GITHUB_REF_NAME}"' in text
 
 
-def test_release_workflow_uses_app_version_without_tag_prefix():
+def test_release_workflow_documents_local_publication_boundary():
     text = WORKFLOW.read_text()
 
-    assert 'VERSION="${GITHUB_REF_NAME#v}"' in text
-    assert '--version "$VERSION"' in text
-    assert "--version ${{ github.ref_name }}" not in text
-
-
-def test_release_workflow_materializes_updater_key_secret_as_file():
-    text = WORKFLOW.read_text()
-
-    assert "TAURI_SIGNING_KEY: ${{ secrets.TAURI_SIGNING_KEY }}" in text
-    assert (
-        "TAURI_SIGNING_PRIVATE_KEY_PASSWORD: "
-        "${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}"
-    ) in text
-    assert 'UPDATER_KEY_PATH="$RUNNER_TEMP/tauri-updater-key.pem"' in text
-    assert 'printf \'%s\' "$TAURI_SIGNING_KEY" > "$UPDATER_KEY_PATH"' in text
-    assert '--signing-key "$UPDATER_KEY_PATH"' in text
-    assert "--signing-key ${{ secrets.TAURI_SIGNING_KEY }}" not in text
+    assert "scripts/sign_and_notarize.sh" in text
+    assert "scripts/publish_local_release.py" in text

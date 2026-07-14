@@ -78,7 +78,6 @@ uv run python engine/gates/perf.py --memory-floor 16
 uv run python engine/verify_citations.py --fixtures fixtures/citations/citation_fixtures.json --output artifacts/citation-results.json
 uv run python scripts/live_canvas_e2e.py --dry-run
 uv run python scripts/release_version_guard.py --tag v0.1.1 --out artifacts/release-evidence/release-version.json
-uv run python scripts/github_release_secrets.py --print-runbook > github-release-secrets-runbook.md
 uv run python scripts/bump_release_version.py --target-version 0.1.1 --allow-same --out artifacts/release-evidence/version-bump-plan.json  # dry-run/idempotency check; use --apply only in future release-prep commits
 uv run python scripts/github_release_preflight.py --candidate-tag v0.1.1 --out artifacts/release-evidence/github-release-preflight-current.json --no-fail
 uv run python scripts/updater_channel_preflight.py --current-version 0.1.0 --out artifacts/release-evidence/updater-channel-current.json
@@ -105,12 +104,11 @@ work.
 - Canvas: guarded live app-level E2E passes on `canvas.johnnyrobot.ai` course `106`, assignment
   `2841`: import, targeted grade for Canvas user `9`, teacher override/approval, post, Progress
   completed, score `2`, and one teacher feedback comment read back.
-- Release readiness: local report currently returns `blocked` for three release/update blockers:
-  `github_release=BLOCKED_GITHUB_RELEASE_PREFLIGHT` because required GitHub Actions release secrets
-  are missing, including the Developer ID certificate `.p12` export needed by `macos-latest`,
-  `updater_channel=BLOCKED_UPDATER_CHANNEL` because the configured GitHub `latest.json`
-  returns HTTP 404, and `clean_machine=BLOCKED_CLEAN_MACHINE_EVIDENCE` because `updater_path` is
-  still missing. `scripts/bump_release_version.py`, `scripts/release_version_guard.py`,
+- Release readiness: local Apple signing/notarization, updater-key signing, and the
+  private-source/public-assets GitHub preflight pass. The report remains blocked until a fresh
+  signed manifest/DMG is published to the currently empty public channel and
+  `clean_machine=BLOCKED_CLEAN_MACHINE_EVIDENCE` receives real `updater_path` evidence.
+  `scripts/bump_release_version.py`, `scripts/release_version_guard.py`,
   `scripts/github_release_preflight.py`,
   `scripts/updater_evidence.py`,
   `scripts/updater_channel_preflight.py`, and `scripts/clean_machine_evidence.py` now fail closed on
@@ -120,16 +118,15 @@ work.
   signed-app Computer Use sweep targets `/Applications/Grader.app` as `com.grader.app` and passes
   with 73 accessibility/screenshot capture pairs. Local keyboard-only review, crash recovery,
   fresh-profile first-run model reconciliation, and the native updater install/restart UI also pass
-  static/build checks. Next add required GitHub Actions release secrets with
-  `scripts/github_release_secrets.py` in a private shell, apply
-  `scripts/bump_release_version.py --target-version <N+1>` in the release-prep commit, require
-  GitHub release preflight PASS for the N+1 candidate, publish a signed N+1 release channel, require
+  static/build checks. Local Developer ID signing/notarization, updater-key signing, and the
+  private-source/public-assets GitHub preflight pass without a certificate `.p12` export. Next
+  publish locally signed N+1 assets with `scripts/publish_local_release.py --apply`, require
   updater-channel preflight PASS, then collect clean-machine in-app updater-path evidence with
   structured manual evidence notes, screenshot/log paths, and all check-specific assertions set
   true.
 
-Before public beta: keep citation checks visibly experimental unless accuracy improves, add GitHub
-release secrets, publish the signed updater channel, and complete the clean-machine updater path
+Before public beta: keep citation checks visibly experimental unless accuracy improves, publish the
+locally signed updater channel, and complete the clean-machine updater path
 test. Canvas rubric-assessment posting remains disabled until local rubric criteria can be mapped to
 real Canvas criterion IDs; attachment write-back still needs separate evidence.
 

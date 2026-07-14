@@ -977,7 +977,7 @@ def check_updates() -> dict:
     import httpx
     try:
         r = httpx.get(
-            "https://github.com/johnnyrobot/grader/releases/latest/download/latest.json",
+            "https://github.com/johnnyrobot/grader-releases/releases/latest/download/latest.json",
             timeout=10,
         )
         if r.status_code != 200:

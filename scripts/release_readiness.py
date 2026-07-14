@@ -420,24 +420,22 @@ def build_next_actions(evidence: dict[str, Any]) -> list[dict[str, Any]]:
     if blocked("github_release"):
         actions.append({
             "gate": "github_release",
-            "title": "Configure and verify GitHub Actions release secrets in a private shell.",
+            "title": "Verify the public release repository and local publication path.",
             "commands": [
-                "uv run python scripts/github_release_secrets.py --print-runbook > github-release-secrets-runbook.md",
-                (
-                    "uv run python scripts/github_release_secrets.py "
-                    "--tauri-signing-key tauri-updater-key.pem "
-                    "--updater-password-keychain-service TAURI_SIGNING_PRIVATE_KEY_PASSWORD "
-                    "--updater-password-keychain-account grader-updater "
-                    "--out artifacts/release-evidence/github-release-secrets-current.json"
-                ),
                 (
                     f"uv run python scripts/github_release_preflight.py --candidate-tag v{expected_version} "
                     "--out artifacts/release-evidence/github-release-preflight-current.json --no-fail"
                 ),
+                (
+                    "uv run python scripts/publish_local_release.py "
+                    "--dmg app/src-tauri/target/release/bundle/dmg/Grader.dmg "
+                    "--manifest latest.json "
+                    f"--version {expected_version}"
+                ),
             ],
             "notes": [
-                "Do not paste Apple passwords, .p12 passwords, updater-key passwords, or private keys into chat.",
-                "Use --apply for github_release_secrets.py only after the dry-run reports no missing values.",
+                "Apple signing/notarization stays on the maintainer Mac and does not require a .p12 export.",
+                "The publisher is dry-run by default; use --apply only after signing and updater evidence pass.",
             ],
         })
 

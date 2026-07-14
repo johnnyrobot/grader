@@ -126,18 +126,18 @@ Current readiness verdict: `{summary.get('readiness_verdict', 'unknown')}`
    it only in the release-prep commit, then require `scripts/release_version_guard.py --tag v<N+1>`
    to pass so the tag, app bundle, Rust crate/lockfile, frontend package/lockfile, Python project,
    engine launcher, and dev mock update fixture agree on the release version.
-3. Configure GitHub Actions release secrets in a private shell with
-   `scripts/github_release_secrets.py`; see `github-release-secrets-runbook.md`. The workflow
-   imports the Developer ID `.p12` into a temporary runner keychain before signing. If the encrypted
-   updater-key password (`TAURI_SIGNING_PRIVATE_KEY_PASSWORD`) is stored in macOS Keychain, use the runbook's
-   `--updater-password-keychain-service ... --updater-password-keychain-account ...` path so the
-   password does not need to be pasted or exported.
+3. Verify the local Developer ID identity, stored `notarytool` profile, and encrypted updater key.
+   Apple signing/notarization stays on the maintainer Mac; no Developer ID `.p12` export or Apple
+   password is uploaded to GitHub. The updater-key password (`TAURI_SIGNING_PRIVATE_KEY_PASSWORD`)
+   may remain in macOS Keychain and be read
+   through `--password-keychain-service ... --password-keychain-account ...`.
 4. Run `scripts/github_release_preflight.py --candidate-tag v<N+1>` and require `status=PASS`
-   before creating the tag or publishing assets. This verifies GitHub auth, the configured updater
-   endpoint, release workflow, required Actions secrets, candidate version consistency, and
+   before creating the tag or publishing assets. This verifies GitHub auth, the private source repo,
+   public assets repo, updater endpoint, release-source workflow, candidate version consistency, and
    tag/release availability without writing to GitHub.
 5. Publish a signed N+1 DMG and signed `latest.json` to the configured GitHub release channel:
-   `https://github.com/johnnyrobot/grader/releases/latest/download/latest.json`.
+   `https://github.com/johnnyrobot/grader-releases/releases/latest/download/latest.json`.
+   Use `scripts/publish_local_release.py --apply`; it also uploads checksums and source provenance.
    Follow `updater-key-private-runbook.md` to verify the updater key/password and regenerate
    signed updater evidence without printing or committing the password.
 6. Run `uv run python scripts/updater_channel_preflight.py --current-version <installed-N-version>`

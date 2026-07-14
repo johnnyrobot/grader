@@ -500,8 +500,8 @@ def test_write_reports(tmp_path):
     assert "Open human-scored public-proxy quality gate" in markdown
     assert "Blocking Items" in markdown
     assert "Next Actions" in markdown
-    assert "github_release_secrets.py --print-runbook" in markdown
-    assert "--updater-password-keychain-service" in markdown
+    assert "publish_local_release.py" in markdown
+    assert "--password-keychain-service" in markdown
 
 
 def test_build_next_actions_maps_release_blockers_to_secret_safe_commands():
