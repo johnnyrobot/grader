@@ -247,7 +247,7 @@ package is a clean-Mac handoff bundle only; do not treat it as passing clean-mac
 - **P4 in progress:** parse/transcribe/write-back/citation modules exist. The 2026-07-12 citation
   rerun scored 20/29 (69%), with 0 false positives and 3/3 retractions caught; enabled mode still
   fails the >=90% phase goal, so beta readiness accepts it only as visibly experimental.
-- **P5 in progress:** privacy passes in isolation (3/3 captured connections allowlisted) and the
+- **P5 supervised-beta gate complete:** privacy passes in isolation (3/3 captured connections allowlisted) and the
   performance gate passes at 37.8s per 1,500-word essay. Public-proxy quality/fairness release mode
   rejects the tiny committed mechanics fixtures. The local anchored 40-item Mohler ASAG public-proxy
   artifact passes quality at QWK 0.845 and passes fairness across all five perturbation families.
@@ -264,19 +264,20 @@ package is a clean-Mac handoff bundle only; do not treat it as passing clean-mac
   `scripts/computer_use_sweep_evidence.py` still fails stale capture sets and clean-machine evidence
   requires a PASS sweep JSON. The encrypted updater key was rotated before public release, the public
   key/config now target `github.com/johnnyrobot/grader-releases`, and the Keychain-backed password
-  probe passes. Signed `latest.json` regeneration still awaits the final rebuilt artifact. The queue UI has a native Tauri
-  install/restart update action. The release-readiness JSON/Markdown now
+  probe passes. The public 0.1.1 release now serves a signed Tauri-compatible
+  `Grader.app.tar.gz`, DMG, `latest.json`, checksums, and source provenance. The queue UI's native
+  install/restart action completed a signed/notarized 0.1.0 → 0.1.1 download, install, and relaunch.
+  The release-readiness JSON/Markdown now
   includes an end-to-end public-beta matrix that maps requirements to evidence. Teacher-local
   validation still requires authorized instructor data. The local-sign/public-assets GitHub release
-  preflight passes; fresh updater assets and the updater-path check still need release validation.
-- **Coverage:** Python collects 204 passing cases with the locked dev extra installed. Frontend has 15 passing component
+  preflight and public updater-channel check pass.
+- **Coverage:** Python collects 208 passing cases with the locked dev extra installed. Frontend has 15 passing component
   tests plus four passing Playwright E2E tests.
-- **Public beta verdict:** not ready for unattended public testing with real student work. Limit
-  current use to a developer-assisted alpha with synthetic or institution-approved test data.
-- **Highest-value next action:** rebuild/sign/notarize the final artifact, generate signed updater
-  evidence using the Keychain-backed updater password, publish through
-  `scripts/publish_local_release.py --apply` to `johnnyrobot/grader-releases`, and exercise the
-  in-app updater path on a clean supported Mac, then add structured `updater_path` manual evidence
-  before broadening beta claims.
+- **Public beta verdict:** ready for a supervised public beta under the two-tier evidence standard;
+  all 19 matrix rows pass and citations are explicitly `PASS_EXPERIMENTAL`. This is not an
+  unattended or teacher-specific accuracy claim.
+- **Highest-value next action:** recruit a small supervised instructor cohort, collect
+  institution-authorized teacher-local calibration evidence, and rerun the signed updater path for
+  every future release.
 - The existing modification under `.omo/run-continuation/` is unrelated operational state; do not
   overwrite or commit it unless explicitly requested.

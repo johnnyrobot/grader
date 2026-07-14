@@ -691,7 +691,8 @@ def _normalize_updater_channel_artifact(path: Path | None, expected_version: str
         channel,
         expected_version=expected_version,
         pairs=[
-            ("details.current_version", details.get("current_version")),
+            ("details.config_version", details.get("config_version")),
+            ("details.manifest_version", details.get("manifest_version")),
         ],
     )
 

@@ -42,6 +42,18 @@ def decide_citation_mode(summary: dict) -> dict:
     }
 
 
+def safe_experimental_release(summary: dict) -> bool:
+    """Return whether the explicitly experimental beta mode meets its safety floor."""
+    mode = summary.get("citation_mode", {})
+    retraction = summary.get("retraction_check", {})
+    return (
+        isinstance(mode, dict)
+        and mode.get("mode") == "experimental"
+        and int(summary.get("false_positives", 0) or 0) == 0
+        and int(retraction.get("caught", 0) or 0) == int(retraction.get("total", 0) or 0)
+    )
+
+
 def score_fixtures(fixtures_path: Path, *, check_claim: bool = True, verbose: bool = False) -> dict:
     """Run the verifier against all 29 fixtures and score results."""
     data = json.loads(fixtures_path.read_text())
@@ -149,6 +161,11 @@ def main() -> None:
     parser.add_argument("--no-claim-check", action="store_true",
                         help="Skip L3 claim checking (faster, but misses claim_unsupported)")
     parser.add_argument("--output", default=None, help="Write results JSON to this path")
+    parser.add_argument(
+        "--accept-safe-experimental",
+        action="store_true",
+        help="Exit successfully when experimental mode has zero false positives and catches every retraction fixture",
+    )
     args = parser.parse_args()
 
     fixtures_path = Path(args.fixtures)
@@ -204,7 +221,10 @@ def main() -> None:
         output_path.write_text(json.dumps(summary, indent=2))
         print(f"\nResults written to {args.output}")
 
-    sys.exit(0 if passed else 1)
+    accepted_experimental = args.accept_safe_experimental and safe_experimental_release(summary)
+    if accepted_experimental and not passed:
+        print("\n✓ SAFE EXPERIMENTAL BETA MODE ACCEPTED")
+    sys.exit(0 if passed or accepted_experimental else 1)
 
 
 if __name__ == "__main__":

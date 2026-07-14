@@ -11,6 +11,7 @@ from scripts.release_readiness import (
     _normalize_citation_artifact,
     _normalize_clean_machine_artifact,
     _normalize_updater_artifact,
+    _normalize_updater_channel_artifact,
     _normalize_updater_key_artifact,
     _signing_preflight,
     build_e2e_matrix,
@@ -347,6 +348,22 @@ def test_normalize_updater_artifact_rejects_missing_version_fields(tmp_path):
     assert updater["status"] == "FAIL"
     assert "details.expected_version is missing" in updater["version_mismatches"]
     assert "details.manifest_version is missing" in updater["version_mismatches"]
+
+
+def test_normalize_updater_channel_accepts_older_installed_baseline(tmp_path):
+    artifact = tmp_path / "updater-channel.json"
+    artifact.write_text(json.dumps({
+        "status": "PASS",
+        "details": {
+            "config_version": "0.1.1",
+            "current_version": "0.1.0",
+            "manifest_version": "0.1.1",
+        },
+    }))
+
+    channel = _normalize_updater_channel_artifact(artifact, "0.1.1")
+
+    assert channel["status"] == "PASS"
 
 
 def test_normalize_updater_key_artifact_missing_is_non_blocking_skip(tmp_path):

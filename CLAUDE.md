@@ -87,10 +87,10 @@ uv run python scripts/release_readiness.py --profile public_beta --expected-vers
 ## Current Evidence
 
 As of 2026-07-13, Grader is suitable only for a developer-assisted alpha using synthetic or
-institution-approved test data. It is not ready for an unattended public beta with real student
-work.
+institution-approved test data. It is ready for a supervised public beta under the two-tier
+evidence standard, but not for an unattended teacher-specific accuracy claim.
 
-- Python: 179 passed, 12 skipped.
+- Python: 208 passed.
 - Frontend: 15 component tests and four Playwright E2E tests pass, including a 16-screen visual
   sweep with 167 visible controls recorded.
 - Privacy: PASS in isolation, 3/3 captured connections allowlisted.
@@ -104,10 +104,9 @@ work.
 - Canvas: guarded live app-level E2E passes on `canvas.johnnyrobot.ai` course `106`, assignment
   `2841`: import, targeted grade for Canvas user `9`, teacher override/approval, post, Progress
   completed, score `2`, and one teacher feedback comment read back.
-- Release readiness: local Apple signing/notarization, updater-key signing, and the
-  private-source/public-assets GitHub preflight pass. The report remains blocked until a fresh
-  signed manifest/DMG is published to the currently empty public channel and
-  `clean_machine=BLOCKED_CLEAN_MACHINE_EVIDENCE` receives real `updater_path` evidence.
+- Release readiness: `supervised_public_beta`, with all 19 matrix rows passing. Local Apple
+  signing/notarization, updater-key signing, the private-source/public-assets GitHub preflight,
+  public `Grader.app.tar.gz` update channel, and the signed 0.1.0 → 0.1.1 in-app update/relaunch pass.
   `scripts/bump_release_version.py`, `scripts/release_version_guard.py`,
   `scripts/github_release_preflight.py`,
   `scripts/updater_evidence.py`,
@@ -119,15 +118,11 @@ work.
   with 73 accessibility/screenshot capture pairs. Local keyboard-only review, crash recovery,
   fresh-profile first-run model reconciliation, and the native updater install/restart UI also pass
   static/build checks. Local Developer ID signing/notarization, updater-key signing, and the
-  private-source/public-assets GitHub preflight pass without a certificate `.p12` export. Next
-  publish locally signed N+1 assets with `scripts/publish_local_release.py --apply`, require
-  updater-channel preflight PASS, then collect clean-machine in-app updater-path evidence with
-  structured manual evidence notes, screenshot/log paths, and all check-specific assertions set
-  true.
+  private-source/public-assets GitHub preflight pass without a certificate `.p12` export.
 
-Before public beta: keep citation checks visibly experimental unless accuracy improves, publish the
-locally signed updater channel, and complete the clean-machine updater path
-test. Canvas rubric-assessment posting remains disabled until local rubric criteria can be mapped to
+During supervised beta: keep citation checks visibly experimental unless accuracy improves, rerun
+the signed updater path for every release, and keep teacher-local calibration claims separate.
+Canvas rubric-assessment posting remains disabled until local rubric criteria can be mapped to
 real Canvas criterion IDs; attachment write-back still needs separate evidence.
 
 ## Working-Tree Caution

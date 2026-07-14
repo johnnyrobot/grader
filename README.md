@@ -32,14 +32,11 @@ per-teacher model to train.
 
 ## Status
 
-🚧 **Developer-assisted alpha; not ready for an unattended public beta.** The engine and desktop
-review workflow work, including the neuroinclusive light-first interface and the tiered
-release-gate machinery. Public-proxy quality/fairness pass and Canvas score/comment round-trip is
-validated. Local Developer ID signing/notarization passes, the updater key was rotated before any
-public release and its password is stored in macOS Keychain, and the read-only public-release
-preflight passes against the separate public `johnnyrobot/grader-releases` channel. Public beta is
-still blocked until fresh signed assets are published and the clean-machine updater N→N+1 behavior
-is validated.
+🟢 **Ready for a supervised public beta under the two-tier evidence standard.** The engine,
+neuroinclusive desktop review workflow, public-proxy quality/fairness, guarded Canvas
+score/comment round-trip, local Developer ID signing/notarization, public updater channel, and
+signed 0.1.0 → 0.1.1 in-app update path pass. Citation verification remains visibly experimental,
+and teacher-specific accuracy claims still require institution-authorized local calibration data.
 
 | | |
 |---|---|
@@ -52,19 +49,19 @@ is validated.
 | Citation verification | 🟡 20/29 correct (69%); retraction check 3/3; accepted only as visibly experimental until accuracy reaches the enabled-mode gate |
 | CI gates | 🟢 Privacy PASS; perf PASS; public-proxy quality/fairness PASS; teacher-local still unvalidated |
 | GitHub release preflight | 🟢 PASS — private source repo + public assets repo; no Apple `.p12` or hosted signing secrets required |
-| Updater evidence | 🟡 Updater key/password probe passes; current `latest.json` is stale/0.1.0 until the fresh bundle is generated |
+| Updater evidence | 🟢 PASS — signed `Grader.app.tar.gz` validates after extraction and matches the public manifest |
 | Signing + notarization | 🟢 PASS — Developer ID private key and stored `grader` notarytool profile verified |
-| Updates | 🟡 Tauri updater integrated with signed manifest generation and in-app install/restart UI; real N→N+1 path still needs release-channel evidence |
-| Beta rollout | ⬜ Blocked until release-readiness report returns `supervised_public_beta` |
+| Updates | 🟢 PASS — public 0.1.1 channel and real signed 0.1.0 → 0.1.1 install/relaunch path verified |
+| Beta rollout | 🟢 `supervised_public_beta` — 19/19 release-matrix rows pass |
 
 See [`docs/HANDOFF.md`](docs/HANDOFF.md) for exact status and [`docs/phases/`](docs/phases/) for
 per-phase detail.
 
 ## Public beta readiness
 
-**Verdict as of 2026-07-13: no.** Grader is suitable for a developer-assisted usability alpha
-using synthetic data or institution-approved test data. It is not ready for an unattended public
-beta with real student work.
+**Verdict as of 2026-07-13: supervised public beta ready.** This is not an unattended or
+teacher-specific accuracy claim: early testers need guided onboarding, citations stay experimental,
+and real student work requires institutional authorization and the documented FERPA controls.
 
 Confirmed in the current checkout:
 
@@ -88,14 +85,11 @@ Confirmed in the current checkout:
   least one teacher feedback comment read back.
 - `scripts/release_readiness.py` writes a consolidated JSON/Markdown verdict with blocker
   summaries plus an end-to-end testing and evaluation matrix that maps public-beta requirements to
-  evidence. With current local artifacts, the report is `blocked`, although the signing doctor,
-  updater-key doctor, and public-release publication preflight now pass. Local signed-app
-  evidence covers fresh-profile first-run model reconciliation, crash recovery, keyboard-only review,
-  and the Computer Use instructor sweep. The remaining release blockers are stale/missing signed
-  updater evidence (`latest.json` is still 0.1.0), the empty public updater channel, and the
-  clean-machine in-app updater N→N+1 path.
+  evidence. The current report is `supervised_public_beta`: all 19 matrix rows pass, including
+  fresh-profile model reconciliation, crash recovery, keyboard-only review, Computer Use, signed
+  release provenance, the public updater channel, and the in-app 0.1.0 → 0.1.1 update/relaunch.
 
-Public-beta blockers:
+Supervised-beta boundaries:
 
 1. Keep citation checking visibly experimental for beta users unless accuracy reaches at least 90%.
 2. Keep Canvas rubric-assessment posting disabled until local rubric criteria can be mapped to real
@@ -105,13 +99,9 @@ Public-beta blockers:
    Keychain profile. Require `scripts/bump_release_version.py --target-version <N+1> --apply` and
    `scripts/github_release_preflight.py --candidate-tag v<N+1>` to pass before publishing; no
    certificate `.p12` export or Apple password belongs in GitHub.
-4. Publish a signed N+1 GitHub updater channel whose `latest.json` advertises a reachable signed
-   `Grader.app.tar.gz` updater bundle, then validate the updater N→N+1 path on a clean supported Mac
-   against that signed `latest.json` and
-   signed/notarized DMG. The current local signed-app fresh-profile first-run, crash recovery,
-   Computer Use sweep, keyboard-only review path, signed updater manifest, and native
-   install/restart UI pass static/build checks against `/Applications/Grader.app` installed as
-   `com.grader.app`; rerun those checks if the release bundle identity changes.
+4. Keep the public `latest.json`, signed `Grader.app.tar.gz`, DMG, checksums, and provenance
+   together. The signed/notarized 0.1.0 → 0.1.1 in-app install/relaunch path passed against
+   `/Applications/Grader.app`; rerun it for every future release bundle or updater-key change.
 5. Keep teacher-local validation separate until an instructor supplies authorized historical grading.
 6. Complete a supervised private pilot before opening enrollment publicly.
 
@@ -227,8 +217,7 @@ and fails PASS updater or clean-machine artifacts that do not match the evaluate
 reports a different version. `scripts/bump_release_version.py` is the dry-run-first helper for
 moving those eight surfaces together before an N+1 release commit: Tauri config, Rust crate and
 lockfile, frontend package and lockfile, Python project, engine launcher `GRADER_APP_VERSION`, and
-the dev mock update fixture. The app is still not public-beta ready until public release
-publication, signed-updater-channel, and clean-machine release behavior evidence pass. Use
+the dev mock update fixture. The current supervised public-beta gate passes; use
 `scripts/bump_release_version.py --target-version <N+1> --apply` in the release-prep commit and
 `scripts/github_release_preflight.py --candidate-tag v<N+1>` before creating the release tag so
 private/public repository access, version drift, missing release-source tests, or stale tag/release

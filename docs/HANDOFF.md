@@ -41,24 +41,20 @@ three you gave 4s"), and it ships zero per-teacher model artifacts. LoRA fine-tu
 | **P2** App shell + UX | 🟢 **Implemented and evidence-backed.** Neuroinclusive light-first UI covers onboarding, queue, review, settings, and model manager. Frontend evidence passes with 15 component tests, 4 Playwright E2E tests, 16 visual-sweep screens, 47 required controls, and 167 visible controls. |
 | **P3** Canvas round-trip | 🟢 **Score/comment beta scope passes.** Guarded live app E2E on `canvas.johnnyrobot.ai` course `106`, assignment `2841`: import → teacher override/approval → post → Progress completed → score/comment read-back. Rubric-assessment posting remains disabled until local criteria map to real Canvas criterion IDs; attachment write-back still needs separate release evidence. |
 | **P4** Documents & citations | 🟡 **Built; citations are experimental.** parse.py, handwriting.py, writeback.py, citations.py built. Citation fixture rerun is 20/29 (69%), 0 false positives, 3/3 retractions caught; acceptable only when visibly labeled experimental until enabled-mode accuracy reaches >=90%. |
-| **P5** Hardening & release | 🟡 **Blocked by fresh updater evidence/channel and clean-machine updater path.** Public-proxy quality/fairness, privacy, performance, frontend, Rust, release-version, local Apple signing/notarization, updater-key signing, and the private-source/public-assets GitHub preflight pass. The remaining blockers are stale `latest.json`, an empty public `johnnyrobot/grader-releases` channel, and missing clean-machine N→N+1 evidence. |
+| **P5** Hardening & release | 🟢 **Supervised public-beta gate passes.** All 19 release-matrix rows pass. The public channel serves the signed/notarized DMG plus a Tauri-compatible signed `Grader.app.tar.gz`; the signed 0.1.0 → 0.1.1 in-app install/relaunch passed. Citations remain visibly experimental and teacher-local claims still require authorized data. |
 
-### The very next command
+### The next release check
 
 ```bash
 cd /Users/laccd/code/grader
-uv run python scripts/bump_release_version.py --target-version 0.1.1 --allow-same --out artifacts/release-evidence/version-bump-plan.json
-uv run python scripts/github_release_preflight.py --candidate-tag v0.1.1 --out artifacts/release-evidence/github-release-preflight-current.json --no-fail
-uv run python scripts/updater_key_doctor.py --signing-key tauri-updater-key.pem --password-keychain-service TAURI_SIGNING_PRIVATE_KEY_PASSWORD --password-keychain-account grader-updater --out artifacts/release-evidence/updater-key-current.json
+uv run python scripts/updater_channel_preflight.py --current-version 0.1.0 --out artifacts/release-evidence/updater-channel-current.json
+uv run python scripts/release_readiness.py --profile public_beta --expected-version 0.1.1 --public-proxy-dir artifacts/public_proxy/mohler_asag_diverse_anchored_pilot --citation-artifact artifacts/citation-results.json --canvas-artifact artifacts/release-evidence/canvas-live-current.json --privacy-artifact artifacts/release-evidence/privacy.json --performance-artifact artifacts/release-evidence/performance.json --frontend-artifact artifacts/release-evidence/frontend.json --rust-artifact artifacts/release-evidence/rust.json --release-version-artifact artifacts/release-evidence/release-version.json --github-release-artifact artifacts/release-evidence/github-release-preflight-current.json --updater-artifact artifacts/release-evidence/updater-current.json --updater-channel-artifact artifacts/release-evidence/updater-channel-current.json --updater-key-artifact artifacts/release-evidence/updater-key-current.json --clean-machine-artifact artifacts/release-evidence/clean-machine-local-current.json --out artifacts/release-readiness
 ```
 
-`scripts/bump_release_version.py --allow-same` should pass as an idempotency check for the prepared
-0.1.1 metadata. The GitHub release preflight and updater-key doctor now return `PASS` without Apple
-credentials in GitHub. The updater-channel preflight should return
-`BLOCKED_UPDATER_CHANNEL` until a signed N+1 GitHub release publishes `latest.json` and the
-reachable signed `Grader.dmg` asset. After both pass, run the clean-machine in-app `Install update
-and restart` path and record `updater_path` evidence. Do **not** claim public beta readiness until
-`scripts/release_readiness.py` reports `supervised_public_beta`.
+The current channel preflight returns `PASS`, and the consolidated report returns
+`supervised_public_beta`. For N+1, rerun version prep, publication preflight, local signing and
+notarization, updater-bundle generation, channel preflight, and the in-app N→N+1 path before
+replacing these artifacts.
 
 ---
 
@@ -227,7 +223,7 @@ commands · gotchas · done-when checklist.**
 | [`phases/P2.md`](phases/P2.md) | App shell + UX | 🟢 implemented; release evidence passes | `uv run python scripts/frontend_evidence.py --out artifacts/release-evidence/frontend.json` |
 | [`phases/P3.md`](phases/P3.md) | Canvas round-trip | 🟢 score/comment beta scope passes | `uv run python scripts/live_canvas_e2e.py --dry-run` |
 | [`phases/P4.md`](phases/P4.md) | Documents & citations | 🟡 in progress | `POST /api/parse` · `POST /api/citations/verify` · `POST /api/writeback/annotate` |
-| [`phases/P5.md`](phases/P5.md) | Hardening & release | 🟡 blocked on GitHub release preflight, updater channel, and clean-machine updater path | `uv run python scripts/release_readiness.py --profile public_beta --expected-version 0.1.1 --out artifacts/release-readiness` |
+| [`phases/P5.md`](phases/P5.md) | Hardening & release | 🟢 supervised public-beta gate passes | `uv run python scripts/release_readiness.py --profile public_beta --expected-version 0.1.1 --out artifacts/release-readiness` |
 
 ## 6. How to resume in a new session
 

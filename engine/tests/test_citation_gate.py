@@ -1,5 +1,5 @@
 from grader.citations import _crossref_record_has_retraction
-from verify_citations import decide_citation_mode
+from verify_citations import decide_citation_mode, safe_experimental_release
 
 
 def test_citation_mode_enabled_when_all_thresholds_pass():
@@ -24,6 +24,26 @@ def test_citation_mode_experimental_when_retractions_fail():
     assert mode["mode"] == "experimental"
     assert mode["release_status"] == "FAIL"
     assert "retraction" in " ".join(mode["failures"])
+
+
+def test_safe_experimental_release_accepts_zero_false_positives_and_all_retractions():
+    summary = {
+        "false_positives": 0,
+        "retraction_check": {"total": 3, "caught": 3},
+        "citation_mode": {"mode": "experimental"},
+    }
+
+    assert safe_experimental_release(summary) is True
+
+
+def test_safe_experimental_release_rejects_missed_retraction():
+    summary = {
+        "false_positives": 0,
+        "retraction_check": {"total": 3, "caught": 2},
+        "citation_mode": {"mode": "experimental"},
+    }
+
+    assert safe_experimental_release(summary) is False
 
 
 def test_crossref_retraction_detects_list_shaped_updated_by():

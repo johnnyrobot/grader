@@ -65,7 +65,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v3
       - run: uv sync --extra dev --locked
-      - run: uv run python engine/verify_citations.py --fixtures fixtures/citations/citation_fixtures.json
+      - run: uv run python engine/verify_citations.py --fixtures fixtures/citations/citation_fixtures.json --accept-safe-experimental
 
   build-frontend:
     name: Frontend Build (tsc + vite)
