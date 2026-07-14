@@ -14,7 +14,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v3
-      - run: uv sync
+      - run: uv sync --extra dev --locked
       - run: uv run python engine/gates/quality.py
 
   fairness:
@@ -24,7 +24,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v3
-      - run: uv sync
+      - run: uv sync --extra dev --locked
       - run: uv run python engine/gates/bias.py
 
   privacy:
@@ -34,7 +34,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v3
-      - run: uv sync
+      - run: uv sync --extra dev --locked
       - run: uv run python engine/gates/egress.py --capture-duration 15
 
   performance:
@@ -44,7 +44,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v3
-      - run: uv sync
+      - run: uv sync --extra dev --locked
       - run: uv run python engine/gates/perf.py --memory-floor 16
 
   tests:
@@ -54,7 +54,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v3
-      - run: uv sync
+      - run: uv sync --extra dev --locked
       - run: uv run pytest engine/tests/ -v
 
   citation-verification:
@@ -64,7 +64,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v3
-      - run: uv sync
+      - run: uv sync --extra dev --locked
       - run: uv run python engine/verify_citations.py --fixtures fixtures/citations/citation_fixtures.json
 
   build-frontend:

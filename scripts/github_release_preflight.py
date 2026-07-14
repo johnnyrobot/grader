@@ -82,7 +82,7 @@ def _workflow_has_release_test_gates(path: Path) -> bool:
         return False
     text = path.read_text()
     required = (
-        "uv sync",
+        "uv sync --extra dev --locked",
         "uv run pytest engine/tests/ -q",
         "npm test -- --run",
         "cargo check",

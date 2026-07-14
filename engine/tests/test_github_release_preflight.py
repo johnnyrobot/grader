@@ -31,7 +31,7 @@ def _write_workflow(path: Path, *, hosted_secrets: bool = False) -> None:
     path.write_text(
         "name: Release Source Verification\n"
         "permissions:\n  contents: read\n"
-        "run: uv sync\n"
+        "run: uv sync --extra dev --locked\n"
         "run: uv run pytest engine/tests/ -q\n"
         "run: npm test -- --run\n"
         "run: cargo check\n"

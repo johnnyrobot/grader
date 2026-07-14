@@ -9,7 +9,7 @@ def test_release_workflow_verifies_source_without_apple_secrets():
     text = WORKFLOW.read_text()
 
     assert "permissions:\n  contents: read" in text
-    assert "run: uv sync" in text
+    assert "run: uv sync --extra dev --locked" in text
     assert "run: uv run pytest engine/tests/ -q" in text
     assert "run: npm test -- --run" in text
     assert "run: cargo check" in text
