@@ -95,10 +95,18 @@ made a 4B model consume 41 GB on a 16 GB machine (P0 finding).
 When you launch Grader for the first time:
 
 1. **Engine starts** — Grader launches the Python engine as a sidecar process
-2. **Canvas token** — paste your Canvas LMS access token (or skip for local-only mode)
-3. **Rubric** — paste or import a rubric for your assignment
-4. **Models** — verify Ollama is running and models are installed (Model Manager screen)
-5. **Import** — pull submissions from Canvas, or load local files
+2. **Appearance** — choose light/dark mode, reading density, and motion preferences
+3. **Local readiness** — wait for the local engine to report Ready
+4. **Engine token** — the signed app discovers its per-launch token automatically; manual tokens
+   are for development only
+5. **Models** — open Local models and verify the three recommended tags are Ready for Grader
+6. **Canvas and rubric** — configure Canvas under Settings > General and create a rubric under
+   Settings > Rubrics
+7. **Import** — during the supervised v0.1.1 beta, a facilitator imports Canvas/local submissions
+   through the authenticated local engine before the instructor starts grading in the app
+
+Continue with the [Instructor User Guide](USER-GUIDE.md) for the complete grading, approval,
+Canvas handoff, update, and recovery workflow.
 
 ## Data storage
 

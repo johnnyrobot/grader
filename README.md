@@ -16,6 +16,9 @@ Student work never leaves your machine.
 
 _Screenshots use synthesized local-only records; no real student data or live Canvas writes._
 
+New to Grader? Follow the **[Instructor User Guide](docs/USER-GUIDE.md)** for setup, model
+readiness, rubrics, grading, teacher approval, Canvas handoff, updates, and recovery.
+
 ---
 
 ## Why
@@ -245,6 +248,7 @@ testing starts.
 | | |
 |---|---|
 | [`docs/HANDOFF.md`](docs/HANDOFF.md) | **Start here** — status, gotchas, next command |
+| [`docs/USER-GUIDE.md`](docs/USER-GUIDE.md) | **Instructor guide** — setup, grading workflow, approval, Canvas, updates, recovery |
 | [`docs/INSTALL.md`](docs/INSTALL.md) | Installation guide (from source + release builds) |
 | [`docs/PRD.md`](docs/PRD.md) | Product requirements |
 | [`docs/SPEC.md`](docs/SPEC.md) | Technical spec sheet |
