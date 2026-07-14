@@ -42,6 +42,8 @@ Open **Local models** from the queue. Grader expects:
 | `grader-vision:1.3b` | Transcribes scans and handwriting; it never grades directly |
 | `nomic-embed-text:latest` | Finds similar teacher-approved examples |
 
+![Grader local model manager](images/grader-demo/04-local-models.png)
+
 If all three say **Ready for Grader**, continue. If Ollama is not detected, start Ollama and choose
 **Refresh status**. If Grader downloads a base text or vision model but the capped Grader tag still
 shows **Needed**, the beta facilitator must run `scripts/make_models.sh`; do not substitute an
