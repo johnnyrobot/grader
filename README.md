@@ -68,7 +68,7 @@ beta with real student work.
 
 Confirmed in the current checkout:
 
-- Python tests: 191 passed, 12 intentionally skipped.
+- Python tests: 204 passed.
 - Frontend tests: 15 passed; TypeScript/Vite production build and Rust `cargo check` pass.
 - The complete mocked desktop workflow passes in Playwright across onboarding, queue, review,
   settings, model management, and local-engine recovery. The visual sweep now fail-closes unless it

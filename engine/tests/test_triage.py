@@ -79,6 +79,13 @@ def test_citation_issues_not_blocking():
     assert any("citation" in r for r in t.reasons)
 
 
+def test_low_confidence_flag_prevents_high_confidence_lane():
+    r = _rubric()
+    d = _draft(0.90, flags=[Flag.LOW_CONFIDENCE])
+    t = triage(d, r, "text", allow_vote=False)
+    assert t.lane == Lane.STANDARD
+
+
 def test_medium_confidence_standard():
     r = _rubric(open_ended=False)
     d = _draft(0.75)

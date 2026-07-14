@@ -116,7 +116,10 @@ def triage(
     elif conf < LOW_CONFIDENCE:
         lane = Lane.STANDARD
         reasons.append("low confidence but the score held up")
-    elif conf >= HIGH_CONFIDENCE and not draft.flags:
+    # Citation findings are advisory and already appear in the teacher-facing reasons. They do not
+    # by themselves make an otherwise confident analytic grade uncertain. Other non-hard flags
+    # (for example LOW_CONFIDENCE) still prevent auto-clearing when they contradict the score.
+    elif conf >= HIGH_CONFIDENCE and set(draft.flags).issubset({Flag.CITATION_ISSUES}):
         lane = Lane.HIGH_CONFIDENCE
         # Style bias on prose is real and prompt-resistant, so prose never fully auto-clears.
         if _has_open_ended(rubric):

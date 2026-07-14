@@ -269,7 +269,7 @@ package is a clean-Mac handoff bundle only; do not treat it as passing clean-mac
   includes an end-to-end public-beta matrix that maps requirements to evidence. Teacher-local
   validation still requires authorized instructor data. The local-sign/public-assets GitHub release
   preflight passes; fresh updater assets and the updater-path check still need release validation.
-- **Coverage:** Python collects 203 cases (191 pass, 12 skip). Frontend has 15 passing component
+- **Coverage:** Python collects 204 passing cases with the locked dev extra installed. Frontend has 15 passing component
   tests plus four passing Playwright E2E tests.
 - **Public beta verdict:** not ready for unattended public testing with real student work. Limit
   current use to a developer-assisted alpha with synthetic or institution-approved test data.

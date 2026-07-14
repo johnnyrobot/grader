@@ -52,8 +52,9 @@ def test_release_version_guard_blocks_mismatched_app_version(tmp_path):
     assert "tauri_config version '0.1.0' does not match expected '0.1.1'" in result["failures"]
 
 
-def test_release_version_guard_blocks_missing_expected_version(tmp_path):
+def test_release_version_guard_blocks_missing_expected_version(tmp_path, monkeypatch):
     files = _write_version_files(tmp_path, "0.1.0")
+    monkeypatch.delenv("GITHUB_REF_NAME", raising=False)
 
     result = collect(version_files=files)
 
