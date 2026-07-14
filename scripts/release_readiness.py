@@ -321,7 +321,7 @@ def build_e2e_matrix(evidence: dict[str, Any]) -> list[dict[str, str | bool]]:
         _matrix_row(
             id="updater-release-channel-preflight",
             area="updates",
-            requirement="Live release channel advertises a newer signed Grader.dmg before clean-machine N to N+1 testing starts.",
+            requirement="Live release channel advertises a newer signed Grader.app.tar.gz updater bundle before clean-machine N to N+1 testing starts.",
             gate="updater_channel",
             status=_gate_status(evidence, "updater_channel"),
             evidence=_artifact_path(
@@ -429,6 +429,7 @@ def build_next_actions(evidence: dict[str, Any]) -> list[dict[str, Any]]:
                 (
                     "uv run python scripts/publish_local_release.py "
                     "--dmg app/src-tauri/target/release/bundle/dmg/Grader.dmg "
+                    "--updater-bundle app/src-tauri/target/release/bundle/macos/Grader.app.tar.gz "
                     "--manifest latest.json "
                     f"--version {expected_version}"
                 ),
@@ -454,7 +455,7 @@ def build_next_actions(evidence: dict[str, Any]) -> list[dict[str, Any]]:
                 ),
                 (
                     f"uv run python scripts/generate_appcast.py "
-                    "--dmg app/src-tauri/target/release/bundle/dmg/Grader.dmg"
+                    "--app app/src-tauri/target/release/bundle/macos/Grader.app"
                     f" --version {expected_version}"
                     " --signing-key tauri-updater-key.pem"
                     " --password-keychain-service TAURI_SIGNING_PRIVATE_KEY_PASSWORD"
@@ -463,7 +464,7 @@ def build_next_actions(evidence: dict[str, Any]) -> list[dict[str, Any]]:
                 ),
                 (
                     f"uv run python scripts/updater_evidence.py --manifest latest.json "
-                    " --artifact app/src-tauri/target/release/bundle/dmg/Grader.dmg"
+                    " --artifact app/src-tauri/target/release/bundle/macos/Grader.app.tar.gz"
                     f" --version {expected_version}"
                     " --out artifacts/release-evidence/updater-current.json"
                 ),
@@ -486,7 +487,7 @@ def build_next_actions(evidence: dict[str, Any]) -> list[dict[str, Any]]:
                 ),
             ],
             "notes": [
-                "Run this only after the GitHub release exposes latest.json and the signed Grader.dmg asset.",
+                "Run this only after the GitHub release exposes latest.json and the signed Grader.app.tar.gz updater bundle.",
                 "This is a preflight for, not a replacement for, the clean-machine in-app N→N+1 update test.",
             ],
         })

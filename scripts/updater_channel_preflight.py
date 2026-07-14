@@ -119,7 +119,7 @@ def collect(
     config_path: Path = Path("app/src-tauri/tauri.conf.json"),
     current_version: str | None = None,
     manifest_url: str | None = None,
-    expected_artifact_name: str = "Grader.dmg",
+    expected_artifact_name: str = "Grader.app.tar.gz",
     timeout: float = 20,
     probe_artifacts: bool = True,
 ) -> dict[str, Any]:
@@ -228,7 +228,7 @@ def main() -> None:
     parser.add_argument("--config", type=Path, default=Path("app/src-tauri/tauri.conf.json"))
     parser.add_argument("--current-version", default=None)
     parser.add_argument("--manifest-url", default=None)
-    parser.add_argument("--expected-artifact-name", default="Grader.dmg")
+    parser.add_argument("--expected-artifact-name", default="Grader.app.tar.gz")
     parser.add_argument("--timeout", type=float, default=20)
     parser.add_argument("--skip-artifact-probe", action="store_true", help="Validate latest.json only; do not HEAD/Range-check release assets")
     parser.add_argument("--out", type=Path, default=Path("artifacts/release-evidence/updater-channel-current.json"))

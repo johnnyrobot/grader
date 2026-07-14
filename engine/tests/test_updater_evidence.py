@@ -1,6 +1,6 @@
 import json
 import sys
-import zipfile
+import tarfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parents[2]))
@@ -39,22 +39,26 @@ def test_updater_evidence_blocks_without_manifest(tmp_path):
 
 def test_updater_evidence_passes_signed_manifest_and_artifact(tmp_path):
     config = tmp_path / "tauri.conf.json"
-    artifact = tmp_path / "Grader.zip"
+    artifact = tmp_path / "Grader.app.tar.gz"
     manifest = tmp_path / "latest.json"
     _write_config(config)
-    with zipfile.ZipFile(artifact, "w") as archive:
-        archive.writestr("Grader.app/Contents/MacOS/Grader", "binary")
+    app = tmp_path / "Grader.app"
+    executable = app / "Contents" / "MacOS" / "Grader"
+    executable.parent.mkdir(parents=True)
+    executable.write_text("binary")
+    with tarfile.open(artifact, "w:gz") as archive:
+        archive.add(app, arcname=app.name)
     manifest.write_text(json.dumps({
         "version": "0.1.0",
         "pub_date": "2026-07-13T00:00:00Z",
         "platforms": {
             "darwin-aarch64": {
                 "signature": "signed-aarch64",
-                "url": "https://example.invalid/releases/Grader.zip",
+                "url": "https://example.invalid/releases/Grader.app.tar.gz",
             },
             "darwin-x86_64": {
                 "signature": "signed-x86",
-                "url": "https://example.invalid/releases/Grader.zip",
+                "url": "https://example.invalid/releases/Grader.app.tar.gz",
             },
         },
     }))
@@ -84,17 +88,21 @@ def test_updater_evidence_passes_signed_manifest_and_artifact(tmp_path):
 
 def test_updater_evidence_blocks_when_local_artifact_signature_fails(tmp_path):
     config = tmp_path / "tauri.conf.json"
-    artifact = tmp_path / "Grader.zip"
+    artifact = tmp_path / "Grader.app.tar.gz"
     manifest = tmp_path / "latest.json"
     _write_config(config)
-    with zipfile.ZipFile(artifact, "w") as archive:
-        archive.writestr("Grader.app/Contents/MacOS/Grader", "binary")
+    app = tmp_path / "Grader.app"
+    executable = app / "Contents" / "MacOS" / "Grader"
+    executable.parent.mkdir(parents=True)
+    executable.write_text("binary")
+    with tarfile.open(artifact, "w:gz") as archive:
+        archive.add(app, arcname=app.name)
     manifest.write_text(json.dumps({
         "version": "0.1.0",
         "pub_date": "2026-07-13T00:00:00Z",
         "platforms": {
-            "darwin-aarch64": {"signature": "signed", "url": "https://example.invalid/Grader.zip"},
-            "darwin-x86_64": {"signature": "signed", "url": "https://example.invalid/Grader.zip"},
+            "darwin-aarch64": {"signature": "signed", "url": "https://example.invalid/Grader.app.tar.gz"},
+            "darwin-x86_64": {"signature": "signed", "url": "https://example.invalid/Grader.app.tar.gz"},
         },
     }))
 
@@ -151,17 +159,21 @@ def test_updater_evidence_blocks_unsigned_manifest(tmp_path):
 
 def test_updater_evidence_blocks_artifacts_older_than_source_commit(tmp_path, monkeypatch):
     config = tmp_path / "tauri.conf.json"
-    artifact = tmp_path / "Grader.zip"
+    artifact = tmp_path / "Grader.app.tar.gz"
     manifest = tmp_path / "latest.json"
     _write_config(config)
-    with zipfile.ZipFile(artifact, "w") as archive:
-        archive.writestr("Grader.app/Contents/MacOS/Grader", "binary")
+    app = tmp_path / "Grader.app"
+    executable = app / "Contents" / "MacOS" / "Grader"
+    executable.parent.mkdir(parents=True)
+    executable.write_text("binary")
+    with tarfile.open(artifact, "w:gz") as archive:
+        archive.add(app, arcname=app.name)
     manifest.write_text(json.dumps({
         "version": "0.1.0",
         "pub_date": "2026-07-13T00:00:00Z",
         "platforms": {
-            "darwin-aarch64": {"signature": "signed", "url": "https://example.invalid/Grader.zip"},
-            "darwin-x86_64": {"signature": "signed", "url": "https://example.invalid/Grader.zip"},
+            "darwin-aarch64": {"signature": "signed", "url": "https://example.invalid/Grader.app.tar.gz"},
+            "darwin-x86_64": {"signature": "signed", "url": "https://example.invalid/Grader.app.tar.gz"},
         },
     }))
     monkeypatch.setattr(

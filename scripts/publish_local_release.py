@@ -2,7 +2,8 @@
 """Publish already signed/notarized Grader assets to the public update channel.
 
 This script never handles Apple credentials. It expects the local release
-pipeline to have produced and verified the DMG and signed ``latest.json``.
+pipeline to have produced and verified the DMG, the signed ``.app.tar.gz``
+updater bundle, and signed ``latest.json``.
 Dry-run is the default; ``--apply`` is required to create the GitHub release.
 """
 
@@ -39,6 +40,7 @@ def _run(runner: Runner, command: list[str]) -> subprocess.CompletedProcess[str]
 def collect(
     *,
     dmg: Path,
+    updater_bundle: Path,
     manifest: Path,
     version: str,
     tag: str,
@@ -50,12 +52,17 @@ def collect(
     checks: dict[str, bool] = {
         "gh_installed": shutil.which("gh") is not None,
         "dmg_present": dmg.is_file(),
+        "updater_bundle_present": updater_bundle.is_file(),
         "manifest_present": manifest.is_file(),
     }
     if not checks["gh_installed"]:
         failures.append("GitHub CLI `gh` is unavailable")
     if not checks["dmg_present"]:
         failures.append(f"DMG is missing: {dmg}")
+    if not checks["updater_bundle_present"]:
+        failures.append(f"updater bundle is missing: {updater_bundle}")
+    elif not updater_bundle.name.endswith(".app.tar.gz"):
+        failures.append(f"updater bundle must end in .app.tar.gz: {updater_bundle}")
     if not checks["manifest_present"]:
         failures.append(f"updater manifest is missing: {manifest}")
 
@@ -79,7 +86,7 @@ def collect(
         entry = platforms.get(platform) if isinstance(platforms, dict) else None
         signature = str(entry.get("signature") or "") if isinstance(entry, dict) else ""
         url = str(entry.get("url") or "") if isinstance(entry, dict) else ""
-        ok = bool(signature) and url == expected_prefix + dmg.name
+        ok = bool(signature) and url == expected_prefix + updater_bundle.name
         platform_checks[platform] = {
             "signature_present": bool(signature),
             "url": url,
@@ -130,6 +137,7 @@ def collect(
 
     hashes = {
         str(dmg): _sha256(dmg) if dmg.is_file() else None,
+        str(updater_bundle): _sha256(updater_bundle) if updater_bundle.is_file() else None,
         str(manifest): _sha256(manifest) if manifest.is_file() else None,
     }
     return {
@@ -141,6 +149,7 @@ def collect(
         "version": version,
         "tag": tag,
         "dmg": str(dmg),
+        "updater_bundle": str(updater_bundle),
         "manifest": str(manifest),
         "hashes": hashes,
         "checks": checks,
@@ -156,9 +165,11 @@ def _write_publication_files(result: dict[str, Any], out_dir: Path) -> tuple[Pat
     notes = out_dir / "release-notes.md"
     provenance.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n")
     dmg = Path(result["dmg"])
+    updater_bundle = Path(result["updater_bundle"])
     manifest = Path(result["manifest"])
     checksums.write_text(
         f"{result['hashes'][str(dmg)]}  {dmg.name}\n"
+        f"{result['hashes'][str(updater_bundle)]}  {updater_bundle.name}\n"
         f"{result['hashes'][str(manifest)]}  {manifest.name}\n"
     )
     notes.write_text(
@@ -188,6 +199,7 @@ def publish(
         "--notes-file", str(notes),
         "--latest",
         result["dmg"],
+        result["updater_bundle"],
         result["manifest"],
         str(checksums),
         str(provenance),
@@ -198,7 +210,7 @@ def publish(
         "returncode": proc.returncode,
         "stdout": (proc.stdout or "").strip(),
         "stderr": (proc.stderr or "").strip(),
-        "assets": [result["dmg"], result["manifest"], str(checksums), str(provenance)],
+        "assets": [result["dmg"], result["updater_bundle"], result["manifest"], str(checksums), str(provenance)],
     }
     if proc.returncode != 0:
         applied["status"] = "BLOCKED_LOCAL_RELEASE_PUBLICATION"
@@ -209,6 +221,7 @@ def publish(
 def main() -> None:
     parser = argparse.ArgumentParser(description="Publish locally signed Grader release assets")
     parser.add_argument("--dmg", type=Path, required=True)
+    parser.add_argument("--updater-bundle", type=Path, required=True)
     parser.add_argument("--manifest", type=Path, default=Path("latest.json"))
     parser.add_argument("--version", required=True)
     parser.add_argument("--tag", default=None)
@@ -222,6 +235,7 @@ def main() -> None:
     tag = args.tag or f"v{args.version}"
     result = collect(
         dmg=args.dmg,
+        updater_bundle=args.updater_bundle,
         manifest=args.manifest,
         version=args.version,
         tag=tag,

@@ -40,7 +40,7 @@ scripts/
 | Guard release version | `release_version_guard.py` | Requires the release tag/version to match Tauri config, Rust crate/lockfile, frontend package/lockfile, Python project, engine launcher, and dev mock update fixture before publishing assets |
 | Optional hosted-runner secrets | `github_release_secrets.py` | Legacy/optional helper; the selected local-signing release path does not require a `.p12` export or Apple secrets in GitHub |
 | Preflight GitHub release publication | `github_release_preflight.py` | Read-only check for private source/public assets repo access, updater endpoint, release-source workflow, and optional N+1 tag/release availability |
-| Publish locally signed assets | `publish_local_release.py` | Dry-run by default; guarded `--apply` uploads DMG, signed `latest.json`, checksums, and source provenance to `johnnyrobot/grader-releases` |
+| Publish locally signed assets | `publish_local_release.py` | Dry-run by default; guarded `--apply` uploads DMG, signed `.app.tar.gz`, signed `latest.json`, checksums, and source provenance to `johnnyrobot/grader-releases` |
 | Diagnose signing credentials | `signing_doctor.py` | Writes `artifacts/release-evidence/signing.json`; probes Developer ID private-key access and notarytool profile before signing; `--print-repair-runbook` emits secret-free local recovery steps |
 | Diagnose updater key | `updater_key_doctor.py` | Writes `artifacts/release-evidence/updater-key-current.json`; signs a tiny temp file to verify the Tauri updater key and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`, either from a private env var or a named macOS Keychain item |
 | Generate updater manifest | `generate_appcast.py` | Requires `--signing-key` for release manifests; can read encrypted-key password from a private env var or named macOS Keychain item; use `--allow-unsigned` only for local smoke fixtures |
@@ -88,22 +88,22 @@ scripts/
 - **`publish_local_release.py`**: use after local signing, notarization, signed-manifest generation,
   and updater evidence. It is dry-run by default and `--apply` fails closed unless `latest.json`
   contains signed macOS entries targeting the exact public release tag. It uploads only the DMG,
-  manifest, SHA-256 checksums, and source provenance; never the updater private key or passwords.
+  Tauri-compatible `.app.tar.gz`, manifest, SHA-256 checksums, and source provenance; never the updater private key or passwords.
 - **`github_release_secrets.py`**: retained only for a future hosted-runner signing design. It is not
   part of the selected public-beta path and should not be used merely because a local `.p12`
   password does not exist.
 - **`updater_evidence.py`**: blocks public beta when `latest.json` is missing, any platform
   signature is empty, the manifest does not reference the supplied artifact, the supplied
   manifest/artifact predates the current git commit, or the local artifact fails
-  signature/notarization checks. For DMGs it mounts the image and verifies the bundled `.app` with
-  codesign and spctl. It does not replace the clean-machine N→N+1 update test.
+  signature/notarization checks. For `.app.tar.gz` bundles it extracts and verifies the bundled
+  `.app` with codesign and spctl. It does not replace the clean-machine N→N+1 update test.
 - **`generate_appcast.py`**: despite the historical name, this creates Tauri `latest.json`
   manifests, not Sparkle XML. It fails closed without a Tauri updater signing key unless
   `--allow-unsigned` is supplied for a non-release smoke fixture. Encrypted updater keys also need
   `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` in non-interactive release runs, or
   `--password-keychain-service TAURI_SIGNING_PRIVATE_KEY_PASSWORD --password-keychain-account grader-updater`
-  after the private release operator stores the password in macOS Keychain. `--app` zips the `.app`
-  bundle before signing the updater artifact.
+  after the private release operator stores the password in macOS Keychain. `--app` packages the
+  signed `.app` as the `.app.tar.gz` format required by Tauri's macOS updater.
 - **`updater_key_doctor.py`**: run before `generate_appcast.py` when the updater manifest is the
   blocker. It signs a temporary file and writes a secret-free JSON artifact; it does not print or
   store the private key or password. Use `--print-private-runbook` for env-var and Keychain setup
@@ -113,7 +113,7 @@ scripts/
   manifest and before asking a clean-machine tester to exercise the updater path:
   `uv run python scripts/updater_channel_preflight.py --current-version <installed-N-version>`.
   It fetches the configured GitHub `latest.json`, requires a newer version, signed darwin manifests,
-  the expected `Grader.dmg` artifact name, the `johnnyrobot/grader` release channel, and reachable
+  the expected `Grader.app.tar.gz` artifact name, the `johnnyrobot/grader-releases` release channel, and reachable
   release asset URLs via HEAD/Range probes. It does not replace the in-app N→N+1 evidence; it catches
   a missing or malformed release channel early.
 - **`signing_doctor.py`**: run before `sign_and_notarize.sh`. It fail-closes on missing Developer
@@ -143,7 +143,7 @@ scripts/
 - **`release_evidence_package.py`**: build this after signing/notarization and updater evidence so a
   clean-machine tester receives one deterministic, gitignored handoff folder:
   `uv run python scripts/release_evidence_package.py --out-dir artifacts/release-evidence/clean-machine-handoff`.
-  It writes hashes/status summaries, copies the release DMG/latest.json when supplied, and includes
+  It writes hashes/status summaries, copies the release DMG/updater bundle/latest.json when supplied, and includes
   `clean-machine-runbook.md`, `clean-machine-manual-evidence.json`,
   `github-release-secrets-runbook.md`, and `updater-key-private-runbook.md`. Include
   `--github-release-evidence artifacts/release-evidence/github-release-preflight-current.json` so

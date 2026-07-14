@@ -4,7 +4,7 @@
 This does not mark Grader public-beta ready. It creates a deterministic folder
 for the clean-machine tester containing:
 
-  - the signed/notarized release artifact and updater manifest, when supplied
+  - the signed/notarized DMG, Tauri updater bundle, and updater manifest, when supplied
   - the latest version/updater/clean-machine/release-readiness evidence JSON
   - the clean-machine manual runbook and evidence template
   - a package manifest with SHA-256 metadata and current blocker summaries
@@ -135,7 +135,7 @@ Current readiness verdict: `{summary.get('readiness_verdict', 'unknown')}`
    before creating the tag or publishing assets. This verifies GitHub auth, the private source repo,
    public assets repo, updater endpoint, release-source workflow, candidate version consistency, and
    tag/release availability without writing to GitHub.
-5. Publish a signed N+1 DMG and signed `latest.json` to the configured GitHub release channel:
+5. Publish a signed N+1 DMG, signed `Grader.app.tar.gz`, and signed `latest.json` to the configured GitHub release channel:
    `https://github.com/johnnyrobot/grader-releases/releases/latest/download/latest.json`.
    Use `scripts/publish_local_release.py --apply`; it also uploads checksums and source provenance.
    Follow `updater-key-private-runbook.md` to verify the updater key/password and regenerate
@@ -161,6 +161,7 @@ def build_package(
     *,
     out_dir: Path,
     dmg: Path | None = None,
+    updater_bundle: Path | None = None,
     updater_manifest: Path | None = None,
     updater_evidence: Path | None = None,
     clean_machine_evidence: Path | None = None,
@@ -188,6 +189,7 @@ def build_package(
 
     files = {
         "dmg": _safe_copy(dmg, release_artifacts_dir, copy_artifacts=copy_artifacts),
+        "updater_bundle": _safe_copy(updater_bundle, release_artifacts_dir, copy_artifacts=copy_artifacts),
         "updater_manifest": _safe_copy(updater_manifest, release_artifacts_dir, copy_artifacts=copy_artifacts),
         "updater_evidence": _safe_copy(updater_evidence, evidence_dir, copy_artifacts=True),
         "clean_machine_evidence": _safe_copy(clean_machine_evidence, evidence_dir, copy_artifacts=True),
@@ -238,6 +240,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Build a clean-machine release evidence handoff package")
     parser.add_argument("--out-dir", type=Path, default=DEFAULT_OUT)
     parser.add_argument("--dmg", type=Path, default=Path("app/src-tauri/target/release/bundle/dmg/Grader.dmg"))
+    parser.add_argument("--updater-bundle", type=Path, default=Path("app/src-tauri/target/release/bundle/macos/Grader.app.tar.gz"))
     parser.add_argument("--updater-manifest", type=Path, default=Path("latest.json"))
     parser.add_argument("--updater-evidence", type=Path, default=Path("artifacts/release-evidence/updater-current.json"))
     parser.add_argument("--clean-machine-evidence", type=Path, default=Path("artifacts/release-evidence/clean-machine-local-current.json"))
@@ -249,12 +252,13 @@ def main() -> None:
     parser.add_argument("--updater-channel-evidence", type=Path, default=Path("artifacts/release-evidence/updater-channel-current.json"))
     parser.add_argument("--updater-key-evidence", type=Path, default=Path("artifacts/release-evidence/updater-key-current.json"))
     parser.add_argument("--no-copy-release-artifacts", action="store_true",
-                        help="Write metadata only for DMG/latest.json instead of copying them into the package")
+                        help="Write metadata only for DMG/updater bundle/latest.json instead of copying them into the package")
     args = parser.parse_args()
 
     manifest = build_package(
         out_dir=args.out_dir,
         dmg=args.dmg,
+        updater_bundle=args.updater_bundle,
         updater_manifest=args.updater_manifest,
         updater_evidence=args.updater_evidence,
         clean_machine_evidence=args.clean_machine_evidence,

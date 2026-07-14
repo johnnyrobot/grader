@@ -9,6 +9,7 @@ from scripts.release_evidence_package import build_package
 
 def test_build_package_copies_artifacts_and_writes_runbook_template(tmp_path):
     dmg = tmp_path / "Grader.dmg"
+    updater_bundle = tmp_path / "Grader.app.tar.gz"
     manifest = tmp_path / "latest.json"
     updater = tmp_path / "updater.json"
     clean = tmp_path / "clean-machine.json"
@@ -20,6 +21,7 @@ def test_build_package_copies_artifacts_and_writes_runbook_template(tmp_path):
     updater_channel = tmp_path / "updater-channel-current.json"
     updater_key = tmp_path / "updater-key.json"
     dmg.write_bytes(b"signed dmg")
+    updater_bundle.write_bytes(b"signed updater")
     manifest.write_text('{"version":"0.1.0","platforms":{"darwin-aarch64":{"signature":""}}}')
     updater.write_text(json.dumps({
         "status": "BLOCKED_UPDATER_EVIDENCE",
@@ -46,6 +48,7 @@ def test_build_package_copies_artifacts_and_writes_runbook_template(tmp_path):
     package = build_package(
         out_dir=out,
         dmg=dmg,
+        updater_bundle=updater_bundle,
         updater_manifest=manifest,
         updater_evidence=updater,
         clean_machine_evidence=clean,
@@ -62,6 +65,7 @@ def test_build_package_copies_artifacts_and_writes_runbook_template(tmp_path):
     assert package["summary"]["readiness_verdict"] == "blocked"
     assert package["summary"]["updater_status"] == "BLOCKED_UPDATER_EVIDENCE"
     assert (out / "release-artifacts" / "Grader.dmg").exists()
+    assert (out / "release-artifacts" / "Grader.app.tar.gz").exists()
     assert (out / "release-artifacts" / "latest.json").exists()
     assert (out / "evidence" / "updater.json").exists()
     assert (out / "evidence" / "release-version.json").exists()

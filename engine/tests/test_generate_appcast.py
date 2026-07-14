@@ -16,9 +16,9 @@ class Proc:
 
 
 def test_generate_manifest_requires_signing_key_for_release(tmp_path):
-    artifact = tmp_path / "Grader.dmg"
+    artifact = tmp_path / "Grader.app.tar.gz"
     output = tmp_path / "latest.json"
-    artifact.write_bytes(b"signed dmg")
+    artifact.write_bytes(b"signed updater")
 
     with pytest.raises(SystemExit) as exc:
         generate_appcast.generate_manifest(
@@ -32,9 +32,9 @@ def test_generate_manifest_requires_signing_key_for_release(tmp_path):
 
 
 def test_sign_file_uses_tauri_v2_private_key_path_command(tmp_path, monkeypatch):
-    artifact = tmp_path / "Grader.dmg"
+    artifact = tmp_path / "Grader.app.tar.gz"
     key = tmp_path / "tauri-key.pem"
-    artifact.write_bytes(b"signed dmg")
+    artifact.write_bytes(b"signed updater")
     key.write_text("fake key")
     seen: list[list[str]] = []
 
@@ -63,9 +63,9 @@ def test_sign_file_uses_tauri_v2_private_key_path_command(tmp_path, monkeypatch)
 
 
 def test_sign_file_accepts_tauri_public_signature_output(tmp_path, monkeypatch):
-    artifact = tmp_path / "Grader.dmg"
+    artifact = tmp_path / "Grader.app.tar.gz"
     key = tmp_path / "tauri-key.pem"
-    artifact.write_bytes(b"signed dmg")
+    artifact.write_bytes(b"signed updater")
     key.write_text("fake key")
 
     def fake_run(command, **_kwargs):
@@ -77,9 +77,9 @@ def test_sign_file_accepts_tauri_public_signature_output(tmp_path, monkeypatch):
 
 
 def test_sign_file_passes_private_env_without_printing_password(tmp_path, monkeypatch):
-    artifact = tmp_path / "Grader.dmg"
+    artifact = tmp_path / "Grader.app.tar.gz"
     key = tmp_path / "tauri-key.pem"
-    artifact.write_bytes(b"signed dmg")
+    artifact.write_bytes(b"signed updater")
     key.write_text("fake key")
 
     def fake_run(command, **kwargs):
@@ -96,9 +96,9 @@ def test_sign_file_passes_private_env_without_printing_password(tmp_path, monkey
 
 
 def test_sign_file_hints_when_private_key_password_missing(tmp_path, monkeypatch, capsys):
-    artifact = tmp_path / "Grader.dmg"
+    artifact = tmp_path / "Grader.app.tar.gz"
     key = tmp_path / "tauri-key.pem"
-    artifact.write_bytes(b"signed dmg")
+    artifact.write_bytes(b"signed updater")
     key.write_text("fake key")
 
     def fake_run(command, **_kwargs):
@@ -116,10 +116,10 @@ def test_sign_file_hints_when_private_key_password_missing(tmp_path, monkeypatch
 
 
 def test_generate_manifest_writes_signed_platform_manifest(tmp_path, monkeypatch):
-    artifact = tmp_path / "Grader.dmg"
+    artifact = tmp_path / "Grader.app.tar.gz"
     output = tmp_path / "latest.json"
     key = tmp_path / "tauri-key.pem"
-    artifact.write_bytes(b"signed dmg")
+    artifact.write_bytes(b"signed updater")
     key.write_text("fake key")
     monkeypatch.setattr(generate_appcast, "_sign_file", lambda path, key_path, env=None: "signed-update")
 
@@ -128,13 +128,13 @@ def test_generate_manifest_writes_signed_platform_manifest(tmp_path, monkeypatch
         version="0.1.0",
         output=output,
         signing_key=key,
-        release_url="https://example.invalid/Grader.dmg",
+        release_url="https://example.invalid/Grader.app.tar.gz",
     )
 
     manifest = json.loads(output.read_text())
     assert manifest["version"] == "0.1.0"
     assert manifest["platforms"]["darwin-aarch64"]["signature"] == "signed-update"
-    assert manifest["platforms"]["darwin-x86_64"]["url"] == "https://example.invalid/Grader.dmg"
+    assert manifest["platforms"]["darwin-x86_64"]["url"] == "https://example.invalid/Grader.app.tar.gz"
 
 
 def test_load_password_from_keychain_returns_secret_without_logging(monkeypatch):
@@ -160,7 +160,7 @@ def test_load_password_from_keychain_returns_secret_without_logging(monkeypatch)
 
 
 def test_generate_manifest_allows_unsigned_smoke_fixture(tmp_path):
-    artifact = tmp_path / "Grader.dmg"
+    artifact = tmp_path / "Grader.app.tar.gz"
     output = tmp_path / "latest.json"
     artifact.write_bytes(b"unsigned fixture")
 
@@ -175,17 +175,32 @@ def test_generate_manifest_allows_unsigned_smoke_fixture(tmp_path):
     assert manifest["platforms"]["darwin-aarch64"]["signature"] == ""
 
 
-def test_zip_app_preserves_app_bundle_parent(tmp_path):
+def test_package_app_preserves_app_bundle_parent(tmp_path):
     app = tmp_path / "Grader.app"
     executable = app / "Contents" / "MacOS" / "Grader"
     executable.parent.mkdir(parents=True)
     executable.write_text("binary")
-    output = tmp_path / "Grader.zip"
+    output = tmp_path / "Grader.app.tar.gz"
 
-    zip_path = generate_appcast._zip_app(app, output)
+    bundle_path = generate_appcast._package_app(app, output)
 
-    assert zip_path == output
-    import zipfile
+    assert bundle_path == output
+    import tarfile
 
-    with zipfile.ZipFile(output) as archive:
-        assert "Grader.app/Contents/MacOS/Grader" in archive.namelist()
+    with tarfile.open(output, "r:gz") as archive:
+        assert "Grader.app/Contents/MacOS/Grader" in archive.getnames()
+
+
+def test_generate_manifest_rejects_dmg_as_updater_artifact(tmp_path):
+    artifact = tmp_path / "Grader.dmg"
+    artifact.write_bytes(b"signed dmg")
+
+    with pytest.raises(SystemExit) as exc:
+        generate_appcast.generate_manifest(
+            artifact_path=artifact,
+            version="0.1.0",
+            output=tmp_path / "latest.json",
+            allow_unsigned=True,
+        )
+
+    assert exc.value.code == 1

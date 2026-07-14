@@ -14,19 +14,21 @@ def _proc(command, returncode=0, stdout="", stderr=""):
 
 def _fixture(tmp_path: Path):
     dmg = tmp_path / "Grader.dmg"
+    updater_bundle = tmp_path / "Grader.app.tar.gz"
     manifest = tmp_path / "latest.json"
     dmg.write_bytes(b"signed dmg")
+    updater_bundle.write_bytes(b"signed updater")
     manifest.write_text(json.dumps({
         "version": "0.1.1",
         "platforms": {
             platform: {
                 "signature": "signed",
-                "url": "https://github.com/johnnyrobot/grader-releases/releases/download/v0.1.1/Grader.dmg",
+                "url": "https://github.com/johnnyrobot/grader-releases/releases/download/v0.1.1/Grader.app.tar.gz",
             }
             for platform in publish_local_release.REQUIRED_PLATFORMS
         },
     }))
-    return dmg, manifest
+    return dmg, updater_bundle, manifest
 
 
 def _runner(commands):
@@ -50,12 +52,13 @@ def _runner(commands):
 
 
 def test_collect_passes_for_signed_public_channel_manifest(tmp_path, monkeypatch):
-    dmg, manifest = _fixture(tmp_path)
+    dmg, updater_bundle, manifest = _fixture(tmp_path)
     commands = []
     monkeypatch.setattr(publish_local_release.shutil, "which", lambda _name: "/usr/bin/gh")
 
     result = publish_local_release.collect(
         dmg=dmg,
+        updater_bundle=updater_bundle,
         manifest=manifest,
         version="0.1.1",
         tag="v0.1.1",
@@ -68,14 +71,15 @@ def test_collect_passes_for_signed_public_channel_manifest(tmp_path, monkeypatch
 
 
 def test_collect_blocks_wrong_release_url(tmp_path, monkeypatch):
-    dmg, manifest = _fixture(tmp_path)
+    dmg, updater_bundle, manifest = _fixture(tmp_path)
     payload = json.loads(manifest.read_text())
-    payload["platforms"]["darwin-aarch64"]["url"] = "https://example.invalid/Grader.dmg"
+    payload["platforms"]["darwin-aarch64"]["url"] = "https://example.invalid/Grader.app.tar.gz"
     manifest.write_text(json.dumps(payload))
     monkeypatch.setattr(publish_local_release.shutil, "which", lambda _name: "/usr/bin/gh")
 
     result = publish_local_release.collect(
         dmg=dmg,
+        updater_bundle=updater_bundle,
         manifest=manifest,
         version="0.1.1",
         tag="v0.1.1",
@@ -87,12 +91,13 @@ def test_collect_blocks_wrong_release_url(tmp_path, monkeypatch):
 
 
 def test_publish_creates_release_with_checksums_and_provenance(tmp_path, monkeypatch):
-    dmg, manifest = _fixture(tmp_path)
+    dmg, updater_bundle, manifest = _fixture(tmp_path)
     commands = []
     runner = _runner(commands)
     monkeypatch.setattr(publish_local_release.shutil, "which", lambda _name: "/usr/bin/gh")
     result = publish_local_release.collect(
         dmg=dmg,
+        updater_bundle=updater_bundle,
         manifest=manifest,
         version="0.1.1",
         tag="v0.1.1",
@@ -107,3 +112,4 @@ def test_publish_creates_release_with_checksums_and_provenance(tmp_path, monkeyp
     create = next(command for command in commands if command[:3] == ["gh", "release", "create"])
     assert "--latest" in create
     assert str(dmg) in create
+    assert str(updater_bundle) in create

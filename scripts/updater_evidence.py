@@ -19,7 +19,7 @@ import json
 import plistlib
 import subprocess
 import tempfile
-import zipfile
+import tarfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Protocol
@@ -212,19 +212,19 @@ def _verify_dmg_artifact(path: Path, *, runner: Runner = subprocess.run) -> tupl
     return failures, details
 
 
-def _verify_zip_artifact(path: Path, *, runner: Runner = subprocess.run) -> tuple[list[str], dict[str, Any]]:
+def _verify_tar_gz_artifact(path: Path, *, runner: Runner = subprocess.run) -> tuple[list[str], dict[str, Any]]:
     details: dict[str, Any] = {}
     failures: list[str] = []
-    with tempfile.TemporaryDirectory(prefix="grader-updater-zip-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="grader-updater-tar-") as tmp:
         extract_dir = Path(tmp)
         try:
-            with zipfile.ZipFile(path) as archive:
-                archive.extractall(extract_dir)
+            with tarfile.open(path, "r:gz") as archive:
+                archive.extractall(extract_dir, filter="data")
         except Exception as exc:
-            return [f"could not extract updater zip artifact: {exc}"], details
+            return [f"could not extract updater .app.tar.gz artifact: {exc}"], details
         app_path = _find_mounted_app(extract_dir)
         if app_path is None:
-            return ["updater zip artifact does not contain a .app bundle"], details
+            return ["updater .app.tar.gz artifact does not contain a .app bundle"], details
         details["bundled_app_path"] = str(app_path)
         app_failures, app_details = _verify_app_signature(app_path, runner=runner)
         details["bundled_app"] = app_details
@@ -238,8 +238,8 @@ def _verify_local_artifact(path: Path, *, runner: Runner = subprocess.run) -> tu
         return _verify_dmg_artifact(path, runner=runner)
     if suffix == ".app" and path.is_dir():
         return _verify_app_signature(path, runner=runner)
-    if suffix == ".zip":
-        return _verify_zip_artifact(path, runner=runner)
+    if path.name.endswith(".app.tar.gz"):
+        return _verify_tar_gz_artifact(path, runner=runner)
     return [f"unsupported updater artifact type for signature validation: {path.name}"], {}
 
 

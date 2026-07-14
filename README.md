@@ -105,8 +105,8 @@ Public-beta blockers:
    Keychain profile. Require `scripts/bump_release_version.py --target-version <N+1> --apply` and
    `scripts/github_release_preflight.py --candidate-tag v<N+1>` to pass before publishing; no
    certificate `.p12` export or Apple password belongs in GitHub.
-4. Publish a signed N+1 GitHub updater channel whose `latest.json` advertises reachable signed
-   `Grader.dmg` release assets, then validate the updater N→N+1 path on a clean supported Mac
+4. Publish a signed N+1 GitHub updater channel whose `latest.json` advertises a reachable signed
+   `Grader.app.tar.gz` updater bundle, then validate the updater N→N+1 path on a clean supported Mac
    against that signed `latest.json` and
    signed/notarized DMG. The current local signed-app fresh-profile first-run, crash recovery,
    Computer Use sweep, keyboard-only review path, signed updater manifest, and native
@@ -170,9 +170,9 @@ uv run python scripts/bump_release_version.py --target-version 0.1.1 --allow-sam
 uv run python scripts/github_release_preflight.py --candidate-tag v0.1.1 --out artifacts/release-evidence/github-release-preflight-current.json --no-fail
 uv run python scripts/updater_key_doctor.py --print-private-runbook > updater-key-private-runbook.md
 uv run python scripts/updater_key_doctor.py --signing-key tauri-updater-key.pem --password-keychain-service TAURI_SIGNING_PRIVATE_KEY_PASSWORD --password-keychain-account grader-updater --out artifacts/release-evidence/updater-key-current.json
-uv run python scripts/generate_appcast.py --dmg /path/to/Grader.dmg --version 0.1.1 --signing-key tauri-updater-key.pem --password-keychain-service TAURI_SIGNING_PRIVATE_KEY_PASSWORD --password-keychain-account grader-updater --output latest.json
-uv run python scripts/updater_evidence.py --manifest latest.json --artifact /path/to/Grader.dmg --out artifacts/release-evidence/updater-current.json  # fails if local artifacts predate the current git commit
-uv run python scripts/publish_local_release.py --dmg /path/to/Grader.dmg --manifest latest.json --version 0.1.1  # dry-run; add --apply only after all local evidence passes
+uv run python scripts/generate_appcast.py --app /path/to/Grader.app --version 0.1.1 --signing-key tauri-updater-key.pem --password-keychain-service TAURI_SIGNING_PRIVATE_KEY_PASSWORD --password-keychain-account grader-updater --output latest.json
+uv run python scripts/updater_evidence.py --manifest latest.json --artifact /path/to/Grader.app.tar.gz --out artifacts/release-evidence/updater-current.json  # fails if local artifacts predate the current git commit
+uv run python scripts/publish_local_release.py --dmg /path/to/Grader.dmg --updater-bundle /path/to/Grader.app.tar.gz --manifest latest.json --version 0.1.1  # dry-run; add --apply only after all local evidence passes
 uv run python scripts/updater_channel_preflight.py --current-version 0.1.0 --out artifacts/release-evidence/updater-channel-current.json  # run after publishing 0.1.1 to test installed 0.1.0 -> 0.1.1
 uv run python scripts/live_canvas_e2e.py --apply --course-id 106 --assignment-id 2841 --course-name "ZZ-GRADER-TEST-SANDBOX (safe to delete)" --output artifacts/release-evidence/canvas-live-current.json
 uv run python scripts/clean_machine_evidence.py --print-manual-runbook > clean-machine-runbook.md
@@ -187,7 +187,7 @@ The clean-machine manual template is fail-closed: every manual row must include 
 tester/timestamp/notes, at least one existing evidence file, and all check-specific `assertions`
 set to `true`. The Computer Use row additionally requires a `PASS` JSON from
 `scripts/computer_use_sweep_evidence.py`. `scripts/release_evidence_package.py` can assemble the
-signed DMG/latest.json, current evidence JSON, runbook, and manual template into one gitignored
+signed DMG/updater bundle/latest.json, current evidence JSON, runbook, and manual template into one gitignored
 clean-machine tester handoff folder; it is not a substitute for the clean-machine test itself.
 
 The committed `fixtures/public_proxy/` set is a tiny mechanics fixture. Real public-proxy datasets
@@ -235,10 +235,10 @@ private/public repository access, version drift, missing release-source tests, o
 state are caught without writing to GitHub. The GitHub workflow verifies Python tests, frontend
 component tests, Rust `cargo check`, and an unsigned Tauri build; Apple signing/notarization stays
 on the maintainer Mac. `scripts/publish_local_release.py --apply` uploads only the verified DMG,
-signed `latest.json`, checksums, and source provenance to the public assets repository. Use
+signed `Grader.app.tar.gz`, signed `latest.json`, checksums, and source provenance to the public assets repository. Use
 `scripts/updater_key_doctor.py` to verify the updater key/password before regenerating
 `latest.json`, and use `scripts/updater_channel_preflight.py` after publishing N+1 to confirm the
-live release channel advertises a signed newer, reachable `Grader.dmg` before clean-machine updater
+live release channel advertises a signed newer, reachable `Grader.app.tar.gz` before clean-machine updater
 testing starts.
 
 ## Docs

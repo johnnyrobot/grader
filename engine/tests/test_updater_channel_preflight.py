@@ -33,18 +33,18 @@ def test_updater_channel_preflight_passes_newer_signed_manifest(tmp_path, monkey
                 "platforms": {
                     "darwin-aarch64": {
                         "signature": "signed",
-                        "url": "https://github.com/johnnyrobot/grader-releases/releases/download/v0.1.1/Grader.dmg",
+                        "url": "https://github.com/johnnyrobot/grader-releases/releases/download/v0.1.1/Grader.app.tar.gz",
                     },
                     "darwin-x86_64": {
                         "signature": "signed",
-                        "url": "https://github.com/johnnyrobot/grader-releases/releases/download/v0.1.1/Grader.dmg",
+                        "url": "https://github.com/johnnyrobot/grader-releases/releases/download/v0.1.1/Grader.app.tar.gz",
                     },
                 },
             }
 
     class HeadResponse:
         status_code = 200
-        url = "https://github.com/johnnyrobot/grader-releases/releases/download/v0.1.1/Grader.dmg"
+        url = "https://github.com/johnnyrobot/grader-releases/releases/download/v0.1.1/Grader.app.tar.gz"
         headers = {"content-length": "123"}
 
     monkeypatch.setattr(preflight.httpx, "get", lambda *_args, **_kwargs: ManifestResponse())
@@ -87,14 +87,14 @@ def test_updater_channel_preflight_blocks_not_newer_version(tmp_path, monkeypatc
             return {
                 "version": "0.1.0",
                 "platforms": {
-                    "darwin-aarch64": {"signature": "signed", "url": "https://github.com/johnnyrobot/grader-releases/releases/download/v0.1.0/Grader.dmg"},
-                    "darwin-x86_64": {"signature": "signed", "url": "https://github.com/johnnyrobot/grader-releases/releases/download/v0.1.0/Grader.dmg"},
+                    "darwin-aarch64": {"signature": "signed", "url": "https://github.com/johnnyrobot/grader-releases/releases/download/v0.1.0/Grader.app.tar.gz"},
+                    "darwin-x86_64": {"signature": "signed", "url": "https://github.com/johnnyrobot/grader-releases/releases/download/v0.1.0/Grader.app.tar.gz"},
                 },
             }
 
     class HeadResponse:
         status_code = 200
-        url = "https://github.com/johnnyrobot/grader-releases/releases/download/v0.1.0/Grader.dmg"
+        url = "https://github.com/johnnyrobot/grader-releases/releases/download/v0.1.0/Grader.app.tar.gz"
         headers = {"content-length": "123"}
 
     monkeypatch.setattr(preflight.httpx, "get", lambda *_args, **_kwargs: ManifestResponse())
@@ -120,18 +120,18 @@ def test_updater_channel_preflight_blocks_missing_artifact_url(tmp_path, monkeyp
                 "platforms": {
                     "darwin-aarch64": {
                         "signature": "signed",
-                        "url": "https://github.com/johnnyrobot/grader-releases/releases/download/v0.1.1/Grader.dmg",
+                        "url": "https://github.com/johnnyrobot/grader-releases/releases/download/v0.1.1/Grader.app.tar.gz",
                     },
                     "darwin-x86_64": {
                         "signature": "signed",
-                        "url": "https://github.com/johnnyrobot/grader-releases/releases/download/v0.1.1/Grader.dmg",
+                        "url": "https://github.com/johnnyrobot/grader-releases/releases/download/v0.1.1/Grader.app.tar.gz",
                     },
                 },
             }
 
     class HeadResponse:
         status_code = 404
-        url = "https://github.com/johnnyrobot/grader-releases/releases/download/v0.1.1/Grader.dmg"
+        url = "https://github.com/johnnyrobot/grader-releases/releases/download/v0.1.1/Grader.app.tar.gz"
         headers = {}
 
     monkeypatch.setattr(preflight.httpx, "get", lambda *_args, **_kwargs: ManifestResponse())

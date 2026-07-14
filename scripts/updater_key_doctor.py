@@ -219,8 +219,8 @@ commit it, or write it to a repo file.
 ```bash
 export TAURI_SIGNING_PRIVATE_KEY_PASSWORD='<updater-key-password>'
 uv run python scripts/updater_key_doctor.py --signing-key tauri-updater-key.pem --out artifacts/release-evidence/updater-key-current.json
-uv run python scripts/generate_appcast.py --dmg app/src-tauri/target/release/bundle/dmg/Grader.dmg --version 0.1.1 --signing-key tauri-updater-key.pem --output latest.json
-uv run python scripts/updater_evidence.py --manifest latest.json --artifact app/src-tauri/target/release/bundle/dmg/Grader.dmg --version 0.1.1 --out artifacts/release-evidence/updater-current.json
+uv run python scripts/generate_appcast.py --app app/src-tauri/target/release/bundle/macos/Grader.app --version 0.1.1 --signing-key tauri-updater-key.pem --output latest.json
+uv run python scripts/updater_evidence.py --manifest latest.json --artifact app/src-tauri/target/release/bundle/macos/Grader.app.tar.gz --version 0.1.1 --out artifacts/release-evidence/updater-current.json
 unset TAURI_SIGNING_PRIVATE_KEY_PASSWORD
 ```
 
@@ -239,7 +239,7 @@ uv run python scripts/updater_key_doctor.py \\
   --out artifacts/release-evidence/updater-key-current.json
 
 uv run python scripts/generate_appcast.py \\
-  --dmg app/src-tauri/target/release/bundle/dmg/Grader.dmg \\
+  --app app/src-tauri/target/release/bundle/macos/Grader.app \\
   --version 0.1.1 \\
   --signing-key tauri-updater-key.pem \\
   --password-keychain-service TAURI_SIGNING_PRIVATE_KEY_PASSWORD \\
@@ -248,7 +248,7 @@ uv run python scripts/generate_appcast.py \\
 
 uv run python scripts/updater_evidence.py \\
   --manifest latest.json \\
-  --artifact app/src-tauri/target/release/bundle/dmg/Grader.dmg \\
+  --artifact app/src-tauri/target/release/bundle/macos/Grader.app.tar.gz \\
   --version 0.1.1 \\
   --out artifacts/release-evidence/updater-current.json
 ```

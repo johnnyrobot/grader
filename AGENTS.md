@@ -69,7 +69,7 @@ Nested guidance exists in `engine/AGENTS.md`, `engine/grader/AGENTS.md`,
 | Desktop ↔ engine boundary | `app/src/api.ts`, `engine/api.py` | Dynamic loopback HTTP port + per-launch bearer token; dev fallback remains `127.0.0.1:8756` |
 | Engine process lifecycle | `app/src-tauri/src/engine.rs`, `lib.rs`, `scripts/start_engine.sh` | Starts/stops uvicorn with the Tauri app |
 | Updater release evidence | `scripts/generate_appcast.py`, `scripts/updater_evidence.py`, `app/src-tauri/tauri.conf.json` | Requires signed `latest.json` and signed artifact |
-| GitHub release publication | `scripts/bump_release_version.py`, `scripts/github_release_preflight.py`, `scripts/publish_local_release.py`, `.github/workflows/release.yml` | Local Apple signing; read-only private-source/public-assets preflight; guarded DMG/manifest/checksum/provenance upload |
+| GitHub release publication | `scripts/bump_release_version.py`, `scripts/github_release_preflight.py`, `scripts/publish_local_release.py`, `.github/workflows/release.yml` | Local Apple signing; read-only private-source/public-assets preflight; guarded DMG/updater-bundle/manifest/checksum/provenance upload |
 | Canvas round-trip | `engine/grader/canvas.py`, Canvas routes in `engine/api.py` | Live sandbox helper is `scripts/seed_canvas_sandbox.py` |
 | Document/handwriting | `engine/grader/parse.py`, `handwriting.py` | Vision transcribes; the text model grades |
 | Citation verification | `engine/grader/citations.py`, `engine/verify_citations.py` | Network-dependent result artifact; rerun before quoting accuracy |
@@ -207,8 +207,8 @@ uv run python scripts/github_release_preflight.py --candidate-tag v0.1.1 --out a
 uv run python scripts/updater_key_doctor.py --print-private-runbook > updater-key-private-runbook.md
 export TAURI_SIGNING_PRIVATE_KEY_PASSWORD='<updater-key-password>'  # private shell only; or use the Keychain commands from the runbook
 uv run python scripts/updater_key_doctor.py --signing-key /path/to/tauri-updater-key.pem --out artifacts/release-evidence/updater-key-current.json
-uv run python scripts/generate_appcast.py --dmg /path/to/Grader.dmg --version 0.1.1 --signing-key /path/to/tauri-updater-key.pem --output latest.json
-uv run python scripts/updater_evidence.py --manifest latest.json --artifact /path/to/Grader.dmg --out artifacts/release-evidence/updater-current.json  # fails if artifacts predate current git commit
+uv run python scripts/generate_appcast.py --app /path/to/Grader.app --version 0.1.1 --signing-key /path/to/tauri-updater-key.pem --output latest.json
+uv run python scripts/updater_evidence.py --manifest latest.json --artifact /path/to/Grader.app.tar.gz --out artifacts/release-evidence/updater-current.json  # fails if artifacts predate current git commit
 uv run python scripts/updater_channel_preflight.py --current-version 0.1.0 --out artifacts/release-evidence/updater-channel-current.json  # run after publishing 0.1.1 to test installed 0.1.0 -> 0.1.1
 uv run python scripts/live_canvas_e2e.py --apply --course-id 106 --assignment-id 2841 --course-name "ZZ-GRADER-TEST-SANDBOX (safe to delete)" --output artifacts/release-evidence/canvas-live-current.json
 uv run python scripts/clean_machine_evidence.py --print-manual-runbook > clean-machine-runbook.md

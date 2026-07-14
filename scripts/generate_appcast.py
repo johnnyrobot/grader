@@ -1,38 +1,32 @@
 #!/usr/bin/env python3
 """Generate the Tauri updater manifest (latest.json) for a release.
 
-Tauri's built-in updater (tauri-plugin-updater) uses a JSON manifest, not
-Sparkle's XML appcast. This script generates the manifest from a built +
-    signed DMG or .app.
+Tauri's built-in macOS updater requires a gzip-compressed tar archive whose
+top-level entry is the signed ``Grader.app`` bundle. A DMG is a distribution
+artifact for people, but it is not a valid input to ``downloadAndInstall``.
 
 The manifest is uploaded to GitHub Releases as the `latest.json` asset.
 The app's tauri.conf.json points to:
   https://github.com/johnnyrobot/grader-releases/releases/latest/download/latest.json
 
 Usage:
-  # Generate from a signed DMG
-  uv run python scripts/generate_appcast.py \
-    --dmg app/src-tauri/target/release/bundle/dmg/Grader.dmg \
-    --version 0.1.1 \
-    --signing-key /path/to/key.pem \
-    --output latest.json
-
-  # Generate from a signed .app (creates a zip)
+  # Package a signed/notarized .app and generate its manifest
   uv run python scripts/generate_appcast.py \
     --app app/src-tauri/target/release/bundle/macos/Grader.app \
     --version 0.1.1 \
     --signing-key /path/to/key.pem \
     --output latest.json
 
-  # With a signing key (generates signature)
+  # Or use an already-created Tauri-compatible updater bundle
   uv run python scripts/generate_appcast.py \
-    --dmg Grader.dmg --version 0.1.1 \
+    --updater-bundle app/src-tauri/target/release/bundle/macos/Grader.app.tar.gz \
+    --version 0.1.1 \
     --signing-key /path/to/key.pem \
     --output latest.json
 
   # Unsigned local smoke fixture only; never use for release evidence
   uv run python scripts/generate_appcast.py \
-    --dmg Grader.dmg --version 0.1.1 \
+    --updater-bundle Grader.app.tar.gz --version 0.1.1 \
     --allow-unsigned \
     --output latest.json
 
@@ -51,7 +45,7 @@ import os
 import re
 import subprocess
 import sys
-import zipfile
+import tarfile
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -83,16 +77,17 @@ def _load_password_from_keychain(service: str, account: str | None = None) -> st
     return password or None
 
 
-def _zip_app(app_path: Path, output: Path) -> Path:
-    """Zip a signed .app bundle, preserving the Grader.app parent directory."""
+def _package_app(app_path: Path, output: Path) -> Path:
+    """Create the ``.app.tar.gz`` layout required by Tauri's macOS updater."""
     if not app_path.is_dir() or app_path.suffix != ".app":
         print(f"ERROR: --app expects a .app directory: {app_path}")
         sys.exit(1)
+    if not output.name.endswith(".app.tar.gz"):
+        print(f"ERROR: updater bundle must end in .app.tar.gz: {output}")
+        sys.exit(1)
     output.parent.mkdir(parents=True, exist_ok=True)
-    with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED) as archive:
-        for child in sorted(app_path.rglob("*")):
-            if child.is_file():
-                archive.write(child, child.relative_to(app_path.parent))
+    with tarfile.open(output, "w:gz") as archive:
+        archive.add(app_path, arcname=app_path.name, recursive=True)
     return output
 
 
@@ -135,6 +130,10 @@ def generate_manifest(
 
     if not artifact_path.exists():
         print(f"ERROR: artifact not found: {artifact_path}")
+        sys.exit(1)
+    if not artifact_path.name.endswith(".app.tar.gz"):
+        print("ERROR: macOS updater artifact must be a Tauri-compatible .app.tar.gz bundle")
+        print("  DMGs are installer downloads and cannot be consumed by tauri-plugin-updater.")
         sys.exit(1)
 
     size = _file_size(artifact_path)
@@ -185,7 +184,7 @@ def generate_manifest(
     print()
     print("Upload to GitHub Releases:")
     print(
-        f"  uv run python scripts/publish_local_release.py --dmg {artifact_path} "
+        f"  uv run python scripts/publish_local_release.py --updater-bundle {artifact_path} "
         f"--manifest {output} --version {version} --apply"
     )
 
@@ -195,8 +194,8 @@ def main() -> None:
         description="Generate Tauri updater manifest (latest.json)"
     )
     group = parser.add_mutually_exclusive_group(required=True)
-    group.add_argument("--dmg", type=Path, help="Path to signed DMG")
-    group.add_argument("--app", type=Path, help="Path to signed .app (will be zipped)")
+    group.add_argument("--updater-bundle", type=Path, help="Path to signed Grader.app.tar.gz")
+    group.add_argument("--app", type=Path, help="Path to signed .app (will be packaged as .app.tar.gz)")
     parser.add_argument("--version", required=True, help="Version string (e.g. 0.1.1)")
     parser.add_argument("--output", type=Path, default=Path("latest.json"),
                         help="Output manifest path (default: latest.json)")
@@ -208,21 +207,24 @@ def main() -> None:
                         help="Read updater key password from this macOS Keychain service without printing it")
     parser.add_argument("--password-keychain-account", default=None,
                         help="Optional macOS Keychain account for --password-keychain-service")
-    parser.add_argument("--zip-output", type=Path, default=None,
-                        help="When --app is used, where to write the zipped .app artifact")
+    parser.add_argument("--bundle-output", type=Path, default=None,
+                        help="When --app is used, where to write the .app.tar.gz artifact")
     parser.add_argument("--allow-unsigned", action="store_true",
                         help="Allow unsigned manifest generation for local smoke fixtures only")
 
     args = parser.parse_args()
 
-    if args.dmg:
-        artifact = args.dmg
+    if args.updater_bundle:
+        artifact = args.updater_bundle
     else:
         app = args.app
         if not app.exists():
             print(f"ERROR: app not found: {app}")
             sys.exit(1)
-        artifact = _zip_app(app, args.zip_output or args.output.with_name(f"{app.stem}.zip"))
+        artifact = _package_app(
+            app,
+            args.bundle_output or app.with_name(f"{app.name}.tar.gz"),
+        )
 
     signing_env = None
     if args.password_keychain_service and not os.environ.get("TAURI_SIGNING_PRIVATE_KEY_PASSWORD"):
