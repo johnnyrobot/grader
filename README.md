@@ -6,6 +6,16 @@ you grade**.
 
 Student work never leaves your machine.
 
+## Product tour
+
+| Privacy-first onboarding | Review-first grading queue |
+| :---: | :---: |
+| ![Grader privacy-first onboarding](docs/images/grader-demo/01-onboarding-welcome.png) | ![Grader grading queue with synthetic submissions](docs/images/grader-demo/02-grading-queue.png) |
+| **Teacher review and explicit approval** | **On-device model manager** |
+| ![Teacher-edited grade after explicit approval](docs/images/grader-demo/03-teacher-review-approved.png) | ![Local text, handwriting, and exemplar models](docs/images/grader-demo/04-local-models.png) |
+
+_Screenshots use synthesized local-only records; no real student data or live Canvas writes._
+
 ---
 
 ## Why
