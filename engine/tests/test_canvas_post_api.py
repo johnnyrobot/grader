@@ -57,13 +57,21 @@ def api_module(monkeypatch):
 def test_canvas_post_uses_canvas_user_id_from_imported_submission(tmp_path, monkeypatch, api_module):
     api = api_module
     monkeypatch.setattr(api, "DB_PATH", tmp_path / "grader_engine.db")
+    monkeypatch.setattr(api, "SETTINGS_FILE", tmp_path / "settings.json")
+    api._save_settings({
+        **api.DEFAULT_SETTINGS,
+        "canvas_url": "https://canvas.example.test",
+        "canvas_token": "saved-test-token",
+        "data_dir": str(tmp_path / "canvas"),
+    })
 
     captured = {}
 
-    def fake_post_grades_batch(course_id, assignment_id, grade_data):
+    def fake_post_grades_batch(course_id, assignment_id, grade_data, **connection):
         captured["course_id"] = course_id
         captured["assignment_id"] = assignment_id
         captured["grade_data"] = grade_data
+        captured["connection"] = connection
         return {"workflow_state": "completed", "completion": 100}
 
     monkeypatch.setattr("grader.canvas.post_grades_batch", fake_post_grades_batch)
@@ -103,6 +111,10 @@ def test_canvas_post_uses_canvas_user_id_from_imported_submission(tmp_path, monk
     assert captured["grade_data"]["98765"]["posted_grade"] == 7
     assert captured["grade_data"]["98765"]["text_comment"] == "feedback"
     assert "rubric_assessment" not in captured["grade_data"]["98765"]
+    assert captured["connection"] == {
+        "base_url": "https://canvas.example.test",
+        "token": "saved-test-token",
+    }
 
 
 def test_canvas_post_skips_grade_without_canvas_user_id(tmp_path, monkeypatch, api_module):
@@ -148,10 +160,13 @@ def test_canvas_post_skips_grade_without_canvas_user_id(tmp_path, monkeypatch, a
 def test_canvas_import_returns_local_submission_ids(tmp_path, monkeypatch, api_module):
     api = api_module
     monkeypatch.setattr(api, "DB_PATH", tmp_path / "grader_engine.db")
-    monkeypatch.setattr("grader.canvas.list_ungraded", lambda course_id, assignment_id: [
+    monkeypatch.setattr("grader.canvas.list_ungraded", lambda course_id, assignment_id, **connection: [
         {"user_id": 98765, "body": "student text", "attachments": []}
     ])
-    monkeypatch.setattr("grader.canvas.download_submission_attachments", lambda submission, dest_dir: [])
+    monkeypatch.setattr(
+        "grader.canvas.download_submission_attachments",
+        lambda submission, dest_dir, **connection: [],
+    )
 
     result = api.canvas_import(
         api.CanvasImportReq(course_id=10, assignment_id=20, download_attachments=True)
@@ -197,6 +212,139 @@ def test_grade_batch_can_limit_to_requested_submission_ids(tmp_path, monkeypatch
     assert result["total"] == 1
     assert captured["args"][2] == ["sub_keep"]
     assert captured["started"] is True
+
+
+def test_saved_settings_drive_canvas_grade_batch_and_attachment_directory(
+    tmp_path, monkeypatch, api_module
+):
+    api = api_module
+    monkeypatch.setattr(api, "DB_PATH", tmp_path / "grader_engine.db")
+    monkeypatch.setattr(api, "SETTINGS_FILE", tmp_path / "settings.json")
+    attachment_root = tmp_path / "canvas-downloads"
+    api._save_settings({
+        **api.DEFAULT_SETTINGS,
+        "canvas_url": "https://canvas.example.test",
+        "canvas_token": "saved-test-token",
+        "data_dir": str(attachment_root),
+        "model_text": "grader-text:test",
+        "model_vision": "grader-vision:test",
+        "model_embed": "nomic-embed-text:test",
+        "review_first_threshold": 0.6,
+        "auto_approve_threshold": 0.9,
+    })
+
+    canvas_calls = {}
+
+    def fake_list(course_id, assignment_id, **connection):
+        canvas_calls["list"] = connection
+        return [{
+            "user_id": 98765,
+            "body": "student text",
+            "attachments": [{"id": 4, "filename": "paper.txt", "url": "https://example.test"}],
+        }]
+
+    def fake_download(submission, dest_dir, **connection):
+        canvas_calls["download"] = {"dest_dir": dest_dir, **connection}
+        return []
+
+    monkeypatch.setattr("grader.canvas.list_ungraded", fake_list)
+    monkeypatch.setattr("grader.canvas.download_submission_attachments", fake_download)
+
+    imported = api.canvas_import(api.CanvasImportReq(course_id=10, assignment_id=20))
+
+    assert imported["imported"] == 1
+    assert canvas_calls["list"] == {
+        "base_url": "https://canvas.example.test",
+        "token": "saved-test-token",
+    }
+    assert canvas_calls["download"]["token"] == "saved-test-token"
+    assert canvas_calls["download"]["dest_dir"] == (
+        attachment_root / "attachments" / "course_10" / "assign_20"
+    )
+
+    monkeypatch.setattr(api._rubric_store, "list", lambda: [{"title": "Rubric"}])
+    monkeypatch.setattr(api._rubric_store, "get", lambda title: object())
+    captured = {}
+
+    class FakeThread:
+        def __init__(self, *, target, args, daemon):
+            captured["args"] = args
+
+        def start(self):
+            captured["started"] = True
+
+    monkeypatch.setattr(api.threading, "Thread", FakeThread)
+    result = api.grade_batch(api.GradeBatch(assignment_id="canvas_10_20"))
+
+    assert result["total"] == 1
+    assert captured["args"][4] == "grader-text:test"
+    assert captured["args"][6:] == (0.6, 0.9)
+    assert api._exemplar_store.embedding_model == "nomic-embed-text:test"
+
+
+def test_saved_vision_model_drives_transcription(tmp_path, monkeypatch, api_module):
+    api = api_module
+    monkeypatch.setattr(api, "DB_PATH", tmp_path / "grader_engine.db")
+    monkeypatch.setattr(api, "SETTINGS_FILE", tmp_path / "settings.json")
+    api._save_settings({
+        **api.DEFAULT_SETTINGS,
+        "model_vision": "grader-vision:test",
+        "data_dir": str(tmp_path / "canvas"),
+    })
+    image_path = tmp_path / "page.png"
+    image_path.write_bytes(b"synthetic image fixture")
+    captured = {}
+
+    def fake_transcribe(paths, *, model):
+        captured["paths"] = paths
+        captured["model"] = model
+        return {
+            "text": "synthetic transcription",
+            "avg_confidence": 0.9,
+            "low_confidence_pages": [],
+            "needs_review": False,
+            "page_results": [],
+        }
+
+    monkeypatch.setattr("grader.handwriting.transcribe_pages", fake_transcribe)
+
+    result = api.transcribe_images(api.TranscribeReq(file_paths=[str(image_path)]))
+
+    assert result["text"] == "synthetic transcription"
+    assert captured["model"] == "grader-vision:test"
+    assert captured["paths"] == [image_path]
+
+
+def test_settings_are_validated_masked_and_written_owner_only(tmp_path, monkeypatch, api_module):
+    api = api_module
+    monkeypatch.setattr(api, "DB_PATH", tmp_path / "grader_engine.db")
+    monkeypatch.setattr(api, "SETTINGS_FILE", tmp_path / "settings.json")
+
+    result = api.update_settings(api.SettingsUpdate(
+        canvas_url="https://canvas.example.test/",
+        canvas_token="1234567890abcdef",
+        data_dir=str(tmp_path / "attachments"),
+        review_first_threshold=0.65,
+        auto_approve_threshold=0.9,
+    ))
+
+    assert result["settings"]["canvas_url"] == "https://canvas.example.test"
+    assert result["settings"]["canvas_token_masked"] == "1234...cdef"
+    assert "canvas_token" not in result["settings"]
+    assert api.get_settings()["canvas_token_masked"] == "1234...cdef"
+    assert api.SETTINGS_FILE.stat().st_mode & 0o777 == 0o600
+
+    with pytest.raises(Exception, match="needs-review threshold"):
+        api.SettingsState(
+            **{
+                **api.DEFAULT_SETTINGS,
+                "review_first_threshold": 0.95,
+                "auto_approve_threshold": 0.9,
+            }
+        )
+
+    with pytest.raises(Exception, match="capped grader-text"):
+        api.GradeBatch(assignment_id="essay", model="qwen3:8b")
 
 
 def test_updates_check_route_is_not_shadowed_by_audit_route(monkeypatch, api_module):

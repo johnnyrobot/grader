@@ -20,7 +20,11 @@ from pathlib import Path
 from typing import Any
 
 
-def transcribe_image(path: Path | str) -> tuple[str, float]:
+def transcribe_image(
+    path: Path | str,
+    *,
+    model: str = "grader-vision:1.3b",
+) -> tuple[str, float]:
     """Transcribe a single image to text with confidence score.
 
     Returns (text, confidence). Confidence < 0.85 flags the item for teacher review.
@@ -35,7 +39,7 @@ def transcribe_image(path: Path | str) -> tuple[str, float]:
         return text, confidence
 
     # Layer 2: grader-vision:1.3b for messy/cursive regions
-    vlm_text, vlm_conf = _vlm_transcribe(path)
+    vlm_text, vlm_conf = _vlm_transcribe(path, model=model)
     if vlm_conf > confidence:
         return vlm_text, vlm_conf
 
@@ -66,7 +70,7 @@ def _apple_vision(path: Path) -> tuple[str, float]:
         return "", 0.0
 
 
-def _vlm_transcribe(path: Path) -> tuple[str, float]:
+def _vlm_transcribe(path: Path, *, model: str = "grader-vision:1.3b") -> tuple[str, float]:
     """Use grader-vision model (MiniCPM-V or similar) via Ollama for cursive/handwriting.
 
     ~6s/page. NOT qwen3-vl — that model emits 20k+ chars of un-disableable reasoning
@@ -75,8 +79,7 @@ def _vlm_transcribe(path: Path) -> tuple[str, float]:
     try:
         import httpx
 
-        # Use grader-vision capped variant, never raw model tag
-        model = "grader-vision:1.3b"
+        # Use a configured grader-vision capped variant, never a raw model tag.
         prompt = (
             "Transcribe this handwritten text exactly as written. "
             "Output ONLY the transcribed text, nothing else. "
@@ -118,6 +121,7 @@ def transcribe_pages(
     page_paths: list[Path],
     *,
     min_confidence: float = 0.85,
+    model: str = "grader-vision:1.3b",
 ) -> dict[str, Any]:
     """Transcribe multiple pages. Returns combined text + per-page confidence + flags.
 
@@ -129,7 +133,7 @@ def transcribe_pages(
     """
     results = []
     for p in page_paths:
-        text, conf = transcribe_image(p)
+        text, conf = transcribe_image(p, model=model)
         results.append({"text": text, "confidence": conf, "path": str(p)})
 
     combined_text = "\n\n--- Page break ---\n\n".join(r["text"] for r in results)

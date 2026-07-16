@@ -99,8 +99,14 @@ class ExemplarStore:
     its keep well past that, and this keeps the dependency surface honest.)
     """
 
-    def __init__(self, path: Path | str = "fixtures/exemplars.db") -> None:
+    def __init__(
+        self,
+        path: Path | str = "fixtures/exemplars.db",
+        *,
+        embedding_model: str = EMBED_MODEL,
+    ) -> None:
         self.path = Path(path)
+        self.embedding_model = embedding_model
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.db = sqlite3.connect(self.path)
         self.db.row_factory = sqlite3.Row
@@ -109,7 +115,7 @@ class ExemplarStore:
     def add(self, ex: Exemplar, *, embed_now: bool = True) -> int:
         vec = ex.embedding
         if vec is None and embed_now:
-            vec = embed([ex.text])[0]
+            vec = embed([ex.text], model=self.embedding_model)[0]
         cur = self.db.execute(
             "INSERT INTO exemplars (assignment_id, student_ref, text, total, max_total, "
             "scores_json, comment, source, embedding, created_at) "
@@ -128,7 +134,10 @@ class ExemplarStore:
         items = list(exs)
         if not items:
             return 0
-        vecs = embed([e.text for e in items])  # one batch; embedding dominates the cost
+        vecs = embed(
+            [e.text for e in items],
+            model=self.embedding_model,
+        )  # one batch; embedding dominates the cost
         for e, v in zip(items, vecs):
             e.embedding = v
             self.add(e, embed_now=False)
@@ -184,7 +193,7 @@ class ExemplarStore:
         if not pool:
             return []
 
-        qv = embed([query_text])[0]
+        qv = embed([query_text], model=self.embedding_model)[0]
         scored = sorted(
             ((e, cosine(qv, e.embedding) + (self.OVERRIDE_BOOST if e.source == "override" else 0.0))
              for e in pool),  # type: ignore[arg-type]
