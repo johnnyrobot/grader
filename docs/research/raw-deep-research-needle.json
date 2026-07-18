@@ -1,0 +1,316 @@
+{
+  "run": {
+    "workflow": "deep-research (all-Opus)",
+    "runId": "wf_56838661-dd4",
+    "date": "2026-07-16",
+    "agentCount": 105,
+    "logs": [
+      "Q: Evaluate the Cactus Compute \"Needle\" model (https://github.com/cactus-compute/ne\u2026",
+      "Decomposed into 6 angles: Primary \u2014 Needle model specs, On-device runtime on Apple Silicon, Tool-calling benchmarks & count limits, Two-stage router for large API surfaces, Fine-tuning small tool-callers on an API, Cactus Compute background & positioning",
+      "Two-stage router for large API surfaces: 6 results",
+      "Primary \u2014 Needle model specs: 6 results",
+      "On-device runtime on Apple Silicon: 6 results",
+      "On-device runtime on Apple Silicon: 3 novel (3 filtered)",
+      "Cactus Compute background & positioning: 6 results",
+      "Cactus Compute background & positioning: 3 novel (3 filtered)",
+      "Fine-tuning small tool-callers on an API: 6 results",
+      "Fine-tuning small tool-callers on an API: 0 novel (6 filtered)",
+      "Tool-calling benchmarks & count limits: 6 results",
+      "Tool-calling benchmarks & count limits: 4 novel (2 filtered)",
+      "Fetched 22 sources \u2192 108 claims \u2192 verifying top 25",
+      "\"Fine-tuning Needle on custom tools requires a JSON\u2026\": 3-0 \u2713",
+      "\"Needle emits tool calls as a JSON array of objects\u2026\": 3-0 \u2713",
+      "\"Needle is a 26M-parameter custom 'Simple Attention\u2026\": 3-0 \u2713",
+      "\"Needle is a 26M-parameter encoder-decoder 'Simple \u2026\": 3-0 \u2713",
+      "\"Needle is released under the MIT license, which pe\u2026\": 3-0 \u2713",
+      "\"Needle is positioned and benchmarked only for 'sin\u2026\": 3-0 \u2713",
+      "\"Needle's tool-calling interface takes tools as a J\u2026\": 3-0 \u2713",
+      "\"Needle was post-trained on 2 billion tokens of fun\u2026\": 3-0 \u2713",
+      "\"Needle supports local fine-tuning on a Mac/PC via \u2026\": 3-0 \u2713",
+      "\"Needle is a 26-million-parameter function-calling \u2026\": 3-0 \u2713",
+      "\"Needle was post-trained on Gemini-synthesized data\u2026\": 3-0 \u2713",
+      "\"Needle's only reported benchmarking is relative si\u2026\": 3-0 \u2713",
+      "\"Needle runs on Cactus's own from-scratch inference\u2026\": 3-0 \u2713",
+      "\"Cactus's Needle is a 26-million-parameter model pu\u2026\": 3-0 \u2713",
+      "\"Needle is a 26-million-parameter model built speci\u2026\": 3-0 \u2713",
+      "\"Needle uses the OpenAI function-calling format and\u2026\": 3-0 \u2713",
+      "\"Needle is a 26-million-parameter model purpose-bui\u2026\": 3-0 \u2713",
+      "\"Cactus is a proprietary on-device inference engine\u2026\": 1-2 \u2717",
+      "\"Needle consumes tool definitions in OpenAI functio\u2026\": 3-0 \u2713",
+      "\"Cactus's runtime targets Apple Silicon via a Metal\u2026\": 2-1 \u2713",
+      "\"Presenting an LLM with all tool descriptions at on\u2026\": 3-0 \u2713",
+      "\"The RAG-MCP method works by first performing a sem\u2026\": 3-0 \u2713",
+      "\"Major LLM function-calling APIs cap at 128 tool de\u2026\": 3-0 \u2713",
+      "\"Retrieval precision (and therefore tool-selection \u2026\": 2-1 \u2713",
+      "\"Scaling a single agent beyond the 128-tool limit (\u2026\": 3-0 \u2713",
+      "Verify done: 25 claims \u2192 24 confirmed, 1 refuted, 0 unverified"
+    ]
+  },
+  "result": {
+    "question": "Evaluate the Cactus Compute \"Needle\" model (https://github.com/cactus-compute/needle, https://huggingface.co/Cactus-Compute/needle) as an on-device tool-calling model for Canvas LMS REST API integration. Context: a local-first macOS grading app (\"Grader\") currently drives Canvas via a CLI tool (canvas-pp-cli) and capped local Ollama models (grader-text:8b, grader-vision:1.3b). The Canvas REST API surface is very large: the instructor's local API doc contains ~417 distinct method+path endpoints, and a Canvas MCP server exposes 646 tools. Questions to answer: (1) What exactly is Needle \u2014 architecture, base model, parameter count, context window, tool-calling format, license, and inference requirements? (2) Is it viable to drive a 400-650-tool API surface \u2014 what is Needle's documented max tool count per call, its benchmark numbers on tool selection (BFCL or similar), and what tool-count limits do small tool-calling models generally hit? Is a two-stage router (retrieve candidate tools, then call) the standard workaround? (3) Could Needle run locally on Apple Silicon alongside a CLI tool as an intent-to-API-call router \u2014 what runtimes does it support (Cactus SDK, GGUF/llama.cpp, Ollama, MLX)? (4) Fine-tuning feasibility: can Needle or its base model be fine-tuned into a Canvas-LMS-specialized tool-calling model \u2014 what does Cactus document about fine-tuning, what training data format would be needed, and are there precedents for fine-tuning small models on large API surfaces? Prioritize primary sources: the cactus-compute/needle GitHub repo, the Cactus-Compute/needle HuggingFace model card, Cactus Compute docs/blog, and function-calling benchmark leaderboards.",
+    "summary": "Needle is a 26M-parameter custom \"Simple Attention Network\" (encoder-decoder, pure attention with no FFN/MLP layers; 12 encoder + 8 decoder layers, d_model=512) distilled from Gemini 3.1 Flash Lite and post-trained on 2B tokens of single-shot function-call data, released MIT-licensed and fully open on Hugging Face \u2014 a purpose-built tool-caller, not a general LLM. It emits calls as a JSON array of {name, arguments} objects, consumes tools in OpenAI function-calling format (or a simplified inline schema in its native repo), and runs on Cactus's from-scratch inference engine (Metal backend on Apple Silicon; no documented GGUF/llama.cpp/Ollama/MLX path), reaching ~6000 tok/s prefill and 1200 tok/s decode. Critically for Grader's use case, Needle publishes no BFCL/numeric benchmark, no context-window size, and no documented maximum-tools-per-call limit; it was trained on only 15 consumer-device tool categories (timers, messaging, navigation, smart home), not a large enterprise REST surface \u2014 so its ability to drive a 400\u2013650-tool Canvas API out-of-the-box is unproven and, given the tool-selection literature, unlikely. The research literature strongly establishes that all-tools-in-context fails at scale (13.62% accuracy dumping all tools vs 43.13% with retrieval; retrieval precision degrades past ~100 tools; hosted APIs cap at 128 tools and OpenAI recommends ~20), making a two-stage retrieve-then-call router the standard, near-mandatory workaround for a 400\u2013650-tool surface. Fine-tuning is Needle's intended path to a new domain: Cactus documents local Mac/PC fine-tuning via `needle finetune data.jsonl` (or a web UI) using a JSONL dataset with query/tools/answers fields, recommending \u2265120 examples per tool (100 train / 10 val / 10 test) to avoid overfitting \u2014 which for Canvas implies a substantial synthetic-data generation effort.",
+    "findings": [
+      {
+        "claim": "Needle is a 26M-parameter custom encoder-decoder 'Simple Attention Network' (pure attention, no FFN/MLP; 12 encoder + 8 decoder layers, d_model=512, GQA 8H/4KV, RoPE, 8192 BPE vocab) distilled from Gemini 3.1 Flash Lite and post-trained on 2B tokens of single-shot function-call data \u2014 a purpose-built function-caller, not a general-purpose LLM like Grader's decoder-only Ollama models.",
+        "confidence": "high",
+        "sources": [
+          "https://github.com/cactus-compute/needle",
+          "https://huggingface.co/Cactus-Compute/needle",
+          "https://cactuscompute.com/blog/needle",
+          "https://docs.cactuscompute.com/v2.0.1/",
+          "https://github.com/cactus-compute/cactus/blob/main/README.md"
+        ],
+        "evidence": "GitHub repo and HF model card both state verbatim '26m parameter Simple Attention Network', 'Encoder: 12 layers, GQA (8H/4KV), RoPE, gated residuals', 'Decoder: 8 layers, self-attn + cross-attn', 'd_model: 512', 'We distilled Gemini 3.1 into a 26m parameter...', and 'Post-trained on 2B tokens of single-shot function call dataset (45mins)'. Pretraining was '200B tokens on 16x TPU v6e (27hrs)'. Architecture is 'Encoder-decoder, pure attention (no FFN)'. Independent coverage (NYU Shanghai RITS, ai-tldr.dev) confirms distillation from Gemini 3.1 Flash Lite and FFN-free SAN design. The encoder-decoder, MLP-free design is genuinely non-standard vs Grader's decoder-only Llama-family models. Merges claims [0],[4],[7],[9],[13],[15] \u2014 all unanimous 3-0.",
+        "vote": "3-0 (six merged claims, all unanimous)"
+      },
+      {
+        "claim": "Needle is released under the MIT license with weights fully open on Hugging Face (Cactus-Compute/needle) and dataset-generation code open \u2014 permitting commercial use, modification, and redistribution, which is compatible with embedding it in the Grader product.",
+        "confidence": "high",
+        "sources": [
+          "https://huggingface.co/Cactus-Compute/needle",
+          "https://github.com/cactus-compute/needle",
+          "https://cactuscompute.com/blog/needle"
+        ],
+        "evidence": "HF README YAML metadata contains authoritative machine-readable 'license: mit'; card body states 'License: MIT'. GitHub README: 'Weights are fully open on Cactus-Compute/needle, as well as the dataset generation.' Cactus blog: 'Everything is MIT licensed.' Corroborated by Gigazine, TechPlanet, NYU RITS, DevPik. Needle is a from-scratch 26M architecture (not a weight-derivative of a restrictively-licensed base), so no upstream base-model license overrides the MIT tag. ONE CAVEAT flagged by verifier: Google's Gemini API ToS may restrict using Gemini outputs to build competing models \u2014 a legal question between Cactus and Google about the distillation-data provenance, not a change to Needle's MIT release status, but worth legal review if relicensing cleanliness matters. Merges claims [1],[5].",
+        "vote": "3-0 (both merged claims unanimous)"
+      },
+      {
+        "claim": "Needle emits tool calls as a JSON array of {name, arguments} objects and consumes tool definitions in OpenAI function-calling format via the Cactus runtime (`cactus run Cactus-Compute/needle [--tools my_tools.json]`, demo toolset by default); the standalone `needle` repo uses a parallel interface (`needle run --query ... --tools '<inline JSON>'`, plus a `needle playground` Gradio web UI at 127.0.0.1:7860) with a simplified per-parameter-required schema rather than strict OpenAI format.",
+        "confidence": "high",
+        "sources": [
+          "https://github.com/cactus-compute/needle",
+          "https://huggingface.co/Cactus-Compute/needle",
+          "https://docs.cactuscompute.com/v2.0.1/",
+          "https://docs.cactuscompute.com/",
+          "https://github.com/cactus-compute/cactus/blob/main/README.md"
+        ],
+        "evidence": "Output format confirmed verbatim on both primary sources: [{\"name\":\"get_weather\",\"arguments\":{\"location\":\"San Francisco\"}}]. Cactus SDK README line 181: 'cactus run Cactus-Compute/needle [--tools my_tools.json]  # OpenAI function-calling format; demo toolset by default'; CLI reference line 232: '--tools <json|file>   tool definitions for tool calling'. NUANCE (verifier-confirmed, not a contradiction): there are two entry points \u2014 the Cactus runtime SDK (`cactus run`, file-based --tools, 'OpenAI function-calling format' label, default demo toolset) and the standalone needle training-repo CLI (`needle run`, inline JSON string, no default toolset, simplified schema with per-param 'required' booleans and no type:function wrapper). The 'OpenAI function-calling format' label describes the tool-definition INPUT; the model OUTPUT is the custom {name, arguments} JSON array. Merges claims [1],[6],[14],[15],[16],[17] \u2014 five unanimous, note [18] below covers runtime.",
+        "vote": "3-0 (merged input/output/CLI claims all unanimous)"
+      },
+      {
+        "claim": "Needle's ONLY reported benchmarking is qualitative single-shot function-calling superiority over four other tiny models (FunctionGemma-270M, Qwen-0.6B, Granite-350M, LFM2.5-350M); it publishes NO numeric BFCL score, NO context-window/max-sequence-length, and NO documented maximum tool count per call, and the post concedes those larger models 'have more scope/capacity and excel in conversational settings.'",
+        "confidence": "high",
+        "sources": [
+          "https://github.com/cactus-compute/needle",
+          "https://huggingface.co/Cactus-Compute/needle",
+          "https://cactuscompute.com/blog/needle"
+        ],
+        "evidence": "All three primary sources contain the verbatim line 'it beats FunctionGemma-270m, Qwen-0.6B, Graninte-350m, LFM2.5-350m on single-shot function call' with zero numbers attached. Blog concedes: 'those models have more scope/capacity and excel in conversational settings.' Three negative sub-claims independently confirmed absent across GitHub, raw README, HF card, and web search: (a) no numeric BFCL/accuracy score for Needle anywhere; (b) no context-window size documented (RoPE and d_model=512 listed but no max sequence length); (c) no maximum-tools-per-call limit documented. This is the single most important gap for the Canvas use case: there is no published evidence Needle can select correctly among hundreds of tools. Merges claims [3],[6],[11] \u2014 all unanimous 3-0.",
+        "vote": "3-0 (three merged claims unanimous)"
+      },
+      {
+        "claim": "Needle was post-trained only on Gemini-synthesized data covering 15 consumer-device tool categories (timers, messaging, navigation, smart home, etc.), targeting on-device 'personal AI' on phones/watches/glasses \u2014 NOT a large enterprise REST API surface \u2014 so driving a 400\u2013650-tool Canvas surface is entirely out of its training distribution and unproven without fine-tuning.",
+        "confidence": "high",
+        "sources": [
+          "https://cactuscompute.com/blog/needle",
+          "https://github.com/cactus-compute/needle"
+        ],
+        "evidence": "Cactus blog states verbatim: 'Dataset synthesized via Gemini with 15 tool categories (timers, messaging, navigation, smart home, etc.)' and 'Post-trained on 2B tokens of synthesized function-calling data.' GitHub `needle generate-data` command 'Synthesize[s] training data via Gemini'. Corroborated by NYU RITS, DevPik, Gigazine describing consumer/on-device framing. Verifier caveat: only 4 of 15 categories are named ('etc.'), and the 'not an enterprise REST surface / Canvas-relevance' is sound inference rather than a directly-sourced Canvas assertion \u2014 but the load-bearing training-data disclosure is exact. This is a limitation the vendor discloses, so no marketing bias. Claim [10], unanimous 3-0.",
+        "vote": "3-0"
+      },
+      {
+        "claim": "Needle runs on Cactus's own from-scratch inference engine (C/C++ core with Python, Swift, Kotlin, Flutter, React Native, Rust bindings) targeting mobile/wearables/custom hardware, with a Metal backend on Apple Silicon (macOS/iOS) and ARM NEON CPU kernels \u2014 so it CAN run locally on Apple Silicon, but GGUF, llama.cpp, Ollama, and MLX are NOT documented as supported runtimes, meaning there is no documented drop-in path to co-run alongside Grader's existing Ollama stack.",
+        "confidence": "high",
+        "sources": [
+          "https://docs.cactuscompute.com/",
+          "https://cactuscompute.com/blog/needle",
+          "https://github.com/cactus-compute/cactus/blob/main/README.md"
+        ],
+        "evidence": "Blog: 'Cactus, an inference engine built from scratch for mobile, wearables and custom hardware.' Docs enumerate bindings 'Swift, Kotlin, Flutter, React Native, Python, Rust', 'Metal (Apple GPU backend)', platforms macOS/iOS/iPadOS/Android; v1 engine uses proprietary 'Cactus Quants' (4-bit-to-1-bit) format and a PyTorch-to-Cactus-graph transpiler. No GGUF/GGML/llama.cpp/Ollama/MLX references as supported runtimes in current docs or README. IMPORTANT NUANCE: Cactus's separate comparison marketing pages DO advertise GGUF model loading ('Cactus supports GGUF model loading') \u2014 so integration alongside a GGUF/Ollama stack is not impossible, it is simply not documented for Needle specifically. The related refuted claim (proprietary 'hybrid edge-cloud' framing, 1-2) and the split vote on [18] (2-1) reflect this GGUF-support ambiguity. For Grader: Needle would most naturally run via the Cactus runtime as a separate process/binding (Python binding available), NOT inside Ollama. Merges claims [12],[18].",
+        "vote": "2-1 on [18] (GGUF-support ambiguity); [12] unanimous 3-0"
+      },
+      {
+        "claim": "Needle supports LOCAL fine-tuning on a Mac/PC \u2014 the documented path to specialize it on a new API surface such as Canvas \u2014 invoked as `needle finetune data.jsonl` (CLI) or via a Gradio web UI; the training data is JSONL with three fields per line (query, tools, answers), and Cactus recommends AT LEAST 120 examples per tool (100 train / 10 val / 10 test) or the model overfits ('perfect training metrics but the model won't generalize').",
+        "confidence": "high",
+        "sources": [
+          "https://github.com/cactus-compute/needle",
+          "https://huggingface.co/Cactus-Compute/needle"
+        ],
+        "evidence": "HF card: 'you can even finetune locally on your Mac/PC', 'Finetune on your own tools via the web UI or CLI', command `needle finetune data.jsonl`, 'Web UI (generates data via Gemini, trains, evaluates, bundles result)'. GitHub confirms JSONL format (query / tools JSON-encoded / answers JSON-encoded) and 'Provide at least 120 examples per tool (100 train / 10 val / 10 test). Fewer examples will overfit.' Corroborated by DeepWiki, DevPik, EveryDev.ai, MindStudio. CAVEAT for Grader: the web-UI data-generation step calls the Gemini CLOUD API \u2014 only the CLI path with pre-generated local data is fully offline, which matters for Grader's on-device/privacy constraints. For a 400\u2013650-tool Canvas surface, \u2265120 examples/tool implies ~50,000\u201378,000 synthetic training examples \u2014 a substantial (but scriptable) data-generation effort. Merges claims [2],[8].",
+        "vote": "3-0 (both merged claims unanimous)"
+      },
+      {
+        "claim": "A two-stage retrieve-then-call router is the standard, near-mandatory mitigation for large tool surfaces: dumping all tool descriptions in-context ('Blank Conditioning') yields only 13.62% tool-selection accuracy, whereas retrieving and injecting only the single best tool (RAG-MCP) raises it to 43.13% (a >3x improvement) via semantic search over a tool index before the LLM is invoked.",
+        "confidence": "high",
+        "sources": [
+          "https://arxiv.org/html/2505.03275v1",
+          "https://arxiv.org/pdf/2410.14594"
+        ],
+        "evidence": "RAG-MCP (arXiv:2505.03275v1) Table 1: MCP-RAG 43.13%, Actual Match 18.20%, Blank Conditioning 13.62% (all-N-descriptions-at-once), on the MCPBench web-search subset. Mechanism confirmed: 'A lightweight LLM-based retriever encodes the user's task description and performs a semantic search over the MCP index, returning the top-k candidate MCPs' and 'Only the single best MCP description ... is injected.' Toolshed (arXiv:2410.14594) independently frames the two standard scaling approaches as (1) fine-tuning for tool use and (2) retriever-based selection from a vector DB. CAVEATS: RAG-MCP v1 is a non-peer-reviewed preprint by the winning method's proponents (self-interested), and 43% absolute accuracy is still low \u2014 'effective' holds in the comparative sense. Corroborated directionally by Gorilla, ToolLLM, Toolshed. Merges claims [19],[21],[23]; [23] also names fine-tuning as the alternate scaling path (directly relevant to Needle fine-tuning finding).",
+        "vote": "3-0 ([19],[21],[23] all unanimous)"
+      },
+      {
+        "claim": "Tool-selection reliability degrades once the tool registry grows past roughly 100 tools, and hosted function-calling APIs (OpenAI, Google Gemini 1.5 Pro; per one paper also Anthropic) cap at 128 tool definitions per request, with OpenAI recommending ~20 tools per agent to maintain accuracy \u2014 all far below Grader's 400\u2013650-tool Canvas surface, confirming all-tools-in-context is not viable and a retrieval/fine-tuning stage is required.",
+        "confidence": "high",
+        "sources": [
+          "https://arxiv.org/html/2505.03275v1",
+          "https://arxiv.org/pdf/2410.14594"
+        ],
+        "evidence": "RAG-MCP stress test varies N (registry size) from 1 to ~1100/11100 and finds 'beyond position ~100 ... retrieval precision diminishes when handling very large tool registries.' Toolshed (arXiv:2410.14594): 'OpenAI (gpt-4o-2024-08-06), Anthropic (claude-3-5-sonnet), Google Gemini 1.5 Pro support up to 128 tool function definitions in the API request, though OpenAI recommends limiting it to around 20 tools per agent.' 128-tool cap independently verified as a live, current (2025-2026) OpenAI API hard limit ('Invalid tools: array too long. Expected an array with maximum length 128'); ~20-tool recommendation confirmed in OpenAI's function-calling guide. IMPORTANT NUANCE for Grader: the 128 hard cap is an OpenAI/Azure hosted-API artifact \u2014 local Ollama/llama.cpp/MLX/Cactus models have NO such API cap, BUT small local tool-callers (like 26M Needle) still degrade well before hundreds of tools, so the retrieval/fine-tuning workaround still applies. One paper's claim that Anthropic also caps at 128 is contradicted by other sources (Anthropic imposes no such hard limit). ToolRet (arXiv:2503.01763, ACL 2025) and reports of degradation as early as 30-50 tools make '~100' conservative. Merges claims [20],[22],[23].",
+        "vote": "2-1 on [20] (position-vs-registry-size ambiguity, resolved in claim's favor); [22] unanimous 3-0"
+      }
+    ],
+    "caveats": "TIME-SENSITIVITY: Needle is a very recent release (~May 2026) and all vendor claims (speeds, benchmark superiority, architecture) are ~2 months old as of this research (July 2026); figures may shift and no independent third-party benchmark of Needle existed at research time. VENDOR-REPORTED, UNVERIFIED NUMBERS: the 6000 tok/s prefill / 1200 tok/s decode speeds are Cactus-reported on unspecified hardware; the 'beats FunctionGemma/Qwen/Granite/LFM2.5' claim has ZERO published numbers behind it and comes from the vendor's own blog/repo. NO BFCL SCORE EXISTS for Needle \u2014 any accuracy expectation for Canvas is pure extrapolation. THE CENTRAL UNKNOWN: Needle documents no maximum-tools-per-call and no context window, and was trained on only 15 consumer tool categories \u2014 there is no evidence, positive or negative, about how it behaves with 400-650 heterogeneous Canvas tools; the tool-selection literature (13.62% all-tools accuracy, ~100-tool degradation threshold) strongly suggests it would fail badly without a retrieval front-end or heavy fine-tuning. SOURCE QUALITY: the two-stage-router evidence rests substantially on RAG-MCP (arXiv:2505.03275v1), a non-peer-reviewed preprint by the method's own proponents with low absolute accuracy (43%); the directional finding (retrieval beats tool-stuffing) is well-corroborated but the specific percentages are self-interested. RUNTIME INTEGRATION is documented only for Cactus's own engine; GGUF/Ollama co-running is advertised generically on Cactus marketing pages but NOT documented for Needle specifically (this drove the one split vote, [18] at 2-1, and the one refuted claim). GEMINI-DISTILLATION ToS: MIT release is confirmed, but the upstream question of whether Gemini's API terms permit using its outputs to train a redistributable competing model is unresolved and is a legal matter, not covered by the sources. TWO CLI INTERFACES exist (`cactus run` SDK vs standalone `needle` repo) with different tool-schema conventions \u2014 integration work must target the right one.",
+    "openQuestions": [
+      "Fine-tuned on a Canvas-specific tool set, what tool-selection accuracy does Needle actually achieve \u2014 and does 26M parameters have enough capacity to reliably discriminate among 400-650 tools, or does it hit the small-model tool-count ceiling regardless of fine-tuning? (No published evidence exists either way; would require an empirical fine-tune-and-benchmark.)",
+      "What is Needle's actual maximum context window / input token limit, and how many tool definitions can physically fit in one call? The architecture uses RoPE and d_model=512 but no max sequence length is documented anywhere \u2014 this directly bounds whether even a retrieved top-k subset fits.",
+      "Can the Cactus runtime realistically co-exist with Grader's Ollama stack on the same Mac (memory, process model, Metal contention), and is there a supported GGUF/Ollama export path for Needle specifically, or must Grader adopt the Cactus SDK (Python binding) as a second inference runtime?",
+      "Does using Gemini-distilled outputs to fine-tune and redistribute a Canvas-specialized Needle create any licensing/ToS exposure under Google's Gemini API terms, given Grader is a commercial product \u2014 and does the fully-offline requirement rule out Cactus's Gemini-cloud-backed web-UI data-generation path, forcing a custom local synthetic-data pipeline for the ~50k-78k Canvas training examples implied by \u2265120 examples/tool?"
+    ],
+    "refuted": [
+      {
+        "claim": "Cactus is a proprietary on-device inference engine ('hybrid edge-cloud AI engine for mobile devices & wearables') that ships its own runtime with native bindings (Swift, Kotlin, Flutter, React Native, Python, Rust) rather than running on llama.cpp, GGUF, MLX, or Ollama.",
+        "vote": "1-2",
+        "source": "https://github.com/cactus-compute/cactus/blob/main/README.md"
+      }
+    ],
+    "unverified": [],
+    "sources": [
+      {
+        "url": "https://github.com/cactus-compute/needle",
+        "quality": "primary",
+        "angle": "Primary \u2014 Needle model specs",
+        "claimCount": 5
+      },
+      {
+        "url": "https://huggingface.co/Cactus-Compute/needle",
+        "quality": "primary",
+        "angle": "Primary \u2014 Needle model specs",
+        "claimCount": 5
+      },
+      {
+        "url": "https://cactuscompute.com/blog/needle",
+        "quality": "primary",
+        "angle": "Primary \u2014 Needle model specs",
+        "claimCount": 5
+      },
+      {
+        "url": "https://deepwiki.com/cactus-compute/needle",
+        "quality": "secondary",
+        "angle": "Primary \u2014 Needle model specs",
+        "claimCount": 5
+      },
+      {
+        "url": "https://docs.cactuscompute.com/v2.0.1/",
+        "quality": "primary",
+        "angle": "Primary \u2014 Needle model specs",
+        "claimCount": 5
+      },
+      {
+        "url": "https://www.mindstudio.ai/blog/what-is-cactus-needle-26m-function-calling-model",
+        "quality": "blog",
+        "angle": "Primary \u2014 Needle model specs",
+        "claimCount": 5
+      },
+      {
+        "url": "https://github.com/cactus-compute/cactus/blob/main/README.md",
+        "quality": "primary",
+        "angle": "On-device runtime on Apple Silicon",
+        "claimCount": 5
+      },
+      {
+        "url": "https://huggingface.co/blog/rshemet/cactus-on-device-inference",
+        "quality": "blog",
+        "angle": "On-device runtime on Apple Silicon",
+        "claimCount": 5
+      },
+      {
+        "url": "https://docs.cactuscompute.com/",
+        "quality": "primary",
+        "angle": "On-device runtime on Apple Silicon",
+        "claimCount": 5
+      },
+      {
+        "url": "https://arxiv.org/html/2505.03275v1",
+        "quality": "primary",
+        "angle": "Tool-calling benchmarks & count limits",
+        "claimCount": 5
+      },
+      {
+        "url": "https://arxiv.org/pdf/2410.14594",
+        "quality": "primary",
+        "angle": "Tool-calling benchmarks & count limits",
+        "claimCount": 5
+      },
+      {
+        "url": "https://tianpan.co/blog/2026-04-09-tool-selection-problem-agent-tool-routing-at-scale",
+        "quality": "blog",
+        "angle": "Tool-calling benchmarks & count limits",
+        "claimCount": 5
+      },
+      {
+        "url": "https://arxiv.org/html/2411.15399v1",
+        "quality": "primary",
+        "angle": "Tool-calling benchmarks & count limits",
+        "claimCount": 5
+      },
+      {
+        "url": "https://arxiv.org/abs/2505.03275",
+        "quality": "primary",
+        "angle": "Two-stage router for large API surfaces",
+        "claimCount": 4
+      },
+      {
+        "url": "https://next.redhat.com/2025/11/26/tool-rag-the-next-breakthrough-in-scalable-ai-agents/",
+        "quality": "blog",
+        "angle": "Two-stage router for large API surfaces",
+        "claimCount": 5
+      },
+      {
+        "url": "https://apxml.com/posts/scaling-mcp-with-tool-rag",
+        "quality": "blog",
+        "angle": "Two-stage router for large API surfaces",
+        "claimCount": 5
+      },
+      {
+        "url": "https://writer.com/engineering/rag-mcp/",
+        "quality": "blog",
+        "angle": "Two-stage router for large API surfaces",
+        "claimCount": 5
+      },
+      {
+        "url": "https://proceedings.mlr.press/v267/patil25a.html",
+        "quality": "primary",
+        "angle": "Two-stage router for large API surfaces",
+        "claimCount": 4
+      },
+      {
+        "url": "https://arxiv.org/pdf/2505.06416",
+        "quality": "primary",
+        "angle": "Two-stage router for large API surfaces",
+        "claimCount": 5
+      },
+      {
+        "url": "https://rits.shanghai.nyu.edu/ai/cactus-releases-needle-a-26m-distilled-model-for-on-device-tool-calling/",
+        "quality": "secondary",
+        "angle": "Cactus Compute background & positioning",
+        "claimCount": 5
+      },
+      {
+        "url": "https://startupfortune.com/needle-shows-tiny-models-can-move-ai-agents-onto-devices/",
+        "quality": "secondary",
+        "angle": "Cactus Compute background & positioning",
+        "claimCount": 5
+      },
+      {
+        "url": "https://cactuscompute.com/",
+        "quality": "primary",
+        "angle": "Cactus Compute background & positioning",
+        "claimCount": 5
+      }
+    ],
+    "stats": {
+      "angles": 6,
+      "sourcesFetched": 22,
+      "claimsExtracted": 108,
+      "claimsVerified": 25,
+      "confirmed": 24,
+      "killed": 1,
+      "unverified": 0,
+      "afterSynthesis": 9,
+      "urlDupes": 5,
+      "budgetDropped": 9,
+      "agentCalls": 105
+    }
+  }
+}
