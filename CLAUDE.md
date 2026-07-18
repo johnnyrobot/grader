@@ -1,131 +1,121 @@
 # CLAUDE.md
 
-This file is a concise entry point for Claude-based coding sessions. Read `AGENTS.md` first and
-follow the nearest nested `AGENTS.md` for files under `engine/`, `engine/grader/`, `scripts/`,
+Grader is a **local-first macOS grading copilot** for college instructors. A Python/FastAPI engine
+uses capped Ollama models (Pydantic AI) to draft rubric-aligned grades; a Tauri 2 / React desktop
+app lets the teacher inspect, edit, override, and **explicitly approve** every draft before anything
+posts to Canvas. Student work never leaves the device.
+
+Read the nearest nested `AGENTS.md` when working under `engine/`, `engine/grader/`, `scripts/`,
 `fixtures/citations/`, or `humanizer-main/`.
 
-## Product Boundary
+## Architecture
+```
+app/                     Tauri 2 + React/TS desktop app
+  src/                   screens/, components/AppShell.tsx, api.ts (all engine calls), theme.tsx, index.css
+  src-tauri/             Rust: engine.rs/lib.rs lifecycle, updater, tauri.conf.json bundle config
+engine/
+  api.py                 authenticated loopback FastAPI; SQLite/WAL queue + append-only audit log
+  grader/                grading, calibration, Canvas, parsing, handwriting, citations, write-back
+  gates/                 release gates: quality.py, bias.py, egress.py, perf.py, public_proxy.py
+  tests/                 pytest suite (schema, metrics, triage, fixtures)
+  bench.py calibrate.py verify_citations.py   P0/P1 experiments + 29-fixture citation harness
+fixtures/                citations/ (synthetic, committed); golden_set/ (real data gitignored)
+scripts/                 make_models.sh, start_engine.sh, Canvas + release/signing/updater tooling
+docs/                    HANDOFF, product/spec, FERPA, DATA-PLAN, rollout, phases P0–P5, research
+.github/workflows/       gates.yml (ship gates) + release.yml (tag-triggered)
+humanizer-main/          SEPARATE subproject — not part of the Grader product; has its own AGENTS.md
+RESEARCH.md              cited architectural rationale (read before relitigating locked decisions)
+pyproject.toml uv.lock   uv-managed, package = false
+```
+**Data flow:** desktop (`app/src/api.ts`) → dynamic loopback HTTP port + per-launch bearer token →
+`engine/api.py` routes → `engine/grader/*`. `grade()` (`engine/grader/agent.py`) turns rubric+text
+into a `GradeRun`; `triage()` assigns a review lane; teacher `apply_override()` produces the
+approved grade and a new exemplar; only then may `engine/grader/canvas.py` post.
 
-Grader is a local-first macOS grading copilot for college instructors. The Python/FastAPI engine
-uses capped Ollama models to draft rubric-aligned grades; the Tauri 2/React app lets the teacher
-inspect, edit, override, and explicitly approve those drafts.
-
-Non-negotiable rules:
-
-- Student work must remain on-device. Never commit real student work, golden sets, handwriting
-  samples, databases, credentials, private files, model weights, DMGs, notarization artifacts, or
-  clean-machine logs with secrets.
-- No grade may post to Canvas without an approved grade in the data layer.
-- Original student files are immutable; annotations always go to a new output file.
-- Vision transcribes and the text model grades. Never let a VLM grade directly.
-- Use only `grader-text:8b` and `grader-vision:1.3b` in application grading paths.
-- Keep `humanizer-main/` separate; it is not part of the Grader product.
-- Canvas live writes are allowed only in courses whose names start with `ZZ-GRADER-TEST`.
-
-## Current Desktop UI
-
-The complete light-first neuroinclusive redesign is implemented across onboarding, queue, grade
-review, settings, and model management.
-
-- Presentation state: `app/src/theme.tsx`
-- Semantic design tokens and component styling: `app/src/index.css`
-- Shared shell: `app/src/components/AppShell.tsx`
-- Screens: `app/src/screens/`
-- Component tests: `app/src/**/*.test.tsx`
-- Full mocked workflow: `app/e2e/neuroinclusive-ui.spec.ts`
-
-Light mode is the default. Dark mode, spacious density, and reduced motion are persisted user
-preferences. Keep status understandable without color, preserve visible focus and keyboard paths,
-and maintain 200% text reflow. Frontend API calls stay in `app/src/api.ts`; grading, documents,
-and Canvas behavior stay in Python.
-
-## Public Beta Standard
-
-The repo uses three evidence tiers:
-
-- `public_proxy`: open human-scored data for supervised public beta evidence.
-- `teacher_local`: instructor-owned historical grading for "grades like this teacher" evidence.
-- `synthetic_fixture`: mechanics and regression only; never accuracy evidence.
-
-The app is not public-beta ready until `scripts/release_readiness.py` reports
-`supervised_public_beta`. Citation verification is experimental unless
-`engine/verify_citations.py` passes at >=90% accuracy, zero false positives, and 3/3 retractions
-caught.
+Key symbols: `grade()` (agent.py), `Rubric`/`GradeDraft` (schema.py), `ExemplarStore`
+(exemplars.py), `triage()` (triage.py), `compute_health()` (calibration.py), `apply_override()`
+(overrides.py), `RubricStore` (rubrics.py), `OfflinePostQueue` (canvas.py), `parse()` (parse.py),
+`transcribe_pages()` (handwriting.py), `verify()`/`verify_batch()` (citations.py), `annotate()`
+(writeback.py), `start_engine()` (src-tauri/src/engine.rs).
 
 ## Commands
-
 ```bash
-uv sync
+# Python engine
+uv sync                                   # package = false project
 uv run pytest engine/tests/ -q
+PYTHONPATH=engine GRADER_ENGINE_TOKEN=dev uv run uvicorn engine.api:app --host 127.0.0.1 --port 8756 --reload
 
-cd app && npm install
-cd app && npm test -- --run
-cd app && npm run build
+# Capped Ollama models (never use raw base tags in app grading)
+ollama pull qwen3:8b && ollama pull minicpm-v4.6:latest
+./scripts/make_models.sh                  # builds grader-text:8b and grader-vision:1.3b
+
+# Desktop app
+cd app && npm install && npm run tauri dev
+cd app && npm test -- --run               # vitest component tests
+cd app && npm run build                   # tsc && vite build
 cd app/src-tauri && cargo check
+cd app && npm run dev -- --host 127.0.0.1 # then, in another terminal: npm run test:e2e (Playwright)
 
-# E2E: run these in separate terminals
-cd app && npm run dev -- --host 127.0.0.1
-cd app && npm run test:e2e
-
-uv run python scripts/build_public_proxy.py mohler-asag --out artifacts/public_proxy/mohler_asag --grade --anchor-exemplars-per-source 40 --anchor-k 6
-uv run python scripts/build_public_proxy.py mohler-asag --out artifacts/public_proxy/mohler_asag --grade --grade-perturbations --anchor-exemplars-per-source 40 --anchor-k 6
-uv run python engine/gates/quality.py --profile public_proxy --public-proxy-dir artifacts/public_proxy/mohler_asag
-uv run python engine/gates/bias.py --profile public_proxy --public-proxy-dir artifacts/public_proxy/mohler_asag
-uv run python engine/gates/quality.py --profile public_proxy --public-proxy-dir fixtures/public_proxy --allow-mechanics-fixture  # smoke only
-uv run python engine/gates/bias.py --profile public_proxy --public-proxy-dir fixtures/public_proxy --allow-mechanics-fixture     # smoke only
+# Release gates
+uv run python engine/gates/quality.py
+uv run python engine/gates/bias.py
 uv run python engine/gates/egress.py --capture-duration 15
 uv run python engine/gates/perf.py --memory-floor 16
-uv run python engine/verify_citations.py --fixtures fixtures/citations/citation_fixtures.json --output artifacts/citation-results.json
-uv run python scripts/live_canvas_e2e.py --dry-run
-uv run python scripts/release_version_guard.py --tag v0.1.1 --out artifacts/release-evidence/release-version.json
-uv run python scripts/bump_release_version.py --target-version 0.1.1 --allow-same --out artifacts/release-evidence/version-bump-plan.json  # dry-run/idempotency check; use --apply only in future release-prep commits
-uv run python scripts/github_release_preflight.py --candidate-tag v0.1.1 --out artifacts/release-evidence/github-release-preflight-current.json --no-fail
-uv run python scripts/updater_channel_preflight.py --current-version 0.1.0 --out artifacts/release-evidence/updater-channel-current.json
-uv run python scripts/release_readiness.py --profile public_beta --expected-version 0.1.1 --release-version-artifact artifacts/release-evidence/release-version.json --github-release-artifact artifacts/release-evidence/github-release-preflight-current.json --updater-channel-artifact artifacts/release-evidence/updater-channel-current.json --out artifacts/release-readiness
+
+# Guarded Canvas sandbox (ONLY ZZ-GRADER-TEST* courses)
+python scripts/seed_canvas_sandbox.py --apply --students 6
 ```
+The full public-beta release pipeline (public-proxy build, citation verify, signing/notarization,
+updater appcast, clean-machine + Computer Use evidence, `scripts/release_readiness.py`) is long and
+evidence-driven — see `scripts/` and `docs/phases/P5.md`. The repo is not public-beta ready until
+`scripts/release_readiness.py` reports `supervised_public_beta`.
 
-## Current Evidence
+## Conventions
+- Run Python via **`uv run python`** / `uv run pytest`. Python ≥ 3.12; new modules use
+  `from __future__ import annotations`.
+- **Grade at temperature 0.** Measure uncertainty with separate consistency samples.
+- Put enforceable output constraints in **Pydantic schemas, not prompt prose**.
+- `grade()` **never raises** — failures become `GradeRun.error` and stay visible in the queue.
+- `build_model()` is the only grading seam that knows the Ollama/OpenAI-compatible base URL.
+- Use only capped tags **`grader-text:8b`** and **`grader-vision:1.3b`**. Vision transcribes, the
+  text model grades.
+- Engine binds to loopback; protected routes require `GRADER_ENGINE_TOKEN`. SQLite uses WAL; the
+  audit log is append-only.
+- Frontend calls belong in `app/src/api.ts`; grading/document/Canvas logic stays in Python.
+- **Light mode is the default.** Use semantic CSS variables from `app/src/index.css`; theme/density/
+  motion prefs live in `app/src/theme.tsx`. Preserve color-independent status, visible focus,
+  keyboard paths, reduced motion, and 200% text reflow.
 
-As of 2026-07-13, Grader is suitable only for a developer-assisted alpha using synthetic or
-institution-approved test data. It is ready for a supervised public beta under the two-tier
-evidence standard, but not for an unattended teacher-specific accuracy claim.
+## Gotchas & Constraints
+Non-negotiable product rules:
+- Student work stays on-device. **Never commit** real student work, golden sets, handwriting
+  samples, databases, credentials, model weights, DMGs, notarization artifacts, or logs with secrets.
+- **No grade posts to Canvas without an approved grade in the data layer** (not merely in the UI).
+- Original student files are **immutable**; annotations always go to a new output file.
+- **Never let a VLM grade directly** — transcribe first, then call the normal text grader.
+- Canvas live writes are allowed **only** in courses whose names start with `ZZ-GRADER-TEST`.
 
-- Python: 209 passed.
-- Frontend: 15 component tests and four Playwright E2E tests pass, including a 16-screen visual
-  sweep with 167 visible controls recorded.
-- Privacy: PASS in isolation, 3/3 captured connections allowlisted.
-- Performance: PASS, 38.3 seconds for a 1,500-word essay.
-- Public-proxy quality/fairness: release mode rejects tiny mechanics fixtures. The local anchored
-  40-item Mohler ASAG run produced 40 scored rows, passes quality at QWK 0.845 against a 0.623
-  human-ceiling-adjusted floor, and passes fairness across all five perturbation families.
-- Teacher-local quality/fairness: unvalidated until authorized instructor data exists.
-- Citations: PASS_EXPERIMENTAL for beta mode, 20/29 correct (69%), 0 false positives, and 3/3
-  retractions caught; enabled mode still requires >=90% accuracy.
-- Canvas: guarded live app-level E2E passes on `canvas.johnnyrobot.ai` course `106`, assignment
-  `2841`: import, targeted grade for Canvas user `9`, teacher override/approval, post, Progress
-  completed, score `2`, and one teacher feedback comment read back.
-- Release readiness: `supervised_public_beta`, with all 19 matrix rows passing. Local Apple
-  signing/notarization, updater-key signing, the private-source/public-assets GitHub preflight,
-  public `Grader.app.tar.gz` update channel, and the signed 0.1.0 → 0.1.1 in-app update/relaunch pass.
-  `scripts/bump_release_version.py`, `scripts/release_version_guard.py`,
-  `scripts/github_release_preflight.py`,
-  `scripts/updater_evidence.py`,
-  `scripts/updater_channel_preflight.py`, and `scripts/clean_machine_evidence.py` now fail closed on
-  eight-surface version drift, missing publication prerequisites, stale artifacts, missing updater manifests,
-  unreachable release assets, and missing structured manual evidence. The latest local app/DMG build signs, notarizes, staples, and passes
-  macOS signature checks; signed updater manifest/release provenance passes; and the latest local
-  signed-app Computer Use sweep targets `/Applications/Grader.app` as `com.grader.app` and passes
-  with 73 accessibility/screenshot capture pairs. Local keyboard-only review, crash recovery,
-  fresh-profile first-run model reconciliation, and the native updater install/restart UI also pass
-  static/build checks. Local Developer ID signing/notarization, updater-key signing, and the
-  private-source/public-assets GitHub preflight pass without a certificate `.p12` export.
+Traps that will bite:
+- **License bans:** never use PyMuPDF (AGPL), marker (GPL/OpenRAIL), or self-hosted Firecrawl/
+  crawl4ai's Docker server (AGPL). Use Docling, pypdf, python-docx, openpyxl, and only crawl4ai's
+  Apache library path. Never commit NC-licensed corpora (PERSUADE 2.0, ELLIPSE, AAC&U VALUE, IAM).
+- **Never use Qwen3-VL for vision** (un-disableable reasoning → 140s+ latency; MiniCPM-V ≈ 5.8s).
+- **Never use raw Ollama base tags for app grading** (default contexts eat tens of GB).
+- **Never pipe `ollama list` to `grep -q` under `set -o pipefail`** — SIGPIPE can hide installed
+  models. Snapshot first.
+- **Canvas bulk posting isn't done until its Progress object reaches `completed`.**
+- **canvas-pp-cli reads are `{meta, results}`; mutations are `{action, resource, success, data,
+  partial_failure}`** — don't parse a read as `{data}`.
+- Never point sandbox tooling at an unmarked course; `ZZ-GRADER-TEST` is the safety boundary.
+- The modification under `.omo/run-continuation/` is unrelated operational state — **never commit,
+  discard, or overwrite it** unless the user explicitly asks.
+- Don't relitigate locked decisions without new evidence — read `RESEARCH.md` and `docs/research/`.
 
-During supervised beta: keep citation checks visibly experimental unless accuracy improves, rerun
-the signed updater path for every release, and keep teacher-local calibration claims separate.
-Canvas rubric-assessment posting remains disabled until local rubric criteria can be mapped to
-real Canvas criterion IDs; attachment write-back still needs separate evidence.
-
-## Working-Tree Caution
-
-The modification under `.omo/run-continuation/` remains unrelated operational state. Never commit,
-discard, or overwrite it unless the user explicitly requests it.
+## Evidence & Status
+Three evidence tiers: `public_proxy` (open human-scored data → supervised public-beta evidence),
+`teacher_local` (instructor-owned history → "grades like this teacher"), `synthetic_fixture`
+(mechanics/regression only, never accuracy). As of 2026-07-13: `supervised_public_beta` ready
+(Python 209 passing; 15 component + 4 Playwright E2E; privacy PASS; perf ~38s/1,500-word essay;
+public-proxy QWK 0.845). Citations are `PASS_EXPERIMENTAL` (20/29, 0 false positives, 3/3
+retractions) — keep visibly experimental until ≥ 90% accuracy. Not an unattended or teacher-specific
+accuracy claim; teacher-local calibration awaits authorized instructor data.
