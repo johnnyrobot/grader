@@ -278,8 +278,10 @@ def test_saved_settings_drive_canvas_grade_batch_and_attachment_directory(
 
     assert result["total"] == 1
     assert captured["args"][4] == "grader-text:test"
-    assert captured["args"][6:] == (0.6, 0.9)
-    assert api._exemplar_store.embedding_model == "nomic-embed-text:test"
+    # The saved embedding model travels with the job...
+    assert captured["args"][6:] == (0.6, 0.9, "nomic-embed-text:test")
+    # ...rather than being written onto the store other threads share.
+    assert api._exemplar_store.embedding_model == "nomic-embed-text"
 
 
 def test_saved_vision_model_drives_transcription(tmp_path, monkeypatch, api_module):
@@ -428,3 +430,50 @@ def test_canvas_import_reports_failure_when_download_fails(tmp_path, monkeypatch
 
     assert result["failures"], "failed download should be reported"
     assert any("555" in str(f.get("user_id")) for f in result["failures"])
+
+
+def test_override_grade_does_not_mutate_the_shared_exemplar_store(tmp_path, monkeypatch, api_module):
+    """The module-level store is shared with in-flight grading threads.
+
+    Reassigning its embedding_model from a request retargets retrieval for a batch
+    already running, so handlers must bind a per-request view instead.
+    """
+    api = api_module
+    monkeypatch.setattr(api, "DB_PATH", tmp_path / "grader_engine.db")
+    monkeypatch.setattr(api, "SETTINGS_FILE", tmp_path / "settings.json")
+    api._save_settings({**api.DEFAULT_SETTINGS, "model_embed": "nomic-embed-text:v1.5"})
+    api._exemplar_store.embedding_model = "nomic-embed-text:latest"
+
+    recorded = {}
+
+    def fake_apply_override(override_store, exemplar_store, **kwargs):
+        recorded["view_model"] = exemplar_store.embedding_model
+        raise RuntimeError("stop after the store is bound")
+
+    monkeypatch.setattr(api, "apply_override", fake_apply_override)
+
+    db = api._db()
+    db.execute(
+        "INSERT INTO submissions (id, assignment_id, student_ref, text, state, created_at) "
+        "VALUES (?,?,?,?,?,?)",
+        ("sub_ov", "a1", "s1", "student text", "graded", api._now()),
+    )
+    db.execute(
+        "INSERT INTO grade_records (id, submission_id, assignment_id, ai_scores_json, "
+        "ai_feedback, ai_confidence, ai_flags_json, lane, created_at) "
+        "VALUES (?,?,?,?,?,?,?,?,?)",
+        ("gr_ov", "sub_ov", "a1", json.dumps({"c1": 3.0}), "draft", 0.7, "[]",
+         "standard", api._now()),
+    )
+    db.commit()
+    db.close()
+
+    with pytest.raises(RuntimeError):
+        api.override_grade("gr_ov", api.OverrideRequest(
+            teacher_scores={"c1": 4.0}, teacher_feedback="raised",
+        ))
+
+    # The handler must pass a view bound to the saved model...
+    assert recorded["view_model"] == "nomic-embed-text:v1.5"
+    # ...without touching the shared singleton other threads are using.
+    assert api._exemplar_store.embedding_model == "nomic-embed-text:latest"

@@ -109,3 +109,39 @@ def test_count_reflects_only_exemplars_usable_by_the_current_model(tmp_path, mon
     store.embedding_model = "model-b"
 
     assert store.count("a1") == 0
+
+
+def test_for_model_view_does_not_mutate_the_shared_store(tmp_path):
+    """Request handlers must bind a model per call, never reassign the shared store's.
+
+    The store is a module-level singleton shared with grading worker threads; mutating
+    it mid-request retargets a running batch's retrieval.
+    """
+    store = ExemplarStore(tmp_path / "ex.db", embedding_model="model-a")
+
+    view = store.for_model("model-b")
+
+    assert view.embedding_model == "model-b"
+    assert store.embedding_model == "model-a"
+    assert view.db is store.db
+
+
+def test_add_rejects_a_precomputed_vector_from_another_model(tmp_path):
+    store = ExemplarStore(tmp_path / "ex.db", embedding_model="model-a")
+    foreign = _exemplar("from another model")
+    foreign.embedding = [1.0, 0.0]
+    foreign.embedding_model = "model-b"
+
+    with pytest.raises(ValueError):
+        store.add(foreign)
+
+
+def test_add_accepts_a_precomputed_vector_from_the_same_model(tmp_path):
+    store = ExemplarStore(tmp_path / "ex.db", embedding_model="model-a")
+    native = _exemplar("same model")
+    native.embedding = [1.0, 0.0]
+    native.embedding_model = "model-a"
+
+    store.add(native)
+
+    assert store.count("a1") == 1

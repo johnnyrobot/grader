@@ -21,6 +21,7 @@ Two retrieval rules that matter:
 
 from __future__ import annotations
 
+import copy
 import json
 import math
 import sqlite3
@@ -141,10 +142,28 @@ class ExemplarStore:
         )
         self.db.commit()
 
+    def for_model(self, embedding_model: str) -> ExemplarStore:
+        """A view of this store bound to one embedding model, sharing its connection.
+
+        Request handlers must never reassign a shared store's `embedding_model`: the
+        store is a singleton that grading worker threads read from, so a mid-flight
+        change silently retargets a running batch's retrieval. Bind a view instead.
+        """
+        view = copy.copy(self)  # shallow: deliberately shares self.db
+        view.embedding_model = embedding_model
+        return view
+
     def add(self, ex: Exemplar, *, embed_now: bool = True) -> int:
         vec = ex.embedding
         if vec is None and embed_now:
             vec = embed([ex.text], model=self.embedding_model)[0]
+        elif vec is not None and ex.embedding_model not in (None, self.embedding_model):
+            # Storing a foreign vector under this store's model label would reintroduce
+            # exactly the cross-model comparison the embedding_model column prevents.
+            raise ValueError(
+                f"embedding was produced by {ex.embedding_model!r}, but this store is "
+                f"bound to {self.embedding_model!r}; re-embed before adding"
+            )
         cur = self.db.execute(
             "INSERT INTO exemplars (assignment_id, student_ref, text, total, max_total, "
             "scores_json, comment, source, embedding, embedding_model, created_at) "
@@ -170,6 +189,7 @@ class ExemplarStore:
         )  # one batch; embedding dominates the cost
         for e, v in zip(items, vecs):
             e.embedding = v
+            e.embedding_model = self.embedding_model
             self.add(e, embed_now=False)
         return len(items)
 
