@@ -65,7 +65,7 @@ and real student work requires institutional authorization and the documented FE
 
 Confirmed in the current checkout:
 
-- Python tests: 229 passed.
+- Python tests: 234 passed.
 - Frontend tests: 18 passed; TypeScript/Vite production build and Rust `cargo check` pass.
 - The complete mocked desktop workflow passes in Playwright across onboarding, queue, review,
   settings, model management, and local-engine recovery. The visual sweep now fail-closes unless it

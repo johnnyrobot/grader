@@ -477,3 +477,43 @@ def test_override_grade_does_not_mutate_the_shared_exemplar_store(tmp_path, monk
     assert recorded["view_model"] == "nomic-embed-text:v1.5"
     # ...without touching the shared singleton other threads are using.
     assert api._exemplar_store.embedding_model == "nomic-embed-text:latest"
+
+
+def test_canvas_url_accepts_https(api_module):
+    api = api_module
+    settings = api.SettingsState(canvas_url="https://canvas.example.edu/")
+    assert settings.canvas_url == "https://canvas.example.edu"
+
+
+def test_canvas_url_rejects_plaintext_http_for_remote_hosts(api_module):
+    """A Canvas token over plaintext HTTP is a credential in the clear."""
+    api = api_module
+    with pytest.raises(Exception) as exc:
+        api.SettingsState(canvas_url="http://canvas.example.edu")
+    assert "https" in str(exc.value).lower()
+
+
+def test_canvas_url_allows_plaintext_http_on_loopback(api_module):
+    """Local Canvas dev instances legitimately run without TLS."""
+    api = api_module
+    for url in ("http://localhost:3000", "http://127.0.0.1:8900"):
+        assert api.SettingsState(canvas_url=url).canvas_url == url
+
+
+def test_canvas_url_rejects_hostnames_that_merely_start_with_localhost(api_module):
+    api = api_module
+    with pytest.raises(Exception):
+        api.SettingsState(canvas_url="http://localhost.attacker.example")
+
+
+def test_invalid_settings_file_is_logged_before_falling_back(tmp_path, monkeypatch, api_module, caplog):
+    """A silent reset to defaults looks identical to 'settings were never saved'."""
+    api = api_module
+    monkeypatch.setattr(api, "SETTINGS_FILE", tmp_path / "settings.json")
+    (tmp_path / "settings.json").write_text("{not valid json")
+
+    with caplog.at_level("WARNING"):
+        result = api._load_settings()
+
+    assert result == api.DEFAULT_SETTINGS
+    assert any("settings" in r.message.lower() for r in caplog.records)
