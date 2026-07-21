@@ -114,8 +114,8 @@ Traps that will bite:
 ## Evidence & Status
 Three evidence tiers: `public_proxy` (open human-scored data → supervised public-beta evidence),
 `teacher_local` (instructor-owned history → "grades like this teacher"), `synthetic_fixture`
-(mechanics/regression only, never accuracy). As of 2026-07-13: `supervised_public_beta` ready
-(Python 209 passing; 15 component + 4 Playwright E2E; privacy PASS; perf ~38s/1,500-word essay;
-public-proxy QWK 0.845). Citations are `PASS_EXPERIMENTAL` (20/29, 0 false positives, 3/3
+(mechanics/regression only, never accuracy). As of 2026-07-21: `supervised_public_beta` ready
+(Python 236 passing; 16 component + 2 API + 4 Playwright E2E; privacy PASS; perf ~38s/1,500-word
+essay; public-proxy QWK 0.845). Citations are `PASS_EXPERIMENTAL` (20/29, 0 false positives, 3/3
 retractions) — keep visibly experimental until ≥ 90% accuracy. Not an unattended or teacher-specific
 accuracy claim; teacher-local calibration awaits authorized instructor data.

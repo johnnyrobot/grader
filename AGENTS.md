@@ -49,7 +49,7 @@ cd app/src-tauri && cargo check   # Rust host
 
 ## Testing
 ```bash
-uv run pytest engine/tests/ -q            # Python engine (209 passing as of 2026-07-13)
+uv run pytest engine/tests/ -q            # Python engine (236 passing as of 2026-07-21)
 cd app && npm test -- --run               # vitest component tests (15)
 cd app && npm run dev -- --host 127.0.0.1 # then in another terminal:
 cd app && npm run test:e2e                # Playwright E2E (mocked workflow, 4 tests)
