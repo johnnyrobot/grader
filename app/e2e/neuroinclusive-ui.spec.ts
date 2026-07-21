@@ -204,7 +204,7 @@ test("instructor exercises every core control surface", async ({ page }, testInf
   await page.getByRole("tab", { name: "General" }).click();
   await page.getByLabel("Canvas URL").fill("https://canvas.example.invalid");
   await page.getByPlaceholder("Paste a new token").fill("synthetic-token");
-  await page.getByLabel("Local data directory").fill("/tmp/grader-synthetic");
+  await page.getByLabel("Canvas attachment directory").fill("/tmp/grader-synthetic");
   await page.getByLabel("High-confidence threshold").fill("0.9");
   await page.getByLabel("Needs-review threshold").fill("0.65");
   await page.getByRole("button", { name: "Save general settings" }).click();
@@ -317,7 +317,7 @@ test("visual sweep records every core screen and visible control inventory", asy
   await page.getByRole("tab", { name: "General" }).click();
   await page.getByLabel("Canvas URL").fill("https://canvas.example.invalid");
   await page.getByPlaceholder("Paste a new token").fill("synthetic-token");
-  await page.getByLabel("Local data directory").fill("/tmp/grader-synthetic");
+  await page.getByLabel("Canvas attachment directory").fill("/tmp/grader-synthetic");
   await page.getByRole("button", { name: "Save general settings" }).click();
   await expect(page.getByText("Settings saved on this Mac.")).toBeVisible();
   await capture("10-settings-general");
