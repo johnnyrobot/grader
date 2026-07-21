@@ -837,15 +837,20 @@ def canvas_import(req: CanvasImportReq) -> dict:
         texts: list[str] = [body] if body else []
 
         if req.download_attachments:
-            att_paths = download_submission_attachments(
+            downloads = download_submission_attachments(
                 sub,
                 dest_dir,
                 token=canvas_connection["token"],
             )
-            for p in att_paths:
-                if not p.exists():
-                    failures.append({"user_id": user_id, "error": f"download failed: {p.name}"})
+            for download in downloads:
+                if not download.ok:
+                    failures.append({
+                        "user_id": user_id,
+                        "error": f"download failed: {download.path.name}"
+                        + (f" ({download.error})" if download.error else ""),
+                    })
                     continue
+                p = download.path
                 try:
                     parsed = parse(p, vision_model=str(settings["model_vision"]))
                     if parsed.markdown.strip():

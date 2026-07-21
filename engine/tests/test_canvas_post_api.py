@@ -384,3 +384,47 @@ def test_updates_check_route_is_not_shadowed_by_audit_route(monkeypatch, api_mod
     assert captured["url"] == "https://github.com/johnnyrobot/grader-releases/releases/latest/download/latest.json"
     assert result["update_available"] is True
     assert result["latest_version"] == "0.1.1"
+
+
+def test_canvas_import_reports_failure_when_download_fails(tmp_path, monkeypatch, api_module):
+    """A failed download must never be replaced by whatever file sits at that path.
+
+    `p.exists()` alone cannot tell a fresh download from a leftover, and grafting a
+    leftover file's text onto this student's submission would grade them on another
+    document.
+    """
+    from grader.canvas import AttachmentDownload
+
+    api = api_module
+    monkeypatch.setattr(api, "DB_PATH", tmp_path / "grader_engine.db")
+    monkeypatch.setattr(api, "SETTINGS_FILE", tmp_path / "settings.json")
+
+    stale = tmp_path / "attachments" / "leftover.pdf"
+    stale.parent.mkdir(parents=True, exist_ok=True)
+    stale.write_text("a different student's essay")
+
+    monkeypatch.setattr(
+        "grader.canvas.list_ungraded",
+        lambda course_id, assignment_id, **connection: [
+            {"user_id": 555, "body": "", "attachments": [
+                {"id": 7, "filename": "essay.pdf", "url": "https://canvas.test/f/7"}
+            ]},
+        ],
+    )
+    monkeypatch.setattr(
+        "grader.canvas.download_submission_attachments",
+        lambda submission, dest_dir, **connection: [
+            AttachmentDownload(path=stale, ok=False, error="canvas returned 403")
+        ],
+    )
+    monkeypatch.setattr(
+        "grader.parse.parse",
+        lambda path, **kwargs: pytest.fail("must not parse a file whose download failed"),
+    )
+
+    result = api.canvas_import(
+        api.CanvasImportReq(course_id=10, assignment_id=20, download_attachments=True)
+    )
+
+    assert result["failures"], "failed download should be reported"
+    assert any("555" in str(f.get("user_id")) for f in result["failures"])

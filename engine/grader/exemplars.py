@@ -46,6 +46,8 @@ CREATE TABLE IF NOT EXISTS exemplars (
     comment       TEXT DEFAULT '',
     source        TEXT NOT NULL,     -- imported | graded_in_app | override
     embedding     BLOB,
+    embedding_model TEXT,            -- which model produced `embedding`; vectors are
+                                     -- only comparable within one model
     created_at    TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_ex_assignment ON exemplars(assignment_id);
@@ -64,6 +66,7 @@ class Exemplar:
     source: str = "graded_in_app"
     student_ref: str | None = None
     embedding: list[float] | None = None
+    embedding_model: str | None = None
 
     @property
     def pct(self) -> float:
@@ -86,6 +89,14 @@ def embed(texts: list[str], *, url: str = EMBED_URL, model: str = EMBED_MODEL) -
 
 
 def cosine(a: list[float], b: list[float]) -> float:
+    if len(a) != len(b):
+        # zip() would truncate to the shorter vector and return a plausible-looking
+        # score. Vectors of different lengths come from different embedding models,
+        # which is never a meaningful comparison — fail loudly instead.
+        raise ValueError(
+            f"cannot compare embeddings of different dimensions ({len(a)} vs {len(b)}); "
+            "they came from different embedding models"
+        )
     dot = sum(x * y for x, y in zip(a, b))
     na = math.sqrt(sum(x * x for x in a))
     nb = math.sqrt(sum(y * y for y in b))
@@ -111,6 +122,24 @@ class ExemplarStore:
         self.db = sqlite3.connect(self.path)
         self.db.row_factory = sqlite3.Row
         self.db.executescript(SCHEMA)
+        self._migrate_embedding_model()
+
+    def _migrate_embedding_model(self) -> None:
+        """Add and backfill `embedding_model` on stores written before it existed.
+
+        Any vector already on disk was produced while the model was the hardcoded
+        EMBED_MODEL constant, so backfilling that value is accurate rather than a guess
+        — and it keeps a teacher's existing exemplars retrievable across the upgrade.
+        """
+        columns = {r["name"] for r in self.db.execute("PRAGMA table_info(exemplars)")}
+        if "embedding_model" not in columns:
+            self.db.execute("ALTER TABLE exemplars ADD COLUMN embedding_model TEXT")
+        self.db.execute(
+            "UPDATE exemplars SET embedding_model = ? "
+            "WHERE embedding_model IS NULL AND embedding IS NOT NULL",
+            (EMBED_MODEL,),
+        )
+        self.db.commit()
 
     def add(self, ex: Exemplar, *, embed_now: bool = True) -> int:
         vec = ex.embedding
@@ -118,12 +147,13 @@ class ExemplarStore:
             vec = embed([ex.text], model=self.embedding_model)[0]
         cur = self.db.execute(
             "INSERT INTO exemplars (assignment_id, student_ref, text, total, max_total, "
-            "scores_json, comment, source, embedding, created_at) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?)",
+            "scores_json, comment, source, embedding, embedding_model, created_at) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
             (
                 ex.assignment_id, ex.student_ref, ex.text, ex.total, ex.max_total,
                 json.dumps(ex.scores), ex.comment, ex.source,
                 json.dumps(vec) if vec else None,
+                self.embedding_model if vec else None,
                 datetime.now(timezone.utc).isoformat(),
             ),
         )
@@ -154,13 +184,21 @@ class ExemplarStore:
                 scores=json.loads(r["scores_json"]), comment=r["comment"] or "",
                 source=r["source"],
                 embedding=json.loads(r["embedding"]) if r["embedding"] else None,
+                embedding_model=r["embedding_model"],
             )
             for r in rows
         ]
 
     def count(self, assignment_id: str) -> int:
+        """Exemplars retrieval can actually use under the current embedding model.
+
+        This gates cold-start and anchor use, so counting rows that `retrieve()` will
+        skip would report a calibrated store while grading with no anchors at all.
+        """
         return self.db.execute(
-            "SELECT COUNT(*) FROM exemplars WHERE assignment_id = ?", (assignment_id,)
+            "SELECT COUNT(*) FROM exemplars "
+            "WHERE assignment_id = ? AND embedding IS NOT NULL AND embedding_model = ?",
+            (assignment_id, self.embedding_model),
         ).fetchone()[0]
 
     # Override exemplars get a similarity boost so they outrank imports at the same
@@ -188,8 +226,13 @@ class ExemplarStore:
         most recent corrections are preferentially retrieved — this is the "weighted
         above pre-import exemplars" requirement (PRD FR-5.2).
         """
+        # Vectors from another embedding model live in a different space; comparing them
+        # yields a confident-looking number that means nothing. Skip them rather than
+        # quietly degrading retrieval when the teacher changes model_embed in Settings.
         pool = [e for e in self._all(assignment_id)
-                if e.embedding and (not exclude_ids or e.id not in exclude_ids)]
+                if e.embedding
+                and e.embedding_model == self.embedding_model
+                and (not exclude_ids or e.id not in exclude_ids)]
         if not pool:
             return []
 
