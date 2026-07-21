@@ -31,6 +31,7 @@ import subprocess
 import sys
 import time
 from dataclasses import dataclass, field
+from functools import lru_cache
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -131,6 +132,37 @@ def _capture_connections(duration: float = 10.0) -> list[dict]:
     return connections
 
 
+@lru_cache(maxsize=1)
+def _resolve_allowlist_ips(attempts: int = 3) -> frozenset[str]:
+    """Forward-resolve the allowlisted hostnames to the addresses they answer on.
+
+    `lsof` reports raw IPs, so the gate has to map an address back to a name. Reverse
+    DNS cannot do that reliably: CDN-fronted hosts (Cloudflare, AWS) generally have no
+    PTR record pointing back at the service, so a reverse lookup on a perfectly
+    legitimate `api.crossref.org` connection fails and the gate reports a FERPA
+    violation that never happened. Asking the forward question instead — "which
+    addresses does this allowed host currently serve from?" — is authoritative.
+
+    Transient resolver failures are retried; a host that still will not resolve is left
+    out rather than treated as permissive, so the gate keeps failing closed.
+    """
+    import socket
+
+    ips: set[str] = set()
+    for hostname in ALLOWLIST_HOSTS:
+        if hostname in ("localhost", "127.0.0.1", "::1"):
+            continue
+        for attempt in range(attempts):
+            try:
+                for info in socket.getaddrinfo(hostname, 443, proto=socket.IPPROTO_TCP):
+                    ips.add(info[4][0])
+                break
+            except Exception:
+                if attempt == attempts - 1:
+                    print(f"  note: could not resolve allowlisted host {hostname}")
+    return frozenset(ips)
+
+
 def _check_host_allowed(host: str) -> bool:
     """Check if a host is in the allowlist.
 
@@ -151,6 +183,12 @@ def _check_host_allowed(host: str) -> bool:
         if pattern.search(host):
             return True
 
+    # Primary check for raw addresses: does an allowlisted host serve from here?
+    if host in _resolve_allowlist_ips():
+        return True
+
+    # Fallback only. Reverse DNS is unreliable for CDN-fronted hosts, so a failure
+    # here means "unverified", not "safe" — the host stays a violation.
     try:
         import socket
         hostname = socket.gethostbyaddr(host)[0].lower()
