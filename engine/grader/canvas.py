@@ -21,6 +21,7 @@ import os
 import subprocess
 import tomllib
 import time
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -210,24 +211,46 @@ def download_attachment(url: str, dest: Path, *, token: str | None = None) -> Pa
     return dest
 
 
+@dataclass
+class AttachmentDownload:
+    """Outcome of one attachment download.
+
+    `ok` is reported explicitly because the destination existing proves nothing — a
+    leftover file from an earlier import satisfies `path.exists()` just as well as a
+    fresh download, and treating that as success feeds the wrong bytes to the grader.
+    """
+
+    path: Path
+    ok: bool
+    error: str | None = None
+
+
 def download_submission_attachments(
     submission: dict, dest_dir: Path, *, token: str | None = None,
-) -> list[Path]:
-    """Download all attachments for a submission. Returns paths to downloaded files."""
-    paths: list[Path] = []
-    for att in submission.get("attachments", []):
+) -> list[AttachmentDownload]:
+    """Download all attachments for a submission.
+
+    Every student in an assignment shares one `dest_dir`, and generic filenames like
+    "essay.pdf" are the norm, so destinations are namespaced by the Canvas attachment
+    id. Without that, one student's original silently overwrites another's — which also
+    breaks the rule that original student files are immutable.
+    """
+    results: list[AttachmentDownload] = []
+    for index, att in enumerate(submission.get("attachments", [])):
         url = att.get("url")
         if not url:
             continue
-        raw_filename = str(att.get("filename", f"attachment_{att.get('id', 'unknown')}"))
-        filename = Path(raw_filename).name or f"attachment_{att.get('id', 'unknown')}"
-        dest = dest_dir / filename
+        att_id = att.get("id")
+        prefix = str(att_id) if att_id not in (None, "") else f"idx{index}"
+        raw_filename = str(att.get("filename") or f"attachment_{prefix}")
+        safe_name = Path(raw_filename).name or f"attachment_{prefix}"
+        dest = dest_dir / f"{prefix}_{safe_name}"
         try:
             download_attachment(url, dest, token=token)
-            paths.append(dest)
-        except Exception:
-            paths.append(dest)  # still return path; caller can check existence
-    return paths
+            results.append(AttachmentDownload(path=dest, ok=True))
+        except Exception as e:
+            results.append(AttachmentDownload(path=dest, ok=False, error=str(e)[:200]))
+    return results
 
 
 # ---------------------------------------------------------------------------
