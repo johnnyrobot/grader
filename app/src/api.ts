@@ -115,10 +115,12 @@ export async function listRubrics(): Promise<any[]> {
 }
 
 export async function gradeBatch(assignmentId: string, model?: string): Promise<{ job_id: string; total: number }> {
+  const body: { assignment_id: string; model?: string } = { assignment_id: assignmentId };
+  if (model) body.model = model;
   const r = await fetch(`${base}/api/grade/batch`, {
     method: "POST",
     headers: { ...headers(), "Content-Type": "application/json" },
-    body: JSON.stringify({ assignment_id: assignmentId, model: model || "grader-text:8b" }),
+    body: JSON.stringify(body),
   });
   if (!r.ok) throw new Error(`grade: ${r.status}`);
   return r.json();

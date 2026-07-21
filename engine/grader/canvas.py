@@ -85,15 +85,28 @@ def missing_canvas_credentials() -> list[str]:
     return missing
 
 
-def _run(*args: str, timeout: int = 30, stdin_json: dict[str, Any] | None = None) -> dict:
+def _run(
+    *args: str,
+    timeout: int = 30,
+    stdin_json: dict[str, Any] | None = None,
+    base_url: str | None = None,
+    token: str | None = None,
+) -> dict:
     """Run canvas-pp-cli with --agent flag, parse JSON output."""
     cmd = [CLI_PATH, *args, "--agent", "--data-source", "live", "--no-cache"]
+    env = os.environ.copy()
+    if base_url:
+        env["CANVAS_BASE_URL"] = base_url.rstrip("/")
+    if token:
+        env["CANVAS_API_TOKEN"] = token
+        env["CANVAS_ACCESS_TOKEN"] = token
     result = subprocess.run(
         cmd,
         capture_output=True,
         input=json.dumps(stdin_json) if stdin_json is not None else None,
         text=True,
         timeout=timeout,
+        env=env,
     )
     if result.returncode != 0:
         raise RuntimeError(f"canvas-pp-cli failed: {result.stderr[:300]}")
@@ -120,7 +133,13 @@ def _mutation_data(envelope: dict) -> dict:
 # Read: list submissions + attachments
 # ---------------------------------------------------------------------------
 
-def list_submissions(course_id: int | str, assignment_id: int | str) -> list[dict]:
+def list_submissions(
+    course_id: int | str,
+    assignment_id: int | str,
+    *,
+    base_url: str | None = None,
+    token: str | None = None,
+) -> list[dict]:
     """List submissions for an assignment, including rubric assessments and comments.
 
     Returns per-student: user_id, score, workflow_state, attachments[], submission_comments[],
@@ -130,22 +149,39 @@ def list_submissions(course_id: int | str, assignment_id: int | str) -> list[dic
         "submissions", "index", str(course_id), str(assignment_id),
         "--include", "submission_comments",
         timeout=30,
+        base_url=base_url,
+        token=token,
     )
     return _read_results(envelope)
 
 
-def list_ungraded(course_id: int | str, assignment_id: int | str) -> list[dict]:
+def list_ungraded(
+    course_id: int | str,
+    assignment_id: int | str,
+    *,
+    base_url: str | None = None,
+    token: str | None = None,
+) -> list[dict]:
     """Filter to submissions that need grading (workflow_state != 'graded')."""
-    subs = list_submissions(course_id, assignment_id)
+    subs = list_submissions(course_id, assignment_id, base_url=base_url, token=token)
     return [s for s in subs if s.get("workflow_state") != "graded"]
 
 
-def get_submission(course_id: int | str, assignment_id: int | str, user_id: int | str) -> dict:
+def get_submission(
+    course_id: int | str,
+    assignment_id: int | str,
+    user_id: int | str,
+    *,
+    base_url: str | None = None,
+    token: str | None = None,
+) -> dict:
     """Show a single submission with attachments + comments."""
     envelope = _run(
         "submissions", "show", str(course_id), str(assignment_id), str(user_id),
         "--include", "submission_comments",
         timeout=15,
+        base_url=base_url,
+        token=token,
     )
     results = _read_results(envelope)
     return results[0] if results else {}
@@ -183,7 +219,8 @@ def download_submission_attachments(
         url = att.get("url")
         if not url:
             continue
-        filename = att.get("filename", f"attachment_{att.get('id', 'unknown')}")
+        raw_filename = str(att.get("filename", f"attachment_{att.get('id', 'unknown')}"))
+        filename = Path(raw_filename).name or f"attachment_{att.get('id', 'unknown')}"
         dest = dest_dir / filename
         try:
             download_attachment(url, dest, token=token)
@@ -206,6 +243,8 @@ def post_grade(
     rubric_assessment: dict | None = None,
     comment: str | None = None,
     comment_file_ids: list[int] | None = None,
+    base_url: str | None = None,
+    token: str | None = None,
 ) -> dict:
     """Post a single grade via `submissions update`.
 
@@ -224,7 +263,7 @@ def post_grade(
         for fid in comment_file_ids:
             args.append(f"--comment-file-ids={fid}")
 
-    envelope = _run(*args, timeout=15)
+    envelope = _run(*args, timeout=15, base_url=base_url, token=token)
     return _mutation_data(envelope)
 
 
@@ -232,6 +271,9 @@ def post_grades_batch(
     course_id: int | str,
     assignment_id: int | str,
     grade_data: dict[str, Any],
+    *,
+    base_url: str | None = None,
+    token: str | None = None,
 ) -> dict:
     """Batch post via `submissions bulk-update`. Returns Progress object.
 
@@ -258,7 +300,16 @@ def post_grades_batch(
 
     body = {"grade_data": {str(assignment_id): assignment_data}}
 
-    envelope = _run("submissions", "bulk-update", str(course_id), "--stdin", timeout=30, stdin_json=body)
+    envelope = _run(
+        "submissions",
+        "bulk-update",
+        str(course_id),
+        "--stdin",
+        timeout=30,
+        stdin_json=body,
+        base_url=base_url,
+        token=token,
+    )
 
     # Mutations return {action, resource, success, data, partial_failure}
     if not envelope.get("success", True):
@@ -273,17 +324,35 @@ def post_grades_batch(
     if progress_id is None:
         return progress
 
-    return _poll_progress(course_id, progress_id)
+    return _poll_progress(
+        course_id,
+        progress_id,
+        base_url=base_url,
+        token=token,
+    )
 
 
 def _poll_progress(
-    course_id: int | str, progress_id: int | str, *, timeout: int = 60, interval: float = 1.0,
+    course_id: int | str,
+    progress_id: int | str,
+    *,
+    timeout: int = 60,
+    interval: float = 1.0,
+    base_url: str | None = None,
+    token: str | None = None,
 ) -> dict:
     """Poll the Progress endpoint until completion or timeout (gotcha #1)."""
     _ = course_id  # Progress show is global in canvas-pp-cli; keep arg for API compatibility.
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        envelope = _run("progress", "show", str(progress_id), timeout=10)
+        envelope = _run(
+            "progress",
+            "show",
+            str(progress_id),
+            timeout=10,
+            base_url=base_url,
+            token=token,
+        )
         results = _read_results(envelope)
         if not results:
             break
@@ -306,6 +375,8 @@ def upload_file(
     file_path: Path,
     *,
     as_user_id: int | str | None = None,
+    base_url: str | None = None,
+    token: str | None = None,
 ) -> int:
     """Upload a file to Canvas via the 3-step flow. Returns Canvas file ID.
 
@@ -313,11 +384,11 @@ def upload_file(
     Step 2: PUT the file bytes to the returned URL.
     Step 3: confirm with Canvas, get the file ID.
     """
-    tok = resolve_canvas_token()
+    tok = token or resolve_canvas_token()
     if not tok:
         raise RuntimeError("no Canvas token set")
 
-    canvas_base = resolve_canvas_base_url()
+    canvas_base = base_url or resolve_canvas_base_url()
     base = canvas_base.rstrip("/") if canvas_base else "https://canvas.instructure.com"
     headers = {"Authorization": f"Bearer {tok}", "Accept": "application/json"}
     file_size = file_path.stat().st_size
@@ -433,7 +504,7 @@ class OfflinePostQueue:
         )
         self.db.commit()
 
-    def flush(self) -> dict:
+    def flush(self, *, base_url: str | None = None, token: str | None = None) -> dict:
         """Attempt to post all queued grades. Returns {posted, failed, remaining}."""
         posted = 0
         failed = 0
@@ -445,6 +516,7 @@ class OfflinePostQueue:
                     item["course_id"], item["assignment_id"], item["user_id"],
                     grade=item["grade"], rubric_assessment=ra,
                     comment=item["comment"], comment_file_ids=fids,
+                    base_url=base_url, token=token,
                 )
                 self.mark_done(item["id"])
                 posted += 1

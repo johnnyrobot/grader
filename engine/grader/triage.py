@@ -71,8 +71,13 @@ def triage(
     anchors: str = "",
     materials: str = "",
     allow_vote: bool = True,
+    low_confidence: float = LOW_CONFIDENCE,
+    high_confidence: float = HIGH_CONFIDENCE,
 ) -> Triage:
     """Assign a review lane. Escalates to a consistency vote only when it's worth paying for."""
+    if not 0 <= low_confidence < high_confidence <= 1:
+        raise ValueError("triage thresholds must satisfy 0 <= low < high <= 1")
+
     reasons: list[str] = []
     conf = draft.confidence
 
@@ -89,7 +94,7 @@ def triage(
     consistency: float | None = None
     votes: list[float] = []
 
-    if conf < LOW_CONFIDENCE and allow_vote:
+    if conf < low_confidence and allow_vote:
         # Expensive signal, bought only where it matters. Resampling at temperature 0 still
         # varies because the retrieved anchors and decode path aren't perfectly fixed; what
         # we're measuring is whether the grade is stable under re-derivation.
@@ -110,16 +115,16 @@ def triage(
                 reasons.append(f"stable across resamples (spread {spread:.0%})")
 
     # Route.
-    if conf < LOW_CONFIDENCE and (consistency is None or consistency < 0.5):
+    if conf < low_confidence and (consistency is None or consistency < 0.5):
         lane = Lane.REVIEW_FIRST
         reasons.append("low confidence and unstable")
-    elif conf < LOW_CONFIDENCE:
+    elif conf < low_confidence:
         lane = Lane.STANDARD
         reasons.append("low confidence but the score held up")
     # Citation findings are advisory and already appear in the teacher-facing reasons. They do not
     # by themselves make an otherwise confident analytic grade uncertain. Other non-hard flags
     # (for example LOW_CONFIDENCE) still prevent auto-clearing when they contradict the score.
-    elif conf >= HIGH_CONFIDENCE and set(draft.flags).issubset({Flag.CITATION_ISSUES}):
+    elif conf >= high_confidence and set(draft.flags).issubset({Flag.CITATION_ISSUES}):
         lane = Lane.HIGH_CONFIDENCE
         # Style bias on prose is real and prompt-resistant, so prose never fully auto-clears.
         if _has_open_ended(rubric):

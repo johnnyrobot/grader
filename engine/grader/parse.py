@@ -31,7 +31,7 @@ class ParsedDoc(BaseModel):
         description="Paths to page images (for handwriting fallback or visual inspection)")
 
 
-def parse(path: Path | str) -> ParsedDoc:
+def parse(path: Path | str, *, vision_model: str | None = None) -> ParsedDoc:
     """Parse a document file into markdown via Docling.
 
     Handles: PDF, DOCX, PPTX, XLSX, HTML, images, plain text.
@@ -47,7 +47,7 @@ def parse(path: Path | str) -> ParsedDoc:
         )
 
     if suffix in (".png", ".jpg", ".jpeg", ".tif", ".tiff"):
-        return _parse_image(path)
+        return _parse_image(path, vision_model=vision_model)
 
     # Docling handles everything else
     try:
@@ -89,11 +89,14 @@ def _parse_with_docling(path: Path) -> ParsedDoc:
     )
 
 
-def _parse_image(path: Path) -> ParsedDoc:
+def _parse_image(path: Path, *, vision_model: str | None = None) -> ParsedDoc:
     """Parse an image file — delegates to handwriting.py if needed."""
     from grader.handwriting import transcribe_image
 
-    text, confidence = transcribe_image(path)
+    if vision_model:
+        text, confidence = transcribe_image(path, model=vision_model)
+    else:
+        text, confidence = transcribe_image(path)
     low_conf: list[str] = []
     if confidence < 0.85:
         low_conf.append(f"Image {path.name}: OCR confidence {confidence:.2f}")
@@ -126,12 +129,12 @@ def _parse_fallback(path: Path) -> ParsedDoc:
     )
 
 
-def parse_multiple(paths: list[Path]) -> list[ParsedDoc]:
+def parse_multiple(paths: list[Path], *, vision_model: str | None = None) -> list[ParsedDoc]:
     """Parse multiple files. Partial failures degrade, never raise."""
     results: list[ParsedDoc] = []
     for p in paths:
         try:
-            results.append(parse(p))
+            results.append(parse(p, vision_model=vision_model))
         except Exception as e:
             results.append(ParsedDoc(
                 markdown=f"[Parse error: {e}]",

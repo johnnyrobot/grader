@@ -163,13 +163,13 @@ function GeneralPanel({ settings, onSave }: { settings: Record<string, string | 
         <div className="settings-form-grid">
           <label><span className="field-label">Canvas URL</span><input className="field-control" value={canvasUrl} onChange={event => setCanvasUrl(event.target.value)} placeholder="https://canvas.instructure.com" /></label>
           <label><span className="field-label">Canvas token {settings.canvas_token_masked ? `(current: ${settings.canvas_token_masked})` : ""}</span><input type="password" className="field-control" value={canvasToken} onChange={event => setCanvasToken(event.target.value)} placeholder="Paste a new token" /><small>Leave blank to keep the current token.</small></label>
-          <label className="settings-span-two"><span className="field-label">Local data directory</span><input className="field-control" value={dataDir} onChange={event => setDataDir(event.target.value)} placeholder="Use the default Grader folder" /></label>
+          <label className="settings-span-two"><span className="field-label">Canvas attachment directory</span><input className="field-control" value={dataDir} onChange={event => setDataDir(event.target.value)} placeholder="Use the default Grader folder" /><small>New Canvas downloads use this folder. Core databases and the durable post queue are selected when the local engine starts.</small></label>
         </div>
       </section>
       <section className="settings-section" aria-labelledby="threshold-heading">
         <h3 id="threshold-heading">Review-lane thresholds</h3>
         <div className="settings-form-grid">
-          <label><span className="field-label">High-confidence threshold</span><input type="number" min="0.5" max="1" step="0.05" className="field-control" value={autoThreshold} onChange={event => setAutoThreshold(Number(event.target.value))} /><small>Still requires your approval.</small></label>
+          <label><span className="field-label">High-confidence threshold</span><input type="number" min="0.5" max="1" step="0.05" className="field-control" value={autoThreshold} onChange={event => setAutoThreshold(Number(event.target.value))} /><small>Drafts at or above this value enter the confident lane and still require your approval.</small></label>
           <label><span className="field-label">Needs-review threshold</span><input type="number" min="0" max="1" step="0.05" className="field-control" value={reviewThreshold} onChange={event => setReviewThreshold(Number(event.target.value))} /><small>Below this value, drafts move to review first.</small></label>
         </div>
       </section>

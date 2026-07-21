@@ -11,13 +11,14 @@ from grader import canvas
 def test_run_passes_stdin_json_to_canvas_cli(monkeypatch):
     captured = {}
 
-    def fake_run(cmd, *, capture_output, input, text, timeout):
+    def fake_run(cmd, *, capture_output, input, text, timeout, env):
         captured.update({
             "cmd": cmd,
             "capture_output": capture_output,
             "input": input,
             "text": text,
             "timeout": timeout,
+            "env": env,
         })
         return SimpleNamespace(returncode=0, stdout='{"success":true,"data":{"id":123}}', stderr="")
 
@@ -41,13 +42,40 @@ def test_run_passes_stdin_json_to_canvas_cli(monkeypatch):
     assert captured["text"] is True
 
 
+def test_run_passes_saved_canvas_credentials_only_through_environment(monkeypatch):
+    captured = {}
+
+    def fake_run(cmd, *, capture_output, input, text, timeout, env):
+        captured["cmd"] = cmd
+        captured["env"] = env
+        return SimpleNamespace(returncode=0, stdout='{"results":[]}', stderr="")
+
+    monkeypatch.setattr(canvas.subprocess, "run", fake_run)
+
+    canvas._run(
+        "submissions",
+        "index",
+        "10",
+        "20",
+        base_url="https://canvas.example.test/",
+        token="saved-test-token",
+    )
+
+    assert captured["env"]["CANVAS_BASE_URL"] == "https://canvas.example.test"
+    assert captured["env"]["CANVAS_API_TOKEN"] == "saved-test-token"
+    assert captured["env"]["CANVAS_ACCESS_TOKEN"] == "saved-test-token"
+    assert "saved-test-token" not in " ".join(captured["cmd"])
+
+
 def test_post_grade_uses_current_canvas_cli_flag_names(monkeypatch):
     captured = {}
 
-    def fake_run(*args, timeout=30, stdin_json=None):
+    def fake_run(*args, timeout=30, stdin_json=None, base_url=None, token=None):
         captured["args"] = args
         captured["timeout"] = timeout
         captured["stdin_json"] = stdin_json
+        captured["base_url"] = base_url
+        captured["token"] = token
         return {"success": True, "data": {"id": "submission_1"}}
 
     monkeypatch.setattr(canvas, "_run", fake_run)
@@ -80,10 +108,12 @@ def test_post_grade_uses_current_canvas_cli_flag_names(monkeypatch):
 def test_post_grades_batch_flattens_grade_data_for_stdin(monkeypatch):
     captured = {}
 
-    def fake_run(*args, timeout=30, stdin_json=None):
+    def fake_run(*args, timeout=30, stdin_json=None, base_url=None, token=None):
         captured["args"] = args
         captured["timeout"] = timeout
         captured["stdin_json"] = stdin_json
+        captured["base_url"] = base_url
+        captured["token"] = token
         return {"success": True, "data": {"workflow_state": "completed", "completion": 100}}
 
     monkeypatch.setattr(canvas, "_run", fake_run)
@@ -120,7 +150,7 @@ def test_post_grades_batch_flattens_grade_data_for_stdin(monkeypatch):
 def test_poll_progress_uses_progress_id_only(monkeypatch):
     captured = {}
 
-    def fake_run(*args, timeout=30, stdin_json=None):
+    def fake_run(*args, timeout=30, stdin_json=None, base_url=None, token=None):
         captured["args"] = args
         return {"results": {"id": 2146, "workflow_state": "completed", "completion": 100}}
 
@@ -135,7 +165,7 @@ def test_poll_progress_uses_progress_id_only(monkeypatch):
 def test_get_submission_requests_submission_comments_include(monkeypatch):
     captured = {}
 
-    def fake_run(*args, timeout=30, stdin_json=None):
+    def fake_run(*args, timeout=30, stdin_json=None, base_url=None, token=None):
         captured["args"] = args
         return {"results": {"id": 29, "submission_comments": [{"id": 12}]}}
 

@@ -93,6 +93,22 @@ def test_medium_confidence_standard():
     assert t.lane == Lane.STANDARD
 
 
+def test_custom_thresholds_change_lane_routing():
+    r = _rubric(open_ended=False)
+    d = _draft(0.90)
+
+    t = triage(
+        d,
+        r,
+        "text",
+        allow_vote=False,
+        low_confidence=0.60,
+        high_confidence=0.95,
+    )
+
+    assert t.lane == Lane.STANDARD
+
+
 def test_low_confidence_no_vote_review_first():
     r = _rubric(open_ended=False)
     d = _draft(0.50)
