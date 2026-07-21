@@ -63,7 +63,7 @@ REQUIRED_CONTROL_LABELS = [
     "Feedback for Student 1042",
     "Canvas URL",
     "Canvas token",
-    "Local data directory",
+    "Canvas attachment directory",
     "High-confidence threshold",
     "Needs-review threshold",
     "General",
