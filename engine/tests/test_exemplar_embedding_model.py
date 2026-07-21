@@ -67,21 +67,51 @@ def test_retrieve_returns_exemplars_embedded_by_the_current_model(tmp_path, monk
     assert [e.text for e, _ in results] == ["written under model-a"]
 
 
-def test_legacy_rows_without_a_model_are_backfilled_to_the_default(tmp_path, monkeypatch):
-    """Pre-migration vectors provably came from the hardcoded EMBED_MODEL constant."""
+LEGACY_SCHEMA = """
+CREATE TABLE exemplars (
+    id            INTEGER PRIMARY KEY,
+    assignment_id TEXT NOT NULL,
+    student_ref   TEXT,
+    text          TEXT NOT NULL,
+    total         REAL NOT NULL,
+    max_total     REAL NOT NULL,
+    scores_json   TEXT NOT NULL,
+    comment       TEXT DEFAULT '',
+    source        TEXT NOT NULL,
+    embedding     BLOB,
+    created_at    TEXT NOT NULL
+);
+"""
+
+
+def test_legacy_database_without_the_column_migrates_and_stays_retrievable(tmp_path, monkeypatch):
+    """Exercises the real ALTER TABLE path against a pre-migration teacher database.
+
+    Vectors written before this column existed provably came from the hardcoded
+    EMBED_MODEL constant, so backfilling that value preserves the exemplar library
+    instead of stranding it.
+    """
+    import sqlite3
+
     db_path = tmp_path / "ex.db"
-    store = ExemplarStore(db_path, embedding_model=EMBED_MODEL)
+    legacy = sqlite3.connect(db_path)
+    legacy.executescript(LEGACY_SCHEMA)
+    legacy.execute(
+        "INSERT INTO exemplars (assignment_id, student_ref, text, total, max_total, "
+        "scores_json, comment, source, embedding, created_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
+        ("a1", "pseudo-1", "legacy row", 4.0, 5.0, json.dumps({"c1": 4.0}), "",
+         "imported", json.dumps([1.0, 0.0]), "2026-01-01T00:00:00+00:00"),
+    )
+    legacy.commit()
+    columns = {r[1] for r in legacy.execute("PRAGMA table_info(exemplars)")}
+    legacy.close()
+    assert "embedding_model" not in columns, "fixture must start without the column"
+
     monkeypatch.setattr("grader.exemplars.embed", _fixed_embed([1.0, 0.0]))
-    store.add(_exemplar("legacy row"))
-    # Simulate a database written before the embedding_model column existed.
-    store.db.execute("UPDATE exemplars SET embedding_model = NULL")
-    store.db.commit()
-    store.db.close()
+    migrated = ExemplarStore(db_path, embedding_model=EMBED_MODEL)
 
-    reopened = ExemplarStore(db_path, embedding_model=EMBED_MODEL)
-    results = reopened.retrieve("a1", "query")
-
-    assert [e.text for e, _ in results] == ["legacy row"]
+    assert migrated.count("a1") == 1
+    assert [e.text for e, _ in migrated.retrieve("a1", "query")] == ["legacy row"]
 
 
 def test_add_records_the_model_that_produced_the_vector(tmp_path, monkeypatch):
