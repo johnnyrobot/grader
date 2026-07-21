@@ -5,6 +5,7 @@ import types
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 sys.path.insert(0, str(Path(__file__).parents[1]))
 
@@ -488,7 +489,7 @@ def test_canvas_url_accepts_https(api_module):
 def test_canvas_url_rejects_plaintext_http_for_remote_hosts(api_module):
     """A Canvas token over plaintext HTTP is a credential in the clear."""
     api = api_module
-    with pytest.raises(Exception) as exc:
+    with pytest.raises(ValidationError) as exc:
         api.SettingsState(canvas_url="http://canvas.example.edu")
     assert "https" in str(exc.value).lower()
 
@@ -501,9 +502,11 @@ def test_canvas_url_allows_plaintext_http_on_loopback(api_module):
 
 
 def test_canvas_url_rejects_hostnames_that_merely_start_with_localhost(api_module):
+    """The loopback exemption must match the parsed host, not a string prefix."""
     api = api_module
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError) as exc:
         api.SettingsState(canvas_url="http://localhost.attacker.example")
+    assert "https" in str(exc.value).lower()
 
 
 def test_invalid_settings_file_is_logged_before_falling_back(tmp_path, monkeypatch, api_module, caplog):
