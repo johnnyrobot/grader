@@ -180,9 +180,14 @@ def _run_grading_job(
     materials: str,
     low_confidence: float,
     high_confidence: float,
+    embedding_model: str,
 ) -> None:
     with _job_lock:
         _jobs[job_id]["status"] = "running"
+
+    # Bound once for the life of the job: a concurrent settings change must not
+    # retarget retrieval half-way through a batch.
+    exemplars = _exemplar_store.for_model(embedding_model)
 
     total = len(submission_ids)
     results: list[dict] = []
@@ -198,8 +203,8 @@ def _run_grading_job(
         record_id = f"gr_{sub_id}"
 
         anchors_txt = ""
-        if _exemplar_store.count(assignment_id) >= 3:
-            hits = _exemplar_store.retrieve(assignment_id, submission_text, k=6, balance=True)
+        if exemplars.count(assignment_id) >= 3:
+            hits = exemplars.retrieve(assignment_id, submission_text, k=6, balance=True)
             anchor_ids = [c.id for c in rubric.criteria]
             anchors_txt = render_anchors(hits, anchor_ids)
 
@@ -389,7 +394,7 @@ def grade_batch(req: GradeBatch) -> dict:
     model = req.model or str(settings["model_text"])
     low_confidence = float(settings["review_first_threshold"])
     high_confidence = float(settings["auto_approve_threshold"])
-    _exemplar_store.embedding_model = str(settings["model_embed"])
+    embedding_model = str(settings["model_embed"])
 
     job_id = f"job_{secrets.token_hex(8)}"
     with _job_lock:
@@ -406,6 +411,7 @@ def grade_batch(req: GradeBatch) -> dict:
             req.materials,
             low_confidence,
             high_confidence,
+            embedding_model,
         ),
         daemon=True,
     )
@@ -513,9 +519,9 @@ def override_grade(grade_id: str, req: OverrideRequest) -> dict:
     rubric = _rubric_store.get(rubric_row[0]["title"]) if rubric_row else None
     max_total = rubric.total_points if rubric else 5.0
 
-    _exemplar_store.embedding_model = str(_load_settings()["model_embed"])
+    exemplars = _exemplar_store.for_model(str(_load_settings()["model_embed"]))
     ov = apply_override(
-        _override_store, _exemplar_store,
+        _override_store, exemplars,
         assignment_id=row["assignment_id"],
         submission_text=sub_row["text"] if sub_row else "",
         ai_draft=draft,
@@ -540,7 +546,7 @@ def override_grade(grade_id: str, req: OverrideRequest) -> dict:
     return {
         "overridden": True, "grade_id": grade_id,
         "ai_total": ov.ai_total, "teacher_total": ov.teacher_total,
-        "exemplar_count": _exemplar_store.count(row["assignment_id"]),
+        "exemplar_count": exemplars.count(row["assignment_id"]),
         "refinement_proposals": [
             {"criterion_id": p.criterion_id, "direction": p.direction,
              "count": p.pattern_count, "avg_delta": p.avg_delta,
@@ -552,8 +558,9 @@ def override_grade(grade_id: str, req: OverrideRequest) -> dict:
 
 @app.get("/api/calibration/{assignment_id}", dependencies=[Depends(_auth)])
 def calibration_health(assignment_id: str) -> dict:
-    health = compute_health(_override_store, _exemplar_store, assignment_id)
-    cold = cold_start_status(_exemplar_store, assignment_id)
+    exemplars = _exemplar_store.for_model(str(_load_settings()["model_embed"]))
+    health = compute_health(_override_store, exemplars, assignment_id)
+    cold = cold_start_status(exemplars, assignment_id)
     return {
         "qwk": health.qwk, "exact": health.exact, "adjacent": health.adjacent,
         "mean_error": health.mean_error, "override_count": health.override_count,
