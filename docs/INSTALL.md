@@ -113,8 +113,16 @@ When you launch Grader for the first time:
 | Interface preferences | `~/Library/Application Support/Grader/` | Tauri/WebView-managed appearance and onboarding state |
 | Models | `~/.ollama/models/` | Ollama-managed |
 
-All data stays on your device. No student work is transmitted anywhere. See
-[`docs/FERPA.md`](FERPA.md) for the privacy audit.
+Grading happens entirely on your device: submission text, drafts, rubrics, and exemplars are
+never sent to any AI service, and the models run locally via Ollama.
+
+Canvas is the one deliberate exception, and only when you ask for it. Importing an assignment
+downloads submissions and attachments **from** your Canvas instance, and posting sends the
+scores and feedback comments you approved **to** it. That traffic goes to your institution's
+own Canvas server over HTTPS — nowhere else — and nothing posts without an approved grade.
+Everything else stays local.
+
+See [`docs/FERPA.md`](FERPA.md) for the privacy audit.
 
 ## Troubleshooting
 

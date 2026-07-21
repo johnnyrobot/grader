@@ -15,6 +15,7 @@ duplicated from the package.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import secrets
 import sqlite3
@@ -23,6 +24,7 @@ from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 from fastapi import Depends, FastAPI, Header, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -39,6 +41,11 @@ from grader.triage import triage
 # ---------------------------------------------------------------------------
 # Per-launch auth: the shell gets the token from the engine's stdout on startup.
 # ---------------------------------------------------------------------------
+
+logger = logging.getLogger(__name__)
+
+# Hosts where plaintext HTTP cannot be intercepted off-device.
+LOOPBACK_HOSTS = {"localhost", "127.0.0.1", "::1"}
 
 ENGINE_TOKEN = os.environ.get("GRADER_ENGINE_TOKEN") or secrets.token_urlsafe(32)
 DATA_DIR = Path(os.environ.get("GRADER_DATA_DIR", "fixtures"))
@@ -628,9 +635,20 @@ class SettingsState(BaseModel):
     @classmethod
     def validate_canvas_url(cls, value: str) -> str:
         value = value.strip().rstrip("/")
-        if value and not value.startswith(("https://", "http://")):
-            raise ValueError("Canvas URL must start with https:// or http://")
-        return value
+        if not value:
+            return value
+        parsed = urlsplit(value)
+        if parsed.scheme == "https":
+            return value
+        # A Canvas token over plaintext HTTP is a credential in the clear. Loopback is
+        # the one place that cannot be intercepted, and local Canvas dev instances
+        # legitimately run without TLS. Compare the parsed host, never a prefix —
+        # "localhost.attacker.example" starts with "localhost".
+        if parsed.scheme == "http" and (parsed.hostname or "").lower() in LOOPBACK_HOSTS:
+            return value
+        raise ValueError(
+            "Canvas URL must use https:// (plain http:// is allowed only for localhost)"
+        )
 
     @field_validator("model_text")
     @classmethod
@@ -688,7 +706,12 @@ def _load_settings() -> dict:
             s = json.loads(SETTINGS_FILE.read_text())
             return SettingsState.model_validate({**DEFAULT_SETTINGS, **s}).model_dump()
         except Exception:
-            pass
+            # Falling back silently is indistinguishable from "never configured": the
+            # teacher would see their Canvas URL and thresholds quietly revert.
+            logger.warning(
+                "Ignoring unreadable settings file %s; falling back to defaults",
+                SETTINGS_FILE, exc_info=True,
+            )
     return DEFAULT_SETTINGS.copy()
 
 
