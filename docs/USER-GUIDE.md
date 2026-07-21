@@ -74,8 +74,10 @@ Choose **Settings** from the queue.
   `https://canvas.example.edu`.
 - **Canvas token:** paste a new token only when configuring or rotating credentials. Grader stores
   it locally and masks the saved value.
-- **Local data directory:** use an institution-approved local location. Do not put student work in
-  a cloud-synchronized folder unless your institution explicitly authorizes it.
+- **Canvas attachment directory:** new Canvas downloads use this institution-approved local
+  location. Do not select a cloud-synchronized folder unless your institution explicitly authorizes
+  it. Core databases and the durable post queue use the engine directory selected when Grader
+  starts.
 - **High-confidence threshold:** controls which drafts enter the confident lane. It never enables
   automatic approval.
 - **Needs-review threshold:** drafts below this confidence enter the first-review lane.
@@ -95,6 +97,11 @@ Keep the capped defaults unless the beta facilitator has validated a replacement
 - text: `grader-text:8b`
 - vision: `grader-vision:1.3b`
 - embeddings: `nomic-embed-text:latest`
+
+The saved text model is used by new grading batches, the vision model is used for new handwriting
+transcriptions, and the embedding model is used when approved exemplars are stored or retrieved.
+Saved review thresholds route new drafts into the queue lanes; changing a setting never approves a
+grade.
 
 ### Rubrics
 
