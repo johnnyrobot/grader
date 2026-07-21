@@ -77,8 +77,25 @@ jobs:
         with:
           node-version: 22
       - run: cd app && npm install
+      - run: cd app && npm test -- --run
       - run: cd app && npx tsc --noEmit
       - run: cd app && npx vite build
+
+  e2e:
+    name: Frontend E2E (Playwright)
+    runs-on: macos-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: cd app && npm install
+      # Chromium only — the suite pins Desktop Chrome, so the other browsers are
+      # download time we never use.
+      - run: cd app && npx playwright install chromium
+      # playwright.config.ts starts the dev server itself under CI.
+      - run: cd app && npm run test:e2e
 
   build-rust:
     name: Rust Build (cargo check)
