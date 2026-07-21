@@ -517,3 +517,45 @@ def test_invalid_settings_file_is_logged_before_falling_back(tmp_path, monkeypat
 
     assert result == api.DEFAULT_SETTINGS
     assert any("settings" in r.message.lower() for r in caplog.records)
+
+
+def test_one_invalid_setting_does_not_discard_the_others(tmp_path, monkeypatch, api_module, caplog):
+    """Resetting every setting because one field is bad is silent data loss.
+
+    A teacher upgrading into stricter Canvas URL validation should lose the URL, not
+    their thresholds and data directory too.
+    """
+    api = api_module
+    settings_file = tmp_path / "settings.json"
+    monkeypatch.setattr(api, "SETTINGS_FILE", settings_file)
+    settings_file.write_text(json.dumps({
+        "canvas_url": "http://canvas.example.edu",   # newly invalid: remote + plaintext
+        "auto_approve_threshold": 0.88,
+        "review_first_threshold": 0.42,
+        "model_text": "grader-text:8b",
+    }))
+
+    with caplog.at_level("WARNING"):
+        result = api._load_settings()
+
+    assert result["canvas_url"] == ""              # dropped back to default
+    assert result["auto_approve_threshold"] == 0.88  # preserved
+    assert result["review_first_threshold"] == 0.42  # preserved
+    assert any("canvas_url" in r.message for r in caplog.records)
+
+
+def test_unattributable_validation_error_falls_back_to_defaults(tmp_path, monkeypatch, api_module, caplog):
+    """Cross-field errors name no single field, so the whole file is untrustworthy."""
+    api = api_module
+    settings_file = tmp_path / "settings.json"
+    monkeypatch.setattr(api, "SETTINGS_FILE", settings_file)
+    settings_file.write_text(json.dumps({
+        "auto_approve_threshold": 0.60,
+        "review_first_threshold": 0.90,  # must be lower than auto-approve
+    }))
+
+    with caplog.at_level("WARNING"):
+        result = api._load_settings()
+
+    assert result == api.DEFAULT_SETTINGS
+    assert caplog.records

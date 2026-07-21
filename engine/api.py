@@ -28,7 +28,7 @@ from urllib.parse import urlsplit
 
 from fastapi import Depends, FastAPI, Header, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, ValidationError, field_validator, model_validator
 
 from grader.agent import grade
 from grader.calibration import cold_start_status, compute_health
@@ -701,18 +701,48 @@ DEFAULT_SETTINGS = SettingsState().model_dump()
 
 
 def _load_settings() -> dict:
-    if SETTINGS_FILE.exists():
-        try:
-            s = json.loads(SETTINGS_FILE.read_text())
-            return SettingsState.model_validate({**DEFAULT_SETTINGS, **s}).model_dump()
-        except Exception:
-            # Falling back silently is indistinguishable from "never configured": the
-            # teacher would see their Canvas URL and thresholds quietly revert.
-            logger.warning(
-                "Ignoring unreadable settings file %s; falling back to defaults",
-                SETTINGS_FILE, exc_info=True,
-            )
-    return DEFAULT_SETTINGS.copy()
+    """Load saved settings, discarding as little as possible.
+
+    Falling back silently is indistinguishable from "never configured", and discarding
+    the whole file over one bad field loses settings the teacher did set — which is how
+    a stricter validator turns into surprise data loss on upgrade. So: drop the fields
+    that fail, keep the rest, and say so.
+    """
+    if not SETTINGS_FILE.exists():
+        return DEFAULT_SETTINGS.copy()
+
+    try:
+        saved = json.loads(SETTINGS_FILE.read_text())
+    except Exception:
+        logger.warning(
+            "Ignoring unreadable settings file %s; falling back to defaults",
+            SETTINGS_FILE, exc_info=True,
+        )
+        return DEFAULT_SETTINGS.copy()
+
+    try:
+        return SettingsState.model_validate({**DEFAULT_SETTINGS, **saved}).model_dump()
+    except ValidationError as first_error:
+        # Cross-field errors (e.g. threshold ordering) carry no field location, so they
+        # cannot be attributed to one setting — those still fall back wholesale.
+        invalid = {str(e["loc"][0]) for e in first_error.errors() if e.get("loc")}
+        if invalid:
+            kept = {k: v for k, v in saved.items() if k not in invalid}
+            try:
+                settings = SettingsState.model_validate({**DEFAULT_SETTINGS, **kept}).model_dump()
+            except ValidationError:
+                pass
+            else:
+                logger.warning(
+                    "Ignoring invalid settings (%s) in %s; keeping the rest",
+                    ", ".join(sorted(invalid)), SETTINGS_FILE,
+                )
+                return settings
+        logger.warning(
+            "Ignoring unusable settings file %s; falling back to defaults",
+            SETTINGS_FILE, exc_info=True,
+        )
+        return DEFAULT_SETTINGS.copy()
 
 
 def _save_settings(s: dict) -> None:
