@@ -104,10 +104,13 @@ When you launch Grader for the first time:
 
 | Data | Location | Notes |
 |---|---|---|
-| Engine state | `fixtures/*.db` | SQLite (submissions, grade records, audit log) |
-| Rubrics | `fixtures/rubrics.db` | SQLite |
-| Exemplars | `fixtures/exemplars.db` | SQLite + embeddings |
-| App config | `~/Library/Application Support/Grader/` | Tauri-managed |
+| Engine state | `$GRADER_DATA_DIR/*.db` (default `fixtures/*.db`) | SQLite (submissions, grade records, audit log); selected when the engine starts |
+| Rubrics | `$GRADER_DATA_DIR/rubrics.db` (default `fixtures/rubrics.db`) | SQLite |
+| Exemplars | `$GRADER_DATA_DIR/exemplars.db` (default `fixtures/exemplars.db`) | SQLite + embeddings |
+| Canvas downloads | Settings > General > Canvas attachment directory | Applies to new Canvas attachment downloads |
+| Offline Canvas post queue | `$GRADER_DATA_DIR/post_queue.db` (default `fixtures/post_queue.db`) | Durable pending posts; selected when the engine starts |
+| Engine settings | `$GRADER_DATA_DIR/settings.json` (default `fixtures/settings.json`) | Canvas token is local, masked in the UI, and stored owner-only |
+| Interface preferences | `~/Library/Application Support/Grader/` | Tauri/WebView-managed appearance and onboarding state |
 | Models | `~/.ollama/models/` | Ollama-managed |
 
 All data stays on your device. No student work is transmitted anywhere. See

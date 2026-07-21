@@ -26,7 +26,7 @@ from typing import Any
 
 from fastapi import Depends, FastAPI, Header, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from grader.agent import grade
 from grader.calibration import cold_start_status, compute_health
@@ -171,8 +171,16 @@ def _broadcast(msg: dict) -> None:
             _ws_clients.remove(ws)
 
 
-def _run_grading_job(job_id: str, assignment_id: str, submission_ids: list[str],
-                     rubric: Rubric, model: str, materials: str) -> None:
+def _run_grading_job(
+    job_id: str,
+    assignment_id: str,
+    submission_ids: list[str],
+    rubric: Rubric,
+    model: str,
+    materials: str,
+    low_confidence: float,
+    high_confidence: float,
+) -> None:
     with _job_lock:
         _jobs[job_id]["status"] = "running"
 
@@ -206,8 +214,16 @@ def _run_grading_job(job_id: str, assignment_id: str, submission_ids: list[str],
                 "ai_feedback": None, "confidence": None, "flags": None,
             }
         else:
-            t = triage(run.draft, rubric, submission_text, model_name=model,
-                       anchors=anchors_txt, materials=materials)
+            t = triage(
+                run.draft,
+                rubric,
+                submission_text,
+                model_name=model,
+                anchors=anchors_txt,
+                materials=materials,
+                low_confidence=low_confidence,
+                high_confidence=high_confidence,
+            )
             state = "drafted"
             ai_scores = {cs.criterion_id: cs.score for cs in run.draft.criterion_scores}
             record = {
@@ -267,9 +283,16 @@ class CreateRubric(BaseModel):
 
 class GradeBatch(BaseModel):
     assignment_id: str
-    model: str = "grader-text:8b"
+    model: str | None = None
     materials: str = ""
     submission_ids: list[str] | None = None
+
+    @field_validator("model")
+    @classmethod
+    def validate_model_override(cls, value: str | None) -> str | None:
+        if value is not None and not value.startswith("grader-text:"):
+            raise ValueError("grading model must use a capped grader-text tag")
+        return value
 
 
 class OverrideRequest(BaseModel):
@@ -362,13 +385,28 @@ def grade_batch(req: GradeBatch) -> dict:
     if not sub_ids:
         raise HTTPException(400, "no submissions to grade for this assignment")
 
+    settings = _load_settings()
+    model = req.model or str(settings["model_text"])
+    low_confidence = float(settings["review_first_threshold"])
+    high_confidence = float(settings["auto_approve_threshold"])
+    _exemplar_store.embedding_model = str(settings["model_embed"])
+
     job_id = f"job_{secrets.token_hex(8)}"
     with _job_lock:
         _jobs[job_id] = {"status": "queued", "total": len(sub_ids), "done": 0, "assignment_id": req.assignment_id}
 
     thread = threading.Thread(
         target=_run_grading_job,
-        args=(job_id, req.assignment_id, sub_ids, rubric, req.model, req.materials),
+        args=(
+            job_id,
+            req.assignment_id,
+            sub_ids,
+            rubric,
+            model,
+            req.materials,
+            low_confidence,
+            high_confidence,
+        ),
         daemon=True,
     )
     thread.start()
@@ -475,6 +513,7 @@ def override_grade(grade_id: str, req: OverrideRequest) -> dict:
     rubric = _rubric_store.get(rubric_row[0]["title"]) if rubric_row else None
     max_total = rubric.total_points if rubric else 5.0
 
+    _exemplar_store.embedding_model = str(_load_settings()["model_embed"])
     ov = apply_override(
         _override_store, _exemplar_store,
         assignment_id=row["assignment_id"],
@@ -567,53 +606,145 @@ def install_model(req: InstallModelRequest) -> dict:
 
 SETTINGS_FILE = DATA_DIR / "settings.json"
 
-DEFAULT_SETTINGS = {
-    "canvas_token": "",
-    "canvas_url": "",
-    "model_text": "grader-text:8b",
-    "model_vision": "grader-vision:1.3b",
-    "model_embed": "nomic-embed-text:latest",
-    "data_dir": str(DATA_DIR),
-    "auto_approve_threshold": 0.95,
-    "review_first_threshold": 0.70,
-}
+
+class SettingsState(BaseModel):
+    canvas_token: str = ""
+    canvas_url: str = ""
+    model_text: str = "grader-text:8b"
+    model_vision: str = "grader-vision:1.3b"
+    model_embed: str = "nomic-embed-text:latest"
+    data_dir: str = str(DATA_DIR)
+    auto_approve_threshold: float = Field(default=0.95, ge=0.5, le=1.0)
+    review_first_threshold: float = Field(default=0.70, ge=0.0, le=1.0)
+
+    @field_validator("canvas_url")
+    @classmethod
+    def validate_canvas_url(cls, value: str) -> str:
+        value = value.strip().rstrip("/")
+        if value and not value.startswith(("https://", "http://")):
+            raise ValueError("Canvas URL must start with https:// or http://")
+        return value
+
+    @field_validator("model_text")
+    @classmethod
+    def validate_text_model(cls, value: str) -> str:
+        if not value.startswith("grader-text:"):
+            raise ValueError("text model must use a capped grader-text tag")
+        return value
+
+    @field_validator("model_vision")
+    @classmethod
+    def validate_vision_model(cls, value: str) -> str:
+        if not value.startswith("grader-vision:"):
+            raise ValueError("vision model must use a capped grader-vision tag")
+        return value
+
+    @field_validator("model_embed")
+    @classmethod
+    def validate_embed_model(cls, value: str) -> str:
+        if not value.startswith("nomic-embed-text:"):
+            raise ValueError("embedding model must use a nomic-embed-text tag")
+        return value
+
+    @field_validator("data_dir")
+    @classmethod
+    def validate_data_dir(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("Canvas attachment directory cannot be blank")
+        return str(Path(value).expanduser())
+
+    @model_validator(mode="after")
+    def validate_threshold_order(self) -> SettingsState:
+        if self.review_first_threshold >= self.auto_approve_threshold:
+            raise ValueError("needs-review threshold must be lower than high-confidence threshold")
+        return self
+
+
+class SettingsUpdate(BaseModel):
+    canvas_token: str | None = None
+    canvas_url: str | None = None
+    model_text: str | None = None
+    model_vision: str | None = None
+    model_embed: str | None = None
+    data_dir: str | None = None
+    auto_approve_threshold: float | None = None
+    review_first_threshold: float | None = None
+
+
+DEFAULT_SETTINGS = SettingsState().model_dump()
 
 
 def _load_settings() -> dict:
     if SETTINGS_FILE.exists():
         try:
             s = json.loads(SETTINGS_FILE.read_text())
-            return {**DEFAULT_SETTINGS, **s}
+            return SettingsState.model_validate({**DEFAULT_SETTINGS, **s}).model_dump()
         except Exception:
             pass
     return DEFAULT_SETTINGS.copy()
 
 
 def _save_settings(s: dict) -> None:
-    SETTINGS_FILE.write_text(json.dumps(s, indent=2))
+    validated = SettingsState.model_validate(s).model_dump()
+    SETTINGS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    temporary = SETTINGS_FILE.with_suffix(".json.tmp")
+    temporary.write_text(json.dumps(validated, indent=2))
+    os.chmod(temporary, 0o600)
+    temporary.replace(SETTINGS_FILE)
+
+
+def _settings_response(settings: dict) -> dict:
+    response = {key: value for key, value in settings.items() if key != "canvas_token"}
+    token = str(settings.get("canvas_token") or "")
+    if token:
+        response["canvas_token_masked"] = (
+            "••••••••" if len(token) <= 8 else token[:4] + "..." + token[-4:]
+        )
+    return response
+
+
+def _canvas_connection(settings: dict | None = None) -> dict[str, str | None]:
+    current = settings or _load_settings()
+    return {
+        "base_url": str(current.get("canvas_url") or "") or None,
+        "token": str(current.get("canvas_token") or "") or None,
+    }
+
+
+def _canvas_attachment_root(settings: dict | None = None) -> Path:
+    current = settings or _load_settings()
+    root = Path(str(current.get("data_dir") or DATA_DIR)).expanduser()
+    root.mkdir(parents=True, exist_ok=True)
+    return root
 
 
 @app.get("/api/settings", dependencies=[Depends(_auth)])
 def get_settings() -> dict:
-    s = _load_settings()
-    if s.get("canvas_token"):
-        s["canvas_token_masked"] = s["canvas_token"][:4] + "..." + s["canvas_token"][-4:]
-        s["canvas_token"] = ""
-    return s
+    return _settings_response(_load_settings())
 
 
 @app.put("/api/settings", dependencies=[Depends(_auth)])
-def update_settings(req: dict) -> dict:
+def update_settings(req: SettingsUpdate) -> dict:
     current = _load_settings()
-    for key in DEFAULT_SETTINGS:
-        if key in req and req[key]:
-            val = req[key]
-            if key == "canvas_token" and val == "":
-                continue
-            current[key] = val
-    _save_settings(current)
-    _audit("settings", "user", "update", {"keys": list(req.keys())})
-    return {"success": True, "settings": {k: current[k] for k in DEFAULT_SETTINGS if k != "canvas_token"}}
+    updates = req.model_dump(exclude_unset=True)
+    for key, value in updates.items():
+        if value is None or (key == "canvas_token" and value == ""):
+            continue
+        current[key] = value
+
+    validated = SettingsState.model_validate(current).model_dump()
+    attachment_root = Path(str(validated["data_dir"])).expanduser()
+    try:
+        attachment_root.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        raise HTTPException(400, f"Canvas attachment directory is not writable: {exc}") from exc
+    if not attachment_root.is_dir():
+        raise HTTPException(400, "Canvas attachment directory is not a directory")
+
+    _save_settings(validated)
+    _audit("settings", "user", "update", {"keys": sorted(updates)})
+    return {"success": True, "settings": _settings_response(validated)}
 
 
 @app.get("/api/audit", dependencies=[Depends(_auth)])
@@ -677,11 +808,18 @@ def canvas_import(req: CanvasImportReq) -> dict:
     from grader.canvas import list_ungraded, download_submission_attachments
     from grader.parse import parse
 
-    dest_dir = DATA_DIR / "attachments" / f"course_{req.course_id}" / f"assign_{req.assignment_id}"
+    settings = _load_settings()
+    canvas_connection = _canvas_connection(settings)
+    dest_dir = (
+        _canvas_attachment_root(settings)
+        / "attachments"
+        / f"course_{req.course_id}"
+        / f"assign_{req.assignment_id}"
+    )
     dest_dir.mkdir(parents=True, exist_ok=True)
 
     try:
-        submissions = list_ungraded(req.course_id, req.assignment_id)
+        submissions = list_ungraded(req.course_id, req.assignment_id, **canvas_connection)
     except Exception as e:
         raise HTTPException(502, f"Canvas API error: {str(e)[:200]}")
 
@@ -699,13 +837,17 @@ def canvas_import(req: CanvasImportReq) -> dict:
         texts: list[str] = [body] if body else []
 
         if req.download_attachments:
-            att_paths = download_submission_attachments(sub, dest_dir)
+            att_paths = download_submission_attachments(
+                sub,
+                dest_dir,
+                token=canvas_connection["token"],
+            )
             for p in att_paths:
                 if not p.exists():
                     failures.append({"user_id": user_id, "error": f"download failed: {p.name}"})
                     continue
                 try:
-                    parsed = parse(p)
+                    parsed = parse(p, vision_model=str(settings["model_vision"]))
                     if parsed.markdown.strip():
                         texts.append(parsed.markdown)
                 except Exception as e:
@@ -783,7 +925,12 @@ def canvas_post(req: CanvasPostReq) -> dict:
         raise HTTPException(400, f"no approved grades to post. Skipped: {skipped}")
 
     try:
-        result = post_grades_batch(req.course_id, req.assignment_id, grade_data)
+        result = post_grades_batch(
+            req.course_id,
+            req.assignment_id,
+            grade_data,
+            **_canvas_connection(),
+        )
     except Exception as e:
         _audit(f"canvas_{req.course_id}_{req.assignment_id}", "canvas", "post_failed",
                {"error": str(e)[:200], "count": len(grade_data)})
@@ -819,7 +966,7 @@ def canvas_flush_queue() -> dict:
     """Flush the offline post queue — attempt to post all pending grades."""
     from grader.canvas import OfflinePostQueue
     queue = OfflinePostQueue(DATA_DIR / "post_queue.db")
-    result = queue.flush()
+    result = queue.flush(**_canvas_connection())
     _audit("canvas_queue", "engine", "flush", result)
     return result
 
@@ -840,7 +987,7 @@ def parse_document(req: ParseReq) -> dict:
     if not p.exists():
         raise HTTPException(404, f"file not found: {req.file_path}")
     try:
-        result = parse(p)
+        result = parse(p, vision_model=str(_load_settings()["model_vision"]))
         return json.loads(result.model_dump_json())
     except Exception as e:
         raise HTTPException(500, f"parse error: {str(e)[:200]}")
@@ -861,7 +1008,7 @@ def transcribe_images(req: TranscribeReq) -> dict:
     paths = [Path(p) for p in req.file_paths if Path(p).exists()]
     if not paths:
         raise HTTPException(404, "no valid image paths")
-    result = transcribe_pages(paths)
+    result = transcribe_pages(paths, model=str(_load_settings()["model_vision"]))
     _audit("transcription", "engine", "transcribe", {
         "pages": len(paths),
         "avg_confidence": result["avg_confidence"],
