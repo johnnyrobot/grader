@@ -38,7 +38,7 @@ three you gave 4s"), and it ships zero per-teacher model artifacts. LoRA fine-tu
 | **Pre-work** | ✅ Complete — research, PRD, spec, data plan, citation fixtures, Canvas sandbox |
 | **P0** Engine spike | 🟢 **Core risk retired, and it reversed a model choice.** `qwen3:8b` in Pydantic AI **Tool-Output mode: 100% schema success, 0 retries**, correct rank-ordering, 27–66s, **zero variance at temp 0**. **But Qwen3-VL is dead for vision** — see the ⚠️ below. |
 | **P1** Calibration core | 🟢 **Complete.** 5 experiments run. Anchors lift QWK +0.127/+0.135 at k=6 (the sweet spot). Context capping has zero quality impact. k≥8 HURTS (too many anchors from a small pool). Override loop, rubric ingestion, refinement, health panel, cold-start rule all built. P5 ship gate blocked on teacher's own graded work. |
-| **P2** App shell + UX | 🟢 **Implemented and evidence-backed.** Neuroinclusive light-first UI covers onboarding, queue, review, settings, and model manager. Frontend evidence passes with 15 component tests, 4 Playwright E2E tests, 16 visual-sweep screens, 47 required controls, and 167 visible controls. |
+| **P2** App shell + UX | 🟢 **Implemented and evidence-backed.** Neuroinclusive light-first UI covers onboarding, queue, review, settings, and model manager. Frontend evidence passes with 16 component tests, 2 API tests, 4 Playwright E2E tests, 16 visual-sweep screens, 47 required controls, and 167 visible controls. |
 | **P3** Canvas round-trip | 🟢 **Score/comment beta scope passes.** Guarded live app E2E on `canvas.johnnyrobot.ai` course `106`, assignment `2841`: import → teacher override/approval → post → Progress completed → score/comment read-back. Rubric-assessment posting remains disabled until local criteria map to real Canvas criterion IDs; attachment write-back still needs separate release evidence. |
 | **P4** Documents & citations | 🟡 **Built; citations are experimental.** parse.py, handwriting.py, writeback.py, citations.py built. Citation fixture rerun is 20/29 (69%), 0 false positives, 3/3 retractions caught; acceptable only when visibly labeled experimental until enabled-mode accuracy reaches >=90%. |
 | **P5** Hardening & release | 🟢 **Supervised public-beta gate passes.** All 19 release-matrix rows pass. The public channel serves the signed/notarized DMG plus a Tauri-compatible signed `Grader.app.tar.gz`; the signed 0.1.0 → 0.1.1 in-app install/relaunch passed. Citations remain visibly experimental and teacher-local claims still require authorized data. |
@@ -51,10 +51,58 @@ uv run python scripts/updater_channel_preflight.py --current-version 0.1.0 --out
 uv run python scripts/release_readiness.py --profile public_beta --expected-version 0.1.1 --public-proxy-dir artifacts/public_proxy/mohler_asag_diverse_anchored_pilot --citation-artifact artifacts/citation-results.json --canvas-artifact artifacts/release-evidence/canvas-live-current.json --privacy-artifact artifacts/release-evidence/privacy.json --performance-artifact artifacts/release-evidence/performance.json --frontend-artifact artifacts/release-evidence/frontend.json --rust-artifact artifacts/release-evidence/rust.json --release-version-artifact artifacts/release-evidence/release-version.json --github-release-artifact artifacts/release-evidence/github-release-preflight-current.json --updater-artifact artifacts/release-evidence/updater-current.json --updater-channel-artifact artifacts/release-evidence/updater-channel-current.json --updater-key-artifact artifacts/release-evidence/updater-key-current.json --clean-machine-artifact artifacts/release-evidence/clean-machine-local-current.json --out artifacts/release-readiness
 ```
 
-The current channel preflight returns `PASS`, and the consolidated report returns
-`supervised_public_beta`. For N+1, rerun version prep, publication preflight, local signing and
-notarization, updater-bundle generation, channel preflight, and the in-app N→N+1 path before
-replacing these artifacts.
+The channel preflight and consolidated report above were last generated 2026-07-13/14 and returned
+`supervised_public_beta` **for that commit**. That verdict is now stale — see §1a. Rerun the command
+above against current `main` before quoting any readiness result. For N+1, also rerun version prep,
+publication preflight, local signing and notarization, updater-bundle generation, channel preflight,
+and the in-app N→N+1 path before replacing these artifacts.
+
+---
+
+## 1a. Session update — 2026-07-24 (read before trusting §1's "ready" status)
+
+The status table and `supervised_public_beta` verdict in §1 predate a run of ~20 commits and no
+longer describe `main`. What changed, and what it means for resuming:
+
+**Merged to `main` this session:**
+- The "apply saved grading settings" work was split off a mixed docs+code PR and landed with **six
+  hardening fixes found in review** of that same change:
+  - Canvas attachments were downloaded into one shared per-assignment dir under the student-supplied
+    filename, and success was inferred from `path.exists()` — a colliding name plus a failed
+    download could **attach one student's essay to another's grade**. Now namespaced by attachment
+    id with an explicit `ok`/`error` per file.
+  - Changing the embedding model silently corrupted anchor retrieval (`cosine()` used `zip()`,
+    truncating mismatched vectors to a plausible score). Vectors now record their model; retrieval
+    skips foreign-model rows; `count()` reports only usable exemplars; databases migrate in place.
+  - A module-level `ExemplarStore` shared with grading threads was mutated per request, letting an
+    override retarget a running batch mid-flight. Handlers now bind a per-request view.
+  - Canvas tokens were accepted over plaintext `http://` (now https-only except loopback);
+    unreadable `settings.json` silently reset **all** settings (now per-field + logged);
+    `INSTALL.md` claimed "No student work is transmitted anywhere" (false for a Canvas app).
+- **The Playwright E2E suite was broken on `main`** — a renamed Settings label ("Local data
+  directory" → "Canvas attachment directory") left two specs and the evidence script pointing at
+  the old label, so the frontend evidence artifact regenerated as **FAIL while every CI gate stayed
+  green**. Fixed, and `gates.yml` now runs vitest **and** Playwright on every PR (it previously ran
+  neither — vitest was release-only, Playwright nowhere).
+- The Privacy Gate produced **false FERPA violations** on CDN-fronted allowlisted hosts (reverse DNS
+  has no PTR for Cloudflare/AWS IPs). Failed 3 CI runs on 6 rotating IPs, all allowlisted. Now
+  forward-resolves the allowlist; still fails closed on genuinely unknown hosts.
+
+**What this means:** several defects lived in code already labelled "release-ready," and the
+evidence pipeline reported green while the E2E suite was red. **Do not inherit the old verdict.**
+
+**To resume — regenerate readiness, don't trust the stale artifact:**
+1. Run the §1 release-readiness command against current `main`. Point `--public-proxy-dir` at
+   `artifacts/public_proxy/mohler_asag_diverse_anchored_pilot` (the default path yields a
+   mechanics-only fixture and a false `blocked`).
+2. Broaden accuracy evidence: QWK 0.845 is **40 items, 2 questions, CS short-answer only** — it does
+   not support the "essays / labs / code" breadth the product claims. Add an essay-length dataset.
+3. Investigate the `nonnative` fairness tail: passes on means, but `within_one_band` 95% vs 100%
+   elsewhere and a `max_abs_delta` of 3.00 on a 0–5 scale. Understand it before beta, not after.
+4. Still open (docs-only, independent): **PR #7** (README how-it-works + feature list). This
+   handoff/counts update is **PR #4**. PRs #5 (privacy gate) and #6 (E2E + CI) already merged.
+5. `docs/HANDOFF.md` §5b, `README.md`, and `docs/PUBLIC_BETA_TEST_MATRIX.md` still narrate the
+   pre-session verdict in places — treat any "19/19 rows pass" line as needing re-confirmation.
 
 ---
 
