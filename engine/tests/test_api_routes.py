@@ -254,3 +254,73 @@ def test_the_queue_of_an_assignment_with_no_grades_is_empty(client, auth):
 
     assert response.status_code == 200
     assert response.json()["items"] == []
+
+
+def test_the_offline_post_queue_is_empty_on_a_fresh_engine(client, auth, api, monkeypatch):
+    from grader.canvas import OfflinePostQueue
+
+    monkeypatch.setattr(api, "_post_queue", OfflinePostQueue(Database.memory()))
+
+    response = client.get("/api/canvas/post-queue", headers=auth)
+
+    assert response.status_code == 200
+    assert response.json() == {"pending": 0, "items": []}
+
+
+def test_flushing_an_empty_queue_reports_nothing_to_do(client, auth, api, monkeypatch):
+    from grader.canvas import OfflinePostQueue
+
+    monkeypatch.setattr(api, "_post_queue", OfflinePostQueue(Database.memory()))
+
+    response = client.post("/api/canvas/flush", headers=auth)
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "posted": 0, "failed": 0, "abandoned": 0, "remaining": 0,
+    }
+
+
+def test_posting_with_canvas_unreachable_queues_over_the_wire(
+    client, auth, api, monkeypatch
+):
+    """The offline path, through the ASGI stack rather than a direct call.
+
+    A direct handler call supplies its own Settings; this proves the route
+    resolves, authenticates, and queues with the injected ones.
+    """
+    import json as _json
+
+    from grader.canvas import OfflinePostQueue
+
+    monkeypatch.setattr(api, "_post_queue", OfflinePostQueue(Database.memory()))
+    client.post("/api/settings", headers=auth, json={
+        "canvas_url": "https://canvas.example.test",
+        "canvas_token": "1234567890abcdef",
+    })
+    monkeypatch.setattr(
+        "grader.canvas.post_grades_batch",
+        lambda *a, **k: (_ for _ in ()).throw(RuntimeError("connection refused")),
+    )
+
+    db = api._db()
+    db.execute(
+        "INSERT INTO submissions (id, assignment_id, student_ref, text, state, created_at) "
+        "VALUES (?,?,?,?,?,?)",
+        ("sub_1", "canvas_10_20", "98765", "text", "graded", api._now()),
+    )
+    db.execute(
+        "INSERT INTO grade_records (id, submission_id, assignment_id, ai_scores_json, "
+        "ai_feedback, ai_confidence, ai_flags_json, lane, approved_at, created_at) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?)",
+        ("gr_1", "sub_1", "canvas_10_20", _json.dumps({"Thesis": 4}), "fb", 0.8,
+         "[]", "standard", api._now(), api._now()),
+    )
+    db.commit()
+
+    response = client.post("/api/canvas/post", headers=auth, json={
+        "course_id": 10, "assignment_id": 20, "grade_ids": ["gr_1"],
+    })
+
+    assert response.status_code == 200
+    assert response.json()["queued"] == 1
+    assert client.get("/api/canvas/post-queue", headers=auth).json()["pending"] == 1
