@@ -710,14 +710,8 @@ class FakeJudge:
 
 def _stub_grading(api, monkeypatch, *, anchor_count=0):
     """Run the pipeline without Ollama: a fake Judge, canned triage, no exemplars."""
-    from grader import triage as triage_mod
-
-    monkeypatch.setattr(
-        api, "triage",
-        lambda draft, rubric, text, **kw: triage_mod.Triage(
-            lane=triage_mod.Lane.STANDARD, confidence=0.9, consistency=None,
-        ),
-    )
+    # triage runs for real: FakeJudge grades at 0.9 confidence, above the
+    # threshold, so no consistency vote fires and no model is needed.
     retriever = types.SimpleNamespace(retrieved=[])
     retriever.count = lambda assignment_id: anchor_count
     retriever.retrieve = lambda *a, **kw: retriever.retrieved.append(a) or []

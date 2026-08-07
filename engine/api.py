@@ -34,15 +34,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, ValidationError, field_validator, model_validator
 
 from grader.approvals import AlreadyApproved, ApprovalStore, GradeNotFound
-from grader.calibration import can_draft, cold_start_status, compute_health
+from grader.calibration import cold_start_status, compute_health
 from grader.canvas import OfflinePostQueue
 from grader.db import Database
-from grader.exemplars import ExemplarStore, render_anchors
+from grader.exemplars import ExemplarStore
+from grader.gradingjob import GradeOutcome, GradingJob, SubmissionText
 from grader.overrides import OverrideStore, detect_patterns
 from grader.ports import Judge
 from grader.rubrics import RubricStore, parse_pasted_rubric
 from grader.schema import GradeDraft, Rubric
-from grader.triage import triage
 
 # ---------------------------------------------------------------------------
 # Per-launch auth: the shell gets the token from the engine's stdout on startup.
@@ -192,6 +192,58 @@ def _broadcast(msg: dict) -> None:
             _ws_clients.remove(ws)
 
 
+class _SqliteGradeStore:
+    """The engine's own tables, behind the GradeStore port.
+
+    A fresh connection per operation, matching every other writer here.
+    """
+
+    def fetch_submission(self, submission_id: str) -> SubmissionText | None:
+        db = _db()
+        try:
+            row = db.execute(
+                "SELECT * FROM submissions WHERE id = ?", (submission_id,)
+            ).fetchone()
+        finally:
+            db.close()
+        if row is None:
+            return None
+        return SubmissionText(
+            id=row["id"], assignment_id=row["assignment_id"], text=row["text"]
+        )
+
+    def save(self, outcome: GradeOutcome, *, rubric_title: str) -> None:
+        record = outcome.record
+        db = _db()
+        try:
+            db.execute(
+                "INSERT OR REPLACE INTO grade_records "
+                "(id, submission_id, assignment_id, rubric_version, rubric_title, "
+                "ai_scores_json, ai_feedback, ai_confidence, ai_flags_json, lane, created_at) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                (outcome.record_id, outcome.submission_id, record["assignment_id"], 1,
+                 rubric_title,
+                 json.dumps(record.get("ai_scores")) if record.get("ai_scores") else None,
+                 record.get("ai_feedback"),
+                 record.get("confidence"),
+                 json.dumps(record.get("flags")) if record.get("flags") else None,
+                 record.get("lane"), _now()),
+            )
+            db.execute(
+                "UPDATE submissions SET state = ? WHERE id = ?",
+                (outcome.state, outcome.submission_id),
+            )
+            db.commit()
+        finally:
+            db.close()
+
+    def audit(self, entity: str, actor: str, event: str, payload: dict) -> None:
+        _audit(entity, actor, event, payload)
+
+
+_grade_store = _SqliteGradeStore()
+
+
 def _run_grading_job(
     job_id: str,
     assignment_id: str,
@@ -204,6 +256,7 @@ def _run_grading_job(
     embedding_model: str,
     judge: Judge | None = None,
 ) -> None:
+    """Transport around GradingJob: job bookkeeping and websocket progress."""
     if judge is None:
         # Imported here rather than at module scope: this is the only place the
         # engine needs pydantic_ai, and importing it up top made every route test
@@ -215,101 +268,28 @@ def _run_grading_job(
     with _job_lock:
         _jobs[job_id]["status"] = "running"
 
-    # Both bound once for the life of the job: a concurrent settings change must
-    # not retarget retrieval, or the model, half-way through a batch.
-    exemplars = _exemplar_store.for_model(embedding_model)
+    job = GradingJob(
+        rubric,
+        judge=judge,
+        # Bound once for the life of the job: a concurrent settings change must
+        # not retarget retrieval half-way through a batch.
+        exemplars=_exemplar_store.for_model(embedding_model),
+        store=_grade_store,
+        low_confidence=low_confidence,
+        high_confidence=high_confidence,
+        materials=materials,
+    )
 
     total = len(submission_ids)
-    results: list[dict] = []
 
-    def announce(done: int, record: dict) -> None:
-        """Record one submission's outcome and tell the desktop app about it."""
-        results.append(record)
+    def on_progress(done: int, _total: int, outcome: GradeOutcome) -> None:
         with _job_lock:
             _jobs[job_id]["done"] = done
         _broadcast({"type": "job_progress", "job_id": job_id, "done": done,
-                     "total": total, "latest": record})
+                     "total": total, "latest": outcome.record})
 
-    for i, sub_id in enumerate(submission_ids):
-        db = _db()
-        row = db.execute("SELECT * FROM submissions WHERE id = ?", (sub_id,)).fetchone()
-        db.close()
-        if not row:
-            # Asked to grade something that isn't there. Report it rather than
-            # dropping it: done/total and the results list are what the desktop
-            # app renders, and a silent omission reads as a stalled batch.
-            record = {
-                "id": f"gr_{sub_id}", "submission_id": sub_id,
-                "assignment_id": assignment_id, "error": "submission not found",
-                "lane": None, "ai_scores": None, "ai_feedback": None,
-                "confidence": None, "flags": None,
-            }
-            _audit(record["id"], "engine", "grade_skipped", record)
-            announce(i + 1, record)
-            continue
-
-        submission_text = row["text"]
-        record_id = f"gr_{sub_id}"
-
-        anchors_txt = ""
-        # How many exemplars unlock drafting is calibration's rule, not this loop's.
-        if can_draft(exemplars, assignment_id):
-            hits = exemplars.retrieve(assignment_id, submission_text, k=6, balance=True)
-            anchor_ids = [c.id for c in rubric.criteria]
-            anchors_txt = render_anchors(hits, anchor_ids)
-
-        run = judge.grade(rubric, submission_text,
-                          anchors=anchors_txt, materials=materials)
-
-        if not run.ok:
-            state = "error"
-            record = {
-                "id": record_id, "submission_id": sub_id, "assignment_id": assignment_id,
-                "error": run.error, "lane": None, "ai_scores": None,
-                "ai_feedback": None, "confidence": None, "flags": None,
-            }
-        else:
-            t = triage(
-                run.draft,
-                rubric,
-                submission_text,
-                judge=judge,
-                anchors=anchors_txt,
-                materials=materials,
-                low_confidence=low_confidence,
-                high_confidence=high_confidence,
-            )
-            state = "drafted"
-            ai_scores = {cs.criterion_id: cs.score for cs in run.draft.criterion_scores}
-            record = {
-                "id": record_id, "submission_id": sub_id, "assignment_id": assignment_id,
-                "ai_scores": ai_scores, "ai_feedback": run.draft.feedback,
-                "confidence": run.draft.confidence,
-                "flags": [f.value for f in run.draft.flags],
-                "lane": t.lane.value, "confidence_level": t.confidence,
-                "triage_reasons": t.reasons, "triage_consistency": t.consistency,
-                "seconds": run.seconds, "retries": run.retries,
-            }
-
-        db = _db()
-        db.execute(
-            "INSERT OR REPLACE INTO grade_records "
-            "(id, submission_id, assignment_id, rubric_version, rubric_title, ai_scores_json, "
-            "ai_feedback, ai_confidence, ai_flags_json, lane, created_at) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-            (record_id, sub_id, assignment_id, 1, rubric.title,
-             json.dumps(record.get("ai_scores")) if record.get("ai_scores") else None,
-             record.get("ai_feedback"),
-             record.get("confidence"),
-             json.dumps(record.get("flags")) if record.get("flags") else None,
-             record.get("lane"), _now()),
-        )
-        db.execute("UPDATE submissions SET state = ? WHERE id = ?", (state, sub_id))
-        db.commit()
-        db.close()
-
-        _audit(record_id, "engine", "graded", record)
-        announce(i + 1, record)
+    outcomes = job.run(assignment_id, submission_ids, on_progress=on_progress)
+    results = [o.record for o in outcomes]
 
     with _job_lock:
         _jobs[job_id]["status"] = "completed"
