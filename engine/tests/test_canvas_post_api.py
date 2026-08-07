@@ -707,3 +707,111 @@ def test_grade_records_gains_rubric_title_on_an_older_database(tmp_path, monkeyp
 
     assert "rubric_title" in columns
     assert row["rubric_title"] is None  # existing rows survive, unattributed
+
+
+# ---------------------------------------------------------------------------
+# Running a grading job
+# ---------------------------------------------------------------------------
+
+def _fake_draft(schema):
+    return schema.GradeDraft(
+        criterion_scores=[schema.CriterionScore(criterion_id="c1", score=4.0, rationale="ok")],
+        feedback="feedback", confidence=0.9, flags=[],
+    )
+
+
+def _stub_grading(api, monkeypatch, *, anchor_count=0):
+    """Run the pipeline without Ollama: canned grade + triage, no exemplars."""
+    from grader import schema as schema_mod
+    from grader import triage as triage_mod
+
+    monkeypatch.setattr(
+        api, "grade",
+        lambda rubric, text, **kw: types.SimpleNamespace(
+            draft=_fake_draft(schema_mod), ok=True, seconds=0.1, retries=0, error=None,
+        ),
+    )
+    monkeypatch.setattr(
+        api, "triage",
+        lambda draft, rubric, text, **kw: triage_mod.Triage(
+            lane=triage_mod.Lane.STANDARD, confidence=0.9, consistency=None,
+        ),
+    )
+    retriever = types.SimpleNamespace(retrieved=[])
+    retriever.count = lambda assignment_id: anchor_count
+    retriever.retrieve = lambda *a, **kw: retriever.retrieved.append(a) or []
+    monkeypatch.setattr(api._exemplar_store, "for_model", lambda model: retriever)
+    return retriever
+
+
+def test_grading_job_accounts_for_every_submission_it_was_given(
+    tmp_path, monkeypatch, api_module
+):
+    """A submission that can't be read is an outcome, not a silent omission.
+
+    The desktop app tracks a batch by done/total and renders the results list, so a
+    dropped submission leaves the job looking unfinished and the teacher without a
+    row explaining why.
+    """
+    api = api_module
+    monkeypatch.setattr(api, "DB_PATH", tmp_path / "grader_engine.db")
+    _stub_grading(api, monkeypatch)
+
+    db = api._db()
+    db.execute(
+        "INSERT INTO submissions (id, assignment_id, student_ref, text, state, created_at) "
+        "VALUES (?,?,?,?,?,?)",
+        ("sub_real", "a1", "s1", "student text", "imported", api._now()),
+    )
+    db.commit()
+    db.close()
+
+    api._jobs["job_1"] = {"status": "queued", "total": 2, "done": 0, "assignment_id": "a1"}
+    api._run_grading_job(
+        "job_1", "a1", ["sub_real", "sub_vanished"],
+        rubric=types.SimpleNamespace(title="Essay", criteria=[]),
+        model="grader-text:8b", materials="",
+        low_confidence=0.6, high_confidence=0.9, embedding_model="nomic-embed-text:v1.5",
+    )
+
+    job = api._jobs["job_1"]
+    assert job["done"] == 2
+    assert len(job["results"]) == 2
+    missing = [r for r in job["results"] if r["submission_id"] == "sub_vanished"]
+    assert missing and missing[0]["error"]
+
+
+def test_grading_job_defers_to_the_single_cold_start_threshold(
+    tmp_path, monkeypatch, api_module
+):
+    """How many exemplars unlock AI drafting is one product rule, defined once.
+
+    calibration.COLD_START_MIN is that definition. A second copy in the grading
+    loop can drift from it silently, since both start at 3.
+    """
+    from grader import calibration
+
+    api = api_module
+    monkeypatch.setattr(api, "DB_PATH", tmp_path / "grader_engine.db")
+    retriever = _stub_grading(api, monkeypatch, anchor_count=4)
+    monkeypatch.setattr(calibration, "COLD_START_MIN", 5)
+
+    db = api._db()
+    db.execute(
+        "INSERT INTO submissions (id, assignment_id, student_ref, text, state, created_at) "
+        "VALUES (?,?,?,?,?,?)",
+        ("sub_1", "a1", "s1", "student text", "imported", api._now()),
+    )
+    db.commit()
+    db.close()
+
+    api._jobs["job_c"] = {"status": "queued", "total": 1, "done": 0, "assignment_id": "a1"}
+    api._run_grading_job(
+        "job_c", "a1", ["sub_1"],
+        rubric=types.SimpleNamespace(title="Essay", criteria=[]),
+        model="grader-text:8b", materials="",
+        low_confidence=0.6, high_confidence=0.9, embedding_model="nomic-embed-text:v1.5",
+    )
+
+    # 4 exemplars, threshold raised to 5: still cold, so no anchors are retrieved.
+    assert retriever.retrieved == []
