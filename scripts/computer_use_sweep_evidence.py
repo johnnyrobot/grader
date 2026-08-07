@@ -14,7 +14,7 @@ import hashlib
 import json
 import plistlib
 import re
-import subprocess
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
@@ -52,6 +52,10 @@ CONTRADICTION_PATTERNS: tuple[tuple[str, str, str], ...] = (
 
 NOOP_SCORE_UPDATE_RE = re.compile(r"Score updated from\s+(\d+(?:\.\d+)?)\s+to\s+\1\b")
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from scripts.ports import source_revision
 DEFAULT_BUNDLE_ID = "com.grader.app"
 
 
@@ -92,27 +96,7 @@ def _sha256_tree(path: Path) -> str:
 
 
 def _git_source_revision() -> dict[str, Any]:
-    try:
-        commit = subprocess.run(
-            ["git", "-C", str(PROJECT_ROOT), "rev-parse", "HEAD"],
-            text=True,
-            capture_output=True,
-            check=True,
-        ).stdout.strip()
-        timestamp = int(subprocess.run(
-            ["git", "-C", str(PROJECT_ROOT), "log", "-1", "--format=%ct"],
-            text=True,
-            capture_output=True,
-            check=True,
-        ).stdout.strip())
-    except Exception as exc:
-        return {"available": False, "reason": str(exc)}
-    return {
-        "available": True,
-        "commit": commit,
-        "commit_time_epoch": timestamp,
-        "commit_time": datetime.fromtimestamp(timestamp, timezone.utc).isoformat(),
-    }
+    return source_revision(PROJECT_ROOT)
 
 
 def _app_bundle_metadata(

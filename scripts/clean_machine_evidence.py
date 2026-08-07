@@ -21,14 +21,18 @@ import argparse
 import hashlib
 import json
 import platform
-import plistlib
 import subprocess
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from scripts.ports import CodeSigner, DiskImage, find_app_bundle, source_revision
 
 REQUIRED_CHECKS = (
     "codesign_verify",
@@ -187,27 +191,7 @@ def _latest_mtime(path: Path) -> float:
 
 
 def _git_source_revision() -> dict[str, object]:
-    try:
-        commit = subprocess.run(
-            ["git", "-C", str(PROJECT_ROOT), "rev-parse", "HEAD"],
-            text=True,
-            capture_output=True,
-            check=True,
-        ).stdout.strip()
-        timestamp = int(subprocess.run(
-            ["git", "-C", str(PROJECT_ROOT), "log", "-1", "--format=%ct"],
-            text=True,
-            capture_output=True,
-            check=True,
-        ).stdout.strip())
-    except Exception as exc:
-        return {"available": False, "reason": str(exc)}
-    return {
-        "available": True,
-        "commit": commit,
-        "commit_time_epoch": timestamp,
-        "commit_time": datetime.fromtimestamp(timestamp, timezone.utc).isoformat(),
-    }
+    return source_revision(PROJECT_ROOT)
 
 
 def _artifact_metadata(path: Path | None) -> dict[str, object]:
@@ -367,19 +351,10 @@ def _run_check(
     }
 
 
-def _find_app_bundle(root: Path) -> Path | None:
-    for child in sorted(root.iterdir()):
-        if child.is_dir() and child.suffix == ".app":
-            return child
-    for child in sorted(root.rglob("*.app")):
-        if child.is_dir():
-            return child
-    return None
-
-
 def _check_app_signature(app_path: Path, *, runner: Runner = subprocess.run) -> tuple[bool, bool, dict[str, object]]:
-    codesign = _run_check(["codesign", "--verify", "--deep", "--strict", str(app_path)], runner=runner)
-    spctl = _run_check(["spctl", "--assess", "--type", "execute", str(app_path)], runner=runner)
+    signer = CodeSigner(runner=runner)
+    codesign = signer.verify_app(app_path)
+    spctl = signer.assess_app(app_path)
     return bool(codesign["ok"]), bool(spctl["ok"]), {
         "source": "app_path",
         "app_path": str(app_path),
@@ -390,46 +365,22 @@ def _check_app_signature(app_path: Path, *, runner: Runner = subprocess.run) -> 
 
 def _check_app_signature_from_dmg(dmg_path: Path, *, runner: Runner = subprocess.run) -> tuple[bool, bool, dict[str, object]]:
     details: dict[str, object] = {"source": "mounted_dmg_app", "dmg_path": str(dmg_path)}
-    attach = _run_check(
-        ["hdiutil", "attach", "-nobrowse", "-readonly", "-plist", str(dmg_path)],
-        runner=runner,
-        output_limit=None,
-    )
-    details["hdiutil_attach"] = attach
-    if not attach.get("ok"):
-        details["reason"] = "could not mount DMG to verify bundled app"
-        return False, False, details
+    codesign_ok = spctl_ok = False
 
-    mount_point: Path | None = None
-    try:
-        plist = plistlib.loads(str(attach.get("output") or "").encode())
-        for entity in plist.get("system-entities", []):
-            candidate = entity.get("mount-point")
-            if candidate:
-                mount_point = Path(candidate)
-                break
-    except Exception as exc:
-        details["reason"] = f"could not parse mounted DMG metadata: {exc}"
+    with DiskImage(dmg_path, runner=runner).mounted() as (mount_point, records):
+        if mount_point is not None:
+            app_path = find_app_bundle(mount_point)
+            if app_path is None:
+                records["reason"] = "mounted DMG does not contain a .app bundle"
+            else:
+                details["app_path"] = str(app_path)
+                codesign_ok, spctl_ok, app_details = _check_app_signature(
+                    app_path, runner=runner
+                )
+                details["app_signature"] = app_details
+    details.update(records)
 
-    if mount_point is None:
-        details["reason"] = details.get("reason") or "mounted DMG did not report a mount point"
-        return False, False, details
-
-    details["mount_point"] = str(mount_point)
-    try:
-        app_path = _find_app_bundle(mount_point)
-        if app_path is None:
-            details["reason"] = "mounted DMG does not contain a .app bundle"
-            return False, False, details
-        details["app_path"] = str(app_path)
-        codesign_ok, spctl_ok, app_details = _check_app_signature(app_path, runner=runner)
-        details["app_signature"] = app_details
-        return codesign_ok, spctl_ok, details
-    finally:
-        details["hdiutil_detach"] = _run_check(
-            ["hdiutil", "detach", str(mount_point)],
-            runner=runner,
-        )
+    return codesign_ok, spctl_ok, details
 
 
 def load_manual_evidence(path: Path | None) -> dict[str, Any]:

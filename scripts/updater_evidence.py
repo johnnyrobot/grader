@@ -16,8 +16,8 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import plistlib
 import subprocess
+import sys
 import tempfile
 import tarfile
 from datetime import datetime, timezone
@@ -26,6 +26,10 @@ from typing import Any, Callable, Protocol
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from scripts.ports import CodeSigner, DiskImage, find_app_bundle, source_revision
 REQUIRED_PLATFORMS = ("darwin-aarch64", "darwin-x86_64")
 
 
@@ -47,27 +51,7 @@ def _sha256(path: Path) -> str:
 
 
 def _git_source_revision() -> dict[str, Any]:
-    try:
-        commit = subprocess.run(
-            ["git", "-C", str(PROJECT_ROOT), "rev-parse", "HEAD"],
-            text=True,
-            capture_output=True,
-            check=True,
-        ).stdout.strip()
-        timestamp = int(subprocess.run(
-            ["git", "-C", str(PROJECT_ROOT), "log", "-1", "--format=%ct"],
-            text=True,
-            capture_output=True,
-            check=True,
-        ).stdout.strip())
-    except Exception as exc:
-        return {"available": False, "reason": str(exc)}
-    return {
-        "available": True,
-        "commit": commit,
-        "commit_time_epoch": timestamp,
-        "commit_time": datetime.fromtimestamp(timestamp, timezone.utc).isoformat(),
-    }
+    return source_revision(PROJECT_ROOT)
 
 
 def _mtime_metadata(path: Path) -> dict[str, Any]:
@@ -147,20 +131,11 @@ def _run(command: list[str], *, runner: Runner = subprocess.run, timeout: int = 
         }
 
 
-def _find_mounted_app(mount_point: Path) -> Path | None:
-    for child in sorted(mount_point.iterdir()):
-        if child.is_dir() and child.suffix == ".app":
-            return child
-    for child in sorted(mount_point.rglob("*.app")):
-        if child.is_dir():
-            return child
-    return None
-
-
 def _verify_app_signature(app_path: Path, *, runner: Runner = subprocess.run) -> tuple[list[str], dict[str, Any]]:
+    signer = CodeSigner(runner=runner)
     checks = {
-        "codesign_verify": _run(["codesign", "--verify", "--deep", "--strict", str(app_path)], runner=runner),
-        "spctl_assess": _run(["spctl", "--assess", "--type", "execute", str(app_path)], runner=runner),
+        "codesign_verify": signer.verify_app(app_path),
+        "spctl_assess": signer.assess_app(app_path),
     }
     failures = [
         f"app signature check failed: {name}"
@@ -171,9 +146,10 @@ def _verify_app_signature(app_path: Path, *, runner: Runner = subprocess.run) ->
 
 
 def _verify_dmg_artifact(path: Path, *, runner: Runner = subprocess.run) -> tuple[list[str], dict[str, Any]]:
+    signer = CodeSigner(runner=runner)
     details: dict[str, Any] = {
-        "stapler_validate": _run(["xcrun", "stapler", "validate", str(path)], runner=runner),
-        "spctl_assess": _run(["spctl", "--assess", "--type", "open", "--context", "context:primary-signature", str(path)], runner=runner),
+        "stapler_validate": signer.validate_staple(path),
+        "spctl_assess": signer.assess_installer(path),
     }
     failures = [
         f"DMG signature/notarization check failed: {name}"
@@ -181,33 +157,21 @@ def _verify_dmg_artifact(path: Path, *, runner: Runner = subprocess.run) -> tupl
         if not details[name].get("ok")
     ]
 
-    attach = _run(["hdiutil", "attach", "-nobrowse", "-readonly", "-plist", str(path)], runner=runner, timeout=120)
-    details["hdiutil_attach"] = attach
-    mount_point: Path | None = None
-    if attach.get("ok"):
-        try:
-            plist = plistlib.loads(str(attach.get("output", "")).encode())
-            for entity in plist.get("system-entities", []):
-                candidate = entity.get("mount-point")
-                if candidate:
-                    mount_point = Path(candidate)
-                    break
-        except Exception as exc:
-            failures.append(f"could not parse mounted DMG metadata: {exc}")
-    else:
-        failures.append("could not mount DMG to verify bundled app")
-
-    if mount_point is not None:
-        details["mount_point"] = str(mount_point)
-        app_path = _find_mounted_app(mount_point)
-        if app_path is None:
-            failures.append("mounted DMG does not contain a .app bundle")
+    # The app a teacher installs is the one inside the image. Verifying the one
+    # left in the build directory can pass while the shipped bundle is unsigned.
+    with DiskImage(path, runner=runner).mounted() as (mount_point, records):
+        if mount_point is None:
+            failures.append(str(records.get("reason") or "could not mount DMG"))
         else:
-            details["bundled_app_path"] = str(app_path)
-            app_failures, app_details = _verify_app_signature(app_path, runner=runner)
-            details["bundled_app"] = app_details
-            failures.extend(f"bundled {failure}" for failure in app_failures)
-        details["hdiutil_detach"] = _run(["hdiutil", "detach", str(mount_point)], runner=runner, timeout=120)
+            app_path = find_app_bundle(mount_point)
+            if app_path is None:
+                failures.append("mounted DMG does not contain a .app bundle")
+            else:
+                details["bundled_app_path"] = str(app_path)
+                app_failures, app_details = _verify_app_signature(app_path, runner=runner)
+                details["bundled_app"] = app_details
+                failures.extend(f"bundled {failure}" for failure in app_failures)
+    details.update(records)
 
     return failures, details
 
@@ -222,7 +186,7 @@ def _verify_tar_gz_artifact(path: Path, *, runner: Runner = subprocess.run) -> t
                 archive.extractall(extract_dir, filter="data")
         except Exception as exc:
             return [f"could not extract updater .app.tar.gz artifact: {exc}"], details
-        app_path = _find_mounted_app(extract_dir)
+        app_path = find_app_bundle(extract_dir)
         if app_path is None:
             return ["updater .app.tar.gz artifact does not contain a .app bundle"], details
         details["bundled_app_path"] = str(app_path)
