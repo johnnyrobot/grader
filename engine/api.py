@@ -31,7 +31,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, ValidationError, field_validator, model_validator
 
 from grader.agent import grade
-from grader.calibration import cold_start_status, compute_health
+from grader.calibration import can_draft, cold_start_status, compute_health
 from grader.exemplars import ExemplarStore, render_anchors
 from grader.overrides import OverrideStore, apply_override, detect_patterns
 from grader.rubrics import RubricStore, parse_pasted_rubric
@@ -213,18 +213,38 @@ def _run_grading_job(
     total = len(submission_ids)
     results: list[dict] = []
 
+    def announce(done: int, record: dict) -> None:
+        """Record one submission's outcome and tell the desktop app about it."""
+        results.append(record)
+        with _job_lock:
+            _jobs[job_id]["done"] = done
+        _broadcast({"type": "job_progress", "job_id": job_id, "done": done,
+                     "total": total, "latest": record})
+
     for i, sub_id in enumerate(submission_ids):
         db = _db()
         row = db.execute("SELECT * FROM submissions WHERE id = ?", (sub_id,)).fetchone()
         db.close()
         if not row:
+            # Asked to grade something that isn't there. Report it rather than
+            # dropping it: done/total and the results list are what the desktop
+            # app renders, and a silent omission reads as a stalled batch.
+            record = {
+                "id": f"gr_{sub_id}", "submission_id": sub_id,
+                "assignment_id": assignment_id, "error": "submission not found",
+                "lane": None, "ai_scores": None, "ai_feedback": None,
+                "confidence": None, "flags": None,
+            }
+            _audit(record["id"], "engine", "grade_skipped", record)
+            announce(i + 1, record)
             continue
 
         submission_text = row["text"]
         record_id = f"gr_{sub_id}"
 
         anchors_txt = ""
-        if exemplars.count(assignment_id) >= 3:
+        # How many exemplars unlock drafting is calibration's rule, not this loop's.
+        if can_draft(exemplars, assignment_id):
             hits = exemplars.retrieve(assignment_id, submission_text, k=6, balance=True)
             anchor_ids = [c.id for c in rubric.criteria]
             anchors_txt = render_anchors(hits, anchor_ids)
@@ -280,12 +300,7 @@ def _run_grading_job(
         db.close()
 
         _audit(record_id, "engine", "graded", record)
-        results.append(record)
-
-        with _job_lock:
-            _jobs[job_id]["done"] = i + 1
-        _broadcast({"type": "job_progress", "job_id": job_id, "done": i + 1,
-                     "total": total, "latest": record})
+        announce(i + 1, record)
 
     with _job_lock:
         _jobs[job_id]["status"] = "completed"
