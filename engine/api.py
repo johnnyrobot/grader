@@ -27,11 +27,10 @@ from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlsplit
 
 from fastapi import Depends, FastAPI, Header, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field, ValidationError, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator
 
 from grader.approvals import AlreadyApproved, ApprovalStore, GradeNotFound
 from grader.calibration import cold_start_status, compute_health
@@ -43,15 +42,13 @@ from grader.overrides import OverrideStore, detect_patterns
 from grader.ports import Judge
 from grader.rubrics import RubricStore, parse_pasted_rubric
 from grader.schema import GradeDraft, Rubric
+from grader.settings import Settings, SettingsPatch, SettingsStore
 
 # ---------------------------------------------------------------------------
 # Per-launch auth: the shell gets the token from the engine's stdout on startup.
 # ---------------------------------------------------------------------------
 
 logger = logging.getLogger(__name__)
-
-# Hosts where plaintext HTTP cannot be intercepted off-device.
-LOOPBACK_HOSTS = {"localhost", "127.0.0.1", "::1"}
 
 ENGINE_TOKEN = os.environ.get("GRADER_ENGINE_TOKEN") or secrets.token_urlsafe(32)
 DATA_DIR = Path(os.environ.get("GRADER_DATA_DIR", "fixtures"))
@@ -72,6 +69,36 @@ def _auth(authorization: str | None = Header(default=None)) -> None:
         raise HTTPException(401, "missing bearer token")
     if authorization.removeprefix("Bearer ") != ENGINE_TOKEN:
         raise HTTPException(403, "invalid token")
+
+
+# ---------------------------------------------------------------------------
+# Settings — what the teacher configured. `grader.settings` owns the rules; this
+# is only the resolution seam. It sits above the routes because a handler names
+# `Depends(current_settings)` in its signature, which is evaluated at def time.
+# ---------------------------------------------------------------------------
+
+SETTINGS_FILE = DATA_DIR / "settings.json"
+
+
+def _settings_store() -> SettingsStore:
+    """The settings file, resolved at call time rather than at import.
+
+    SETTINGS_FILE is module state that tests rebind after import, so a store built
+    at import would keep pointing at the real data directory. A SettingsStore is a
+    path plus the rules for reading it — constructing one per call costs nothing.
+    """
+    return SettingsStore(SETTINGS_FILE)
+
+
+def current_settings() -> Settings:
+    """Resolve the saved settings once for this request.
+
+    Routes take this as a dependency rather than calling the store, so FastAPI's
+    per-request cache guarantees one read per request. Eight handlers used to
+    each load and re-coerce their own copy, which is how two of them ended up
+    writing conflicting values onto a shared store.
+    """
+    return _settings_store().current()
 
 
 # ---------------------------------------------------------------------------
@@ -415,7 +442,7 @@ def _resolve_rubric(title: str | None) -> Rubric:
 
 
 @app.post("/api/grade/batch", dependencies=[Depends(_auth)])
-def grade_batch(req: GradeBatch) -> dict:
+def grade_batch(req: GradeBatch, settings: Settings = Depends(current_settings)) -> dict:
     rubric = _resolve_rubric(req.rubric_title)
 
     db = _db()
@@ -436,11 +463,10 @@ def grade_batch(req: GradeBatch) -> dict:
     if not sub_ids:
         raise HTTPException(400, "no submissions to grade for this assignment")
 
-    settings = _load_settings()
-    model = req.model or str(settings["model_text"])
-    low_confidence = float(settings["review_first_threshold"])
-    high_confidence = float(settings["auto_approve_threshold"])
-    embedding_model = str(settings["model_embed"])
+    model = req.model or settings.model_text
+    low_confidence = settings.thresholds.review_first
+    high_confidence = settings.thresholds.auto_approve
+    embedding_model = settings.model_embed
 
     job_id = f"job_{secrets.token_hex(8)}"
     with _job_lock:
@@ -535,7 +561,8 @@ def approve_grade(grade_id: str) -> dict:
 
 
 @app.post("/api/grades/{grade_id}/override", dependencies=[Depends(_auth)])
-def override_grade(grade_id: str, req: OverrideRequest) -> dict:
+def override_grade(grade_id: str, req: OverrideRequest,
+                    settings: Settings = Depends(current_settings)) -> dict:
     db = _db()
     row = db.execute("SELECT * FROM grade_records WHERE id = ?", (grade_id,)).fetchone()
     if not row:
@@ -573,7 +600,7 @@ def override_grade(grade_id: str, req: OverrideRequest) -> dict:
         )
     max_total = rubric.total_points
 
-    exemplars = _exemplar_store.for_model(str(_load_settings()["model_embed"]))
+    exemplars = _exemplar_store.for_model(settings.model_embed)
     ov = _approvals.override(
         grade_id,
         override_store=_override_store,
@@ -601,8 +628,9 @@ def override_grade(grade_id: str, req: OverrideRequest) -> dict:
 
 
 @app.get("/api/calibration/{assignment_id}", dependencies=[Depends(_auth)])
-def calibration_health(assignment_id: str) -> dict:
-    exemplars = _exemplar_store.for_model(str(_load_settings()["model_embed"]))
+def calibration_health(assignment_id: str,
+                        settings: Settings = Depends(current_settings)) -> dict:
+    exemplars = _exemplar_store.for_model(settings.model_embed)
     health = compute_health(_override_store, exemplars, assignment_id)
     cold = cold_start_status(exemplars, assignment_id)
     return {
@@ -652,196 +680,31 @@ def install_model(req: InstallModelRequest) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Settings — Canvas token, data dir, model preferences
+# Settings routes — the store and the resolution seam are defined near the top,
+# because a handler's `Depends(current_settings)` is evaluated at def time.
 # ---------------------------------------------------------------------------
 
-SETTINGS_FILE = DATA_DIR / "settings.json"
-
-
-class SettingsState(BaseModel):
-    canvas_token: str = ""
-    canvas_url: str = ""
-    model_text: str = "grader-text:8b"
-    model_vision: str = "grader-vision:1.3b"
-    model_embed: str = "nomic-embed-text:latest"
-    data_dir: str = str(DATA_DIR)
-    auto_approve_threshold: float = Field(default=0.95, ge=0.5, le=1.0)
-    review_first_threshold: float = Field(default=0.70, ge=0.0, le=1.0)
-
-    @field_validator("canvas_url")
-    @classmethod
-    def validate_canvas_url(cls, value: str) -> str:
-        value = value.strip().rstrip("/")
-        if not value:
-            return value
-        parsed = urlsplit(value)
-        if parsed.scheme == "https":
-            return value
-        # A Canvas token over plaintext HTTP is a credential in the clear. Loopback is
-        # the one place that cannot be intercepted, and local Canvas dev instances
-        # legitimately run without TLS. Compare the parsed host, never a prefix —
-        # "localhost.attacker.example" starts with "localhost".
-        if parsed.scheme == "http" and (parsed.hostname or "").lower() in LOOPBACK_HOSTS:
-            return value
-        raise ValueError(
-            "Canvas URL must use https:// (plain http:// is allowed only for localhost)"
-        )
-
-    @field_validator("model_text")
-    @classmethod
-    def validate_text_model(cls, value: str) -> str:
-        if not value.startswith("grader-text:"):
-            raise ValueError("text model must use a capped grader-text tag")
-        return value
-
-    @field_validator("model_vision")
-    @classmethod
-    def validate_vision_model(cls, value: str) -> str:
-        if not value.startswith("grader-vision:"):
-            raise ValueError("vision model must use a capped grader-vision tag")
-        return value
-
-    @field_validator("model_embed")
-    @classmethod
-    def validate_embed_model(cls, value: str) -> str:
-        if not value.startswith("nomic-embed-text:"):
-            raise ValueError("embedding model must use a nomic-embed-text tag")
-        return value
-
-    @field_validator("data_dir")
-    @classmethod
-    def validate_data_dir(cls, value: str) -> str:
-        value = value.strip()
-        if not value:
-            raise ValueError("Canvas attachment directory cannot be blank")
-        return str(Path(value).expanduser())
-
-    @model_validator(mode="after")
-    def validate_threshold_order(self) -> SettingsState:
-        if self.review_first_threshold >= self.auto_approve_threshold:
-            raise ValueError("needs-review threshold must be lower than high-confidence threshold")
-        return self
-
-
-class SettingsUpdate(BaseModel):
-    canvas_token: str | None = None
-    canvas_url: str | None = None
-    model_text: str | None = None
-    model_vision: str | None = None
-    model_embed: str | None = None
-    data_dir: str | None = None
-    auto_approve_threshold: float | None = None
-    review_first_threshold: float | None = None
-
-
-DEFAULT_SETTINGS = SettingsState().model_dump()
-
-
-def _load_settings() -> dict:
-    """Load saved settings, discarding as little as possible.
-
-    Falling back silently is indistinguishable from "never configured", and discarding
-    the whole file over one bad field loses settings the teacher did set — which is how
-    a stricter validator turns into surprise data loss on upgrade. So: drop the fields
-    that fail, keep the rest, and say so.
-    """
-    if not SETTINGS_FILE.exists():
-        return DEFAULT_SETTINGS.copy()
-
-    try:
-        saved = json.loads(SETTINGS_FILE.read_text())
-    except Exception:
-        logger.warning(
-            "Ignoring unreadable settings file %s; falling back to defaults",
-            SETTINGS_FILE, exc_info=True,
-        )
-        return DEFAULT_SETTINGS.copy()
-
-    try:
-        return SettingsState.model_validate({**DEFAULT_SETTINGS, **saved}).model_dump()
-    except ValidationError as first_error:
-        # Cross-field errors (e.g. threshold ordering) carry no field location, so they
-        # cannot be attributed to one setting — those still fall back wholesale.
-        invalid = {str(e["loc"][0]) for e in first_error.errors() if e.get("loc")}
-        if invalid:
-            kept = {k: v for k, v in saved.items() if k not in invalid}
-            try:
-                settings = SettingsState.model_validate({**DEFAULT_SETTINGS, **kept}).model_dump()
-            except ValidationError:
-                pass
-            else:
-                logger.warning(
-                    "Ignoring invalid settings (%s) in %s; keeping the rest",
-                    ", ".join(sorted(invalid)), SETTINGS_FILE,
-                )
-                return settings
-        logger.warning(
-            "Ignoring unusable settings file %s; falling back to defaults",
-            SETTINGS_FILE, exc_info=True,
-        )
-        return DEFAULT_SETTINGS.copy()
-
-
-def _save_settings(s: dict) -> None:
-    validated = SettingsState.model_validate(s).model_dump()
-    SETTINGS_FILE.parent.mkdir(parents=True, exist_ok=True)
-    temporary = SETTINGS_FILE.with_suffix(".json.tmp")
-    temporary.write_text(json.dumps(validated, indent=2))
-    os.chmod(temporary, 0o600)
-    temporary.replace(SETTINGS_FILE)
-
-
-def _settings_response(settings: dict) -> dict:
-    response = {key: value for key, value in settings.items() if key != "canvas_token"}
-    token = str(settings.get("canvas_token") or "")
-    if token:
-        response["canvas_token_masked"] = (
-            "••••••••" if len(token) <= 8 else token[:4] + "..." + token[-4:]
-        )
-    return response
-
-
-def _canvas_connection(settings: dict | None = None) -> dict[str, str | None]:
-    current = settings or _load_settings()
-    return {
-        "base_url": str(current.get("canvas_url") or "") or None,
-        "token": str(current.get("canvas_token") or "") or None,
-    }
-
-
-def _canvas_attachment_root(settings: dict | None = None) -> Path:
-    current = settings or _load_settings()
-    root = Path(str(current.get("data_dir") or DATA_DIR)).expanduser()
-    root.mkdir(parents=True, exist_ok=True)
-    return root
-
-
 @app.get("/api/settings", dependencies=[Depends(_auth)])
-def get_settings() -> dict:
-    return _settings_response(_load_settings())
+def get_settings(settings: Settings = Depends(current_settings)) -> dict:
+    return settings.masked()
 
 
 @app.put("/api/settings", dependencies=[Depends(_auth)])
-def update_settings(req: SettingsUpdate) -> dict:
-    current = _load_settings()
-    updates = req.model_dump(exclude_unset=True)
-    for key, value in updates.items():
-        if value is None or (key == "canvas_token" and value == ""):
-            continue
-        current[key] = value
+def update_settings(req: SettingsPatch) -> dict:
+    """Apply a patch. Rejecting it is a 400 — the teacher typed something invalid.
 
-    validated = SettingsState.model_validate(current).model_dump()
-    attachment_root = Path(str(validated["data_dir"])).expanduser()
+    The route does not read, merge or validate: `SettingsStore.update` owns that,
+    so a partial write cannot happen here. All this layer decides is which HTTP
+    status a rejection deserves.
+    """
     try:
-        attachment_root.mkdir(parents=True, exist_ok=True)
-    except OSError as exc:
-        raise HTTPException(400, f"Canvas attachment directory is not writable: {exc}") from exc
-    if not attachment_root.is_dir():
-        raise HTTPException(400, "Canvas attachment directory is not a directory")
+        settings = _settings_store().update(req)
+    except ValueError as exc:  # includes pydantic's ValidationError
+        raise HTTPException(400, str(exc)) from exc
 
-    _save_settings(validated)
-    _audit("settings", "user", "update", {"keys": sorted(updates)})
-    return {"success": True, "settings": _settings_response(validated)}
+    _audit("settings", "user", "update",
+           {"keys": sorted(req.model_dump(exclude_unset=True))})
+    return {"success": True, "settings": settings.masked()}
 
 
 @app.get("/api/audit", dependencies=[Depends(_auth)])
@@ -896,7 +759,8 @@ class CanvasPostReq(BaseModel):
 
 
 @app.post("/api/canvas/import", dependencies=[Depends(_auth)])
-def canvas_import(req: CanvasImportReq) -> dict:
+def canvas_import(req: CanvasImportReq,
+                   settings: Settings = Depends(current_settings)) -> dict:
     """Import submissions from Canvas into the local queue.
 
     Downloads attachments, parses with Docling, enqueues as submissions.
@@ -905,10 +769,9 @@ def canvas_import(req: CanvasImportReq) -> dict:
     from grader.canvas import list_ungraded, download_submission_attachments
     from grader.parse import parse
 
-    settings = _load_settings()
-    canvas_connection = _canvas_connection(settings)
+    canvas_connection = settings.canvas.as_kwargs()
     dest_dir = (
-        _canvas_attachment_root(settings)
+        settings.attachment_root()
         / "attachments"
         / f"course_{req.course_id}"
         / f"assign_{req.assignment_id}"
@@ -949,7 +812,7 @@ def canvas_import(req: CanvasImportReq) -> dict:
                     continue
                 p = download.path
                 try:
-                    parsed = parse(p, vision_model=str(settings["model_vision"]))
+                    parsed = parse(p, vision_model=settings.model_vision)
                     if parsed.markdown.strip():
                         texts.append(parsed.markdown)
                 except Exception as e:
@@ -977,7 +840,7 @@ def canvas_import(req: CanvasImportReq) -> dict:
 
 
 @app.post("/api/canvas/post", dependencies=[Depends(_auth)])
-def canvas_post(req: CanvasPostReq) -> dict:
+def canvas_post(req: CanvasPostReq, settings: Settings = Depends(current_settings)) -> dict:
     """Post approved grades back to Canvas.
 
     This route cannot read approved_at — it asks _approvals.postable(), which is
@@ -1001,7 +864,7 @@ def canvas_post(req: CanvasPostReq) -> dict:
             req.course_id,
             req.assignment_id,
             grade_data,
-            **_canvas_connection(),
+            **settings.canvas.as_kwargs(),
         )
     except Exception as e:
         _audit(f"canvas_{req.course_id}_{req.assignment_id}", "canvas", "post_failed",
@@ -1035,9 +898,9 @@ def canvas_post_queue_status() -> dict:
 
 
 @app.post("/api/canvas/flush", dependencies=[Depends(_auth)])
-def canvas_flush_queue() -> dict:
+def canvas_flush_queue(settings: Settings = Depends(current_settings)) -> dict:
     """Flush the offline post queue — attempt to post all pending grades."""
-    result = _post_queue.flush(**_canvas_connection())
+    result = _post_queue.flush(**settings.canvas.as_kwargs())
     _audit("canvas_queue", "engine", "flush", result)
     return result
 
@@ -1051,14 +914,14 @@ class ParseReq(BaseModel):
 
 
 @app.post("/api/parse", dependencies=[Depends(_auth)])
-def parse_document(req: ParseReq) -> dict:
+def parse_document(req: ParseReq, settings: Settings = Depends(current_settings)) -> dict:
     """Parse a document file to markdown. Returns ParsedDoc fields."""
     from grader.parse import parse
     p = Path(req.file_path)
     if not p.exists():
         raise HTTPException(404, f"file not found: {req.file_path}")
     try:
-        result = parse(p, vision_model=str(_load_settings()["model_vision"]))
+        result = parse(p, vision_model=settings.model_vision)
         return json.loads(result.model_dump_json())
     except Exception as e:
         raise HTTPException(500, f"parse error: {str(e)[:200]}")
@@ -1073,13 +936,13 @@ class TranscribeReq(BaseModel):
 
 
 @app.post("/api/transcribe", dependencies=[Depends(_auth)])
-def transcribe_images(req: TranscribeReq) -> dict:
+def transcribe_images(req: TranscribeReq, settings: Settings = Depends(current_settings)) -> dict:
     """Transcribe handwritten images to text. Returns combined text + confidence + review flags."""
     from grader.handwriting import transcribe_pages
     paths = [Path(p) for p in req.file_paths if Path(p).exists()]
     if not paths:
         raise HTTPException(404, "no valid image paths")
-    result = transcribe_pages(paths, model=str(_load_settings()["model_vision"]))
+    result = transcribe_pages(paths, model=settings.model_vision)
     _audit("transcription", "engine", "transcribe", {
         "pages": len(paths),
         "avg_confidence": result["avg_confidence"],

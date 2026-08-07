@@ -7,9 +7,18 @@ from pathlib import Path
 
 import pytest
 from fastapi import HTTPException
-from pydantic import ValidationError
 
 sys.path.insert(0, str(Path(__file__).parents[1]))
+
+from grader.settings import SettingsPatch  # noqa: E402  (needs the path insert above)
+
+
+def _save_settings(api, **values):
+    """Seed the settings file the way the settings route does.
+
+    Unnamed fields keep their defaults, so a test states only what it depends on.
+    """
+    return api._settings_store().update(SettingsPatch(**values))
 
 
 @pytest.fixture
@@ -30,12 +39,12 @@ def test_canvas_post_uses_canvas_user_id_from_imported_submission(tmp_path, monk
     api = api_module
     monkeypatch.setattr(api, "DB_PATH", tmp_path / "grader_engine.db")
     monkeypatch.setattr(api, "SETTINGS_FILE", tmp_path / "settings.json")
-    api._save_settings({
-        **api.DEFAULT_SETTINGS,
-        "canvas_url": "https://canvas.example.test",
-        "canvas_token": "saved-test-token",
-        "data_dir": str(tmp_path / "canvas"),
-    })
+    _save_settings(
+        api,
+        canvas_url="https://canvas.example.test",
+        canvas_token="saved-test-token",
+        data_dir=str(tmp_path / "canvas"),
+    )
 
     captured = {}
 
@@ -74,7 +83,10 @@ def test_canvas_post_uses_canvas_user_id_from_imported_submission(tmp_path, monk
     db.commit()
     db.close()
 
-    result = api.canvas_post(api.CanvasPostReq(course_id=10, assignment_id=20, grade_ids=["grade_local"]))
+    result = api.canvas_post(
+        api.CanvasPostReq(course_id=10, assignment_id=20, grade_ids=["grade_local"]),
+        settings=api.current_settings(),
+    )
 
     assert result["posted"] == 1
     assert captured["course_id"] == 10
@@ -125,7 +137,10 @@ def test_canvas_post_skips_grade_without_canvas_user_id(tmp_path, monkeypatch, a
     db.close()
 
     with pytest.raises(Exception) as exc_info:
-        api.canvas_post(api.CanvasPostReq(course_id=10, assignment_id=20, grade_ids=["grade_local"]))
+        api.canvas_post(
+            api.CanvasPostReq(course_id=10, assignment_id=20, grade_ids=["grade_local"]),
+            settings=api.current_settings(),
+        )
     assert "no approved grades to post" in str(exc_info.value)
 
 
@@ -141,7 +156,8 @@ def test_canvas_import_returns_local_submission_ids(tmp_path, monkeypatch, api_m
     )
 
     result = api.canvas_import(
-        api.CanvasImportReq(course_id=10, assignment_id=20, download_attachments=True)
+        api.CanvasImportReq(course_id=10, assignment_id=20, download_attachments=True),
+        settings=api.current_settings(),
     )
 
     assert result["imported"] == 1
@@ -178,7 +194,8 @@ def test_grade_batch_can_limit_to_requested_submission_ids(tmp_path, monkeypatch
     db.close()
 
     result = api.grade_batch(
-        api.GradeBatch(assignment_id="canvas_10_20", submission_ids=["sub_keep"])
+        api.GradeBatch(assignment_id="canvas_10_20", submission_ids=["sub_keep"]),
+        settings=api.current_settings(),
     )
 
     assert result["total"] == 1
@@ -193,17 +210,17 @@ def test_saved_settings_drive_canvas_grade_batch_and_attachment_directory(
     monkeypatch.setattr(api, "DB_PATH", tmp_path / "grader_engine.db")
     monkeypatch.setattr(api, "SETTINGS_FILE", tmp_path / "settings.json")
     attachment_root = tmp_path / "canvas-downloads"
-    api._save_settings({
-        **api.DEFAULT_SETTINGS,
-        "canvas_url": "https://canvas.example.test",
-        "canvas_token": "saved-test-token",
-        "data_dir": str(attachment_root),
-        "model_text": "grader-text:test",
-        "model_vision": "grader-vision:test",
-        "model_embed": "nomic-embed-text:test",
-        "review_first_threshold": 0.6,
-        "auto_approve_threshold": 0.9,
-    })
+    _save_settings(
+        api,
+        canvas_url="https://canvas.example.test",
+        canvas_token="saved-test-token",
+        data_dir=str(attachment_root),
+        model_text="grader-text:test",
+        model_vision="grader-vision:test",
+        model_embed="nomic-embed-text:test",
+        review_first_threshold=0.6,
+        auto_approve_threshold=0.9,
+    )
 
     canvas_calls = {}
 
@@ -222,7 +239,9 @@ def test_saved_settings_drive_canvas_grade_batch_and_attachment_directory(
     monkeypatch.setattr("grader.canvas.list_ungraded", fake_list)
     monkeypatch.setattr("grader.canvas.download_submission_attachments", fake_download)
 
-    imported = api.canvas_import(api.CanvasImportReq(course_id=10, assignment_id=20))
+    imported = api.canvas_import(
+        api.CanvasImportReq(course_id=10, assignment_id=20), settings=api.current_settings()
+    )
 
     assert imported["imported"] == 1
     assert canvas_calls["list"] == {
@@ -246,7 +265,9 @@ def test_saved_settings_drive_canvas_grade_batch_and_attachment_directory(
             captured["started"] = True
 
     monkeypatch.setattr(api.threading, "Thread", FakeThread)
-    result = api.grade_batch(api.GradeBatch(assignment_id="canvas_10_20"))
+    result = api.grade_batch(
+        api.GradeBatch(assignment_id="canvas_10_20"), settings=api.current_settings()
+    )
 
     assert result["total"] == 1
     assert captured["args"][4] == "grader-text:test"
@@ -260,11 +281,11 @@ def test_saved_vision_model_drives_transcription(tmp_path, monkeypatch, api_modu
     api = api_module
     monkeypatch.setattr(api, "DB_PATH", tmp_path / "grader_engine.db")
     monkeypatch.setattr(api, "SETTINGS_FILE", tmp_path / "settings.json")
-    api._save_settings({
-        **api.DEFAULT_SETTINGS,
-        "model_vision": "grader-vision:test",
-        "data_dir": str(tmp_path / "canvas"),
-    })
+    _save_settings(
+        api,
+        model_vision="grader-vision:test",
+        data_dir=str(tmp_path / "canvas"),
+    )
     image_path = tmp_path / "page.png"
     image_path.write_bytes(b"synthetic image fixture")
     captured = {}
@@ -282,7 +303,9 @@ def test_saved_vision_model_drives_transcription(tmp_path, monkeypatch, api_modu
 
     monkeypatch.setattr("grader.handwriting.transcribe_pages", fake_transcribe)
 
-    result = api.transcribe_images(api.TranscribeReq(file_paths=[str(image_path)]))
+    result = api.transcribe_images(
+        api.TranscribeReq(file_paths=[str(image_path)]), settings=api.current_settings()
+    )
 
     assert result["text"] == "synthetic transcription"
     assert captured["model"] == "grader-vision:test"
@@ -294,7 +317,7 @@ def test_settings_are_validated_masked_and_written_owner_only(tmp_path, monkeypa
     monkeypatch.setattr(api, "DB_PATH", tmp_path / "grader_engine.db")
     monkeypatch.setattr(api, "SETTINGS_FILE", tmp_path / "settings.json")
 
-    result = api.update_settings(api.SettingsUpdate(
+    result = api.update_settings(SettingsPatch(
         canvas_url="https://canvas.example.test/",
         canvas_token="1234567890abcdef",
         data_dir=str(tmp_path / "attachments"),
@@ -305,17 +328,19 @@ def test_settings_are_validated_masked_and_written_owner_only(tmp_path, monkeypa
     assert result["settings"]["canvas_url"] == "https://canvas.example.test"
     assert result["settings"]["canvas_token_masked"] == "1234...cdef"
     assert "canvas_token" not in result["settings"]
-    assert api.get_settings()["canvas_token_masked"] == "1234...cdef"
+    assert api.get_settings(api.current_settings())["canvas_token_masked"] == "1234...cdef"
     assert api.SETTINGS_FILE.stat().st_mode & 0o777 == 0o600
 
-    with pytest.raises(Exception, match="needs-review threshold"):
-        api.SettingsState(
-            **{
-                **api.DEFAULT_SETTINGS,
-                "review_first_threshold": 0.95,
-                "auto_approve_threshold": 0.9,
-            }
-        )
+    # A rejected patch is the teacher's input being wrong, not the engine failing.
+    with pytest.raises(HTTPException) as excinfo:
+        api.update_settings(SettingsPatch(
+            review_first_threshold=0.95, auto_approve_threshold=0.9,
+        ))
+    assert excinfo.value.status_code == 400
+    assert "needs-review threshold" in str(excinfo.value.detail)
+
+    # ...and it leaves the saved settings exactly as they were.
+    assert api.current_settings().review_first_threshold == 0.65
 
     with pytest.raises(Exception, match="capped grader-text"):
         api.GradeBatch(assignment_id="essay", model="qwen3:8b")
@@ -397,7 +422,8 @@ def test_canvas_import_reports_failure_when_download_fails(tmp_path, monkeypatch
     )
 
     result = api.canvas_import(
-        api.CanvasImportReq(course_id=10, assignment_id=20, download_attachments=True)
+        api.CanvasImportReq(course_id=10, assignment_id=20, download_attachments=True),
+        settings=api.current_settings(),
     )
 
     assert result["failures"], "failed download should be reported"
@@ -413,7 +439,7 @@ def test_override_grade_does_not_mutate_the_shared_exemplar_store(tmp_path, monk
     api = api_module
     monkeypatch.setattr(api, "DB_PATH", tmp_path / "grader_engine.db")
     monkeypatch.setattr(api, "SETTINGS_FILE", tmp_path / "settings.json")
-    api._save_settings({**api.DEFAULT_SETTINGS, "model_embed": "nomic-embed-text:v1.5"})
+    _save_settings(api, model_embed="nomic-embed-text:v1.5")
     api._exemplar_store.embedding_model = "nomic-embed-text:latest"
 
     recorded = {}
@@ -446,96 +472,12 @@ def test_override_grade_does_not_mutate_the_shared_exemplar_store(tmp_path, monk
     with pytest.raises(RuntimeError):
         api.override_grade("gr_ov", api.OverrideRequest(
             teacher_scores={"c1": 4.0}, teacher_feedback="raised",
-        ))
+        ), settings=api.current_settings())
 
     # The handler must pass a view bound to the saved model...
     assert recorded["view_model"] == "nomic-embed-text:v1.5"
     # ...without touching the shared singleton other threads are using.
     assert api._exemplar_store.embedding_model == "nomic-embed-text:latest"
-
-
-def test_canvas_url_accepts_https(api_module):
-    api = api_module
-    settings = api.SettingsState(canvas_url="https://canvas.example.edu/")
-    assert settings.canvas_url == "https://canvas.example.edu"
-
-
-def test_canvas_url_rejects_plaintext_http_for_remote_hosts(api_module):
-    """A Canvas token over plaintext HTTP is a credential in the clear."""
-    api = api_module
-    with pytest.raises(ValidationError) as exc:
-        api.SettingsState(canvas_url="http://canvas.example.edu")
-    assert "https" in str(exc.value).lower()
-
-
-def test_canvas_url_allows_plaintext_http_on_loopback(api_module):
-    """Local Canvas dev instances legitimately run without TLS."""
-    api = api_module
-    for url in ("http://localhost:3000", "http://127.0.0.1:8900"):
-        assert api.SettingsState(canvas_url=url).canvas_url == url
-
-
-def test_canvas_url_rejects_hostnames_that_merely_start_with_localhost(api_module):
-    """The loopback exemption must match the parsed host, not a string prefix."""
-    api = api_module
-    with pytest.raises(ValidationError) as exc:
-        api.SettingsState(canvas_url="http://localhost.attacker.example")
-    assert "https" in str(exc.value).lower()
-
-
-def test_invalid_settings_file_is_logged_before_falling_back(tmp_path, monkeypatch, api_module, caplog):
-    """A silent reset to defaults looks identical to 'settings were never saved'."""
-    api = api_module
-    monkeypatch.setattr(api, "SETTINGS_FILE", tmp_path / "settings.json")
-    (tmp_path / "settings.json").write_text("{not valid json")
-
-    with caplog.at_level("WARNING"):
-        result = api._load_settings()
-
-    assert result == api.DEFAULT_SETTINGS
-    assert any("settings" in r.message.lower() for r in caplog.records)
-
-
-def test_one_invalid_setting_does_not_discard_the_others(tmp_path, monkeypatch, api_module, caplog):
-    """Resetting every setting because one field is bad is silent data loss.
-
-    A teacher upgrading into stricter Canvas URL validation should lose the URL, not
-    their thresholds and data directory too.
-    """
-    api = api_module
-    settings_file = tmp_path / "settings.json"
-    monkeypatch.setattr(api, "SETTINGS_FILE", settings_file)
-    settings_file.write_text(json.dumps({
-        "canvas_url": "http://canvas.example.edu",   # newly invalid: remote + plaintext
-        "auto_approve_threshold": 0.88,
-        "review_first_threshold": 0.42,
-        "model_text": "grader-text:8b",
-    }))
-
-    with caplog.at_level("WARNING"):
-        result = api._load_settings()
-
-    assert result["canvas_url"] == ""              # dropped back to default
-    assert result["auto_approve_threshold"] == 0.88  # preserved
-    assert result["review_first_threshold"] == 0.42  # preserved
-    assert any("canvas_url" in r.message for r in caplog.records)
-
-
-def test_unattributable_validation_error_falls_back_to_defaults(tmp_path, monkeypatch, api_module, caplog):
-    """Cross-field errors name no single field, so the whole file is untrustworthy."""
-    api = api_module
-    settings_file = tmp_path / "settings.json"
-    monkeypatch.setattr(api, "SETTINGS_FILE", settings_file)
-    settings_file.write_text(json.dumps({
-        "auto_approve_threshold": 0.60,
-        "review_first_threshold": 0.90,  # must be lower than auto-approve
-    }))
-
-    with caplog.at_level("WARNING"):
-        result = api._load_settings()
-
-    assert result == api.DEFAULT_SETTINGS
-    assert caplog.records
 
 
 # ---------------------------------------------------------------------------
@@ -566,7 +508,9 @@ def test_grade_batch_refuses_to_pick_between_rubrics(tmp_path, monkeypatch, api_
     _seed_submission(api)
 
     with pytest.raises(HTTPException) as excinfo:
-        api.grade_batch(api.GradeBatch(assignment_id="canvas_10_20"))
+        api.grade_batch(
+            api.GradeBatch(assignment_id="canvas_10_20"), settings=api.current_settings()
+        )
 
     assert excinfo.value.status_code == 400
     assert "Essay 1" in excinfo.value.detail and "Essay 2" in excinfo.value.detail
@@ -593,7 +537,8 @@ def test_grade_batch_grades_against_the_named_rubric(tmp_path, monkeypatch, api_
     _seed_submission(api)
 
     result = api.grade_batch(
-        api.GradeBatch(assignment_id="canvas_10_20", rubric_title="Essay 2")
+        api.GradeBatch(assignment_id="canvas_10_20", rubric_title="Essay 2"),
+        settings=api.current_settings(),
     )
 
     assert result["total"] == 1
@@ -642,7 +587,7 @@ def test_override_scales_against_the_rubric_the_grade_was_produced_against(
     with pytest.raises(RuntimeError):
         api.override_grade("gr_ov", api.OverrideRequest(
             teacher_scores={"c1": 4.0}, teacher_feedback="raised",
-        ))
+        ), settings=api.current_settings())
 
     # "Essay 2", not the alphabetically-first "Essay 1".
     assert recorded["max_total"] == 100.0
@@ -829,12 +774,16 @@ def test_canvas_post_will_not_post_the_same_grade_twice(tmp_path, monkeypatch, a
     db.close()
 
     first = api.canvas_post(
-        api.CanvasPostReq(course_id=10, assignment_id=20, grade_ids=["gr_p"])
+        api.CanvasPostReq(course_id=10, assignment_id=20, grade_ids=["gr_p"]),
+        settings=api.current_settings(),
     )
     assert first["posted"] == 1
 
     with pytest.raises(HTTPException) as excinfo:
-        api.canvas_post(api.CanvasPostReq(course_id=10, assignment_id=20, grade_ids=["gr_p"]))
+        api.canvas_post(
+            api.CanvasPostReq(course_id=10, assignment_id=20, grade_ids=["gr_p"]),
+            settings=api.current_settings(),
+        )
 
     assert "already posted" in str(excinfo.value.detail)
     assert len(calls) == 1  # Canvas heard about this grade exactly once
