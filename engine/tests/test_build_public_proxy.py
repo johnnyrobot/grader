@@ -240,3 +240,25 @@ def test_call_with_timeout_raises_for_slow_call():
         assert "slow unit exceeded 1s" in str(error)
     else:  # pragma: no cover
         raise AssertionError("expected timeout")
+
+
+def test_grading_children_are_never_forked_on_macos():
+    """CoreFoundation is not fork-safe, and the grading child resolves proxies.
+
+    A forked child dies in _os_log_preferences_refresh with SIGSEGV, but only
+    once the parent has touched CoreFoundation — which a fresh run does not and
+    a resumed run does. The failure therefore hid in exactly the runs that
+    regenerate existing release evidence, and the builder still exited 0 with
+    every regraded item unscored.
+    """
+    import sys as _sys
+    from unittest.mock import patch
+
+    from scripts.build_public_proxy import _start_method
+
+    with patch.object(_sys, "platform", "darwin"):
+        assert _start_method() == "spawn"
+    with patch.object(_sys, "platform", "win32"):
+        assert _start_method() == "spawn"
+    with patch.object(_sys, "platform", "linux"):
+        assert _start_method() == "fork"

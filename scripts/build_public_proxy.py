@@ -349,6 +349,27 @@ class GradeTimeoutError(TimeoutError):
     pass
 
 
+def _start_method() -> str:
+    """How to start the grading child process.
+
+    Never ``fork`` on macOS. The child grades over HTTP, and Python resolves
+    proxies for that call through ``SCDynamicStoreCopyProxiesWithOptions``,
+    which reads CFPreferences — and CoreFoundation is not fork-safe. Once the
+    parent has touched it, the forked child dies in
+    ``_os_log_preferences_refresh`` with SIGSEGV.
+
+    It failed exactly where it mattered least visibly: a fresh run forks before
+    the parent has initialised CoreFoundation and survives, so this only bit
+    runs that resumed an existing evidence directory — where the parent reads
+    the previous examples first. Every regraded item came back unscored, the
+    builder recorded `grade_error` per item, and the process still exited 0.
+
+    ``spawn`` costs an interpreter start per grade and is correct on every
+    platform this runs on. `fork` stays for Linux, where it is safe and cheap.
+    """
+    return "fork" if sys.platform.startswith("linux") else "spawn"
+
+
 def _grade_text_worker(
     result_queue: mp.Queue,
     example: dict[str, Any],
@@ -380,8 +401,7 @@ def _grade_text_with_timeout(
     if seconds <= 0:
         return _grade_text(example, text, model, anchors=anchors)
 
-    context_name = "fork" if sys.platform != "win32" else "spawn"
-    context = mp.get_context(context_name)
+    context = mp.get_context(_start_method())
     result_queue = context.Queue(maxsize=1)
     process = context.Process(
         target=_grade_text_worker,
