@@ -121,6 +121,9 @@ class ExemplarStore:
         self.embedding_model = embedding_model
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.db = sqlite3.connect(self.path)
+        # Read by the request threadpool while the grading thread writes. WAL is
+        # written into the file header, so a replacement connection inherits it.
+        self.db.execute("PRAGMA journal_mode=WAL")
         self.db.row_factory = sqlite3.Row
         self.db.executescript(SCHEMA)
         self._migrate_embedding_model()
