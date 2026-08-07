@@ -9,7 +9,6 @@ For handwriting, see handwriting.py — this module handles typed/printed docume
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -113,13 +112,48 @@ def _parse_image(path: Path, *, vision_model: str | None = None) -> ParsedDoc:
     )
 
 
+# Above this share of replacement characters and control bytes, a decode did not
+# recover text — it transliterated binary. Ten percent is far above what a real
+# document produces (a stray NUL in a .doc) and far below a PDF's own bytes.
+_UNREADABLE_RATIO = 0.10
+
+
+def _looks_like_text(text: str) -> bool:
+    """Did decoding these bytes recover prose, or just spell out the binary?"""
+    if not text:
+        return False
+    unreadable = sum(
+        1 for ch in text if ch == "�" or (ord(ch) < 32 and ch not in "\t\n\r")
+    )
+    return unreadable / len(text) < _UNREADABLE_RATIO
+
+
 def _parse_fallback(path: Path) -> ParsedDoc:
-    """Last-resort: read bytes as text."""
+    """Last-resort: read bytes as text, but only if they are text.
+
+    The fallback exists for files that really are prose under an extension
+    Docling declines. A PDF Docling rejected is not that. Decoding its bytes
+    yields `%PDF-1.4` and a run of replacement characters, and returning that as
+    `markdown` put binary noise into the grading pipeline as the student's
+    essay — every caller reads `markdown` and none reads `confidence`, so the
+    model graded the noise and the teacher was told nothing.
+
+    Empty markdown is the honest answer: the caller can see there is no text.
+    """
     try:
-        raw = path.read_bytes()
-        text = raw.decode("utf-8", errors="replace")
+        text = path.read_bytes().decode("utf-8", errors="replace")
     except Exception:
-        text = f"[Unable to parse {path.name}]"
+        text = ""
+
+    if not _looks_like_text(text):
+        return ParsedDoc(
+            markdown="",
+            source_path=str(path),
+            source_type=path.suffix.lower().lstrip(".") or "unknown",
+            confidence=0.0,
+            low_confidence_regions=[f"{path.name} could not be read as text"],
+        )
+
     return ParsedDoc(
         markdown=text,
         source_path=str(path),

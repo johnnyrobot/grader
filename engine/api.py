@@ -831,6 +831,14 @@ def canvas_import(req: CanvasImportReq,
                     parsed = parse(p, vision_model=settings.model_vision)
                     if parsed.markdown.strip():
                         texts.append(parsed.markdown)
+                    else:
+                        # A file that produced no text is a file the teacher has
+                        # to look at themselves. Importing it silently leaves a
+                        # student holding a grade derived from nothing.
+                        failures.append({
+                            "user_id": user_id,
+                            "error": f"no readable text extracted from {p.name}",
+                        })
                 except Exception as e:
                     failures.append({"user_id": user_id, "error": f"parse failed: {str(e)[:100]}"})
 
