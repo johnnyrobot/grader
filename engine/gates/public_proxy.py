@@ -12,7 +12,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from grader.metrics import agreement, human_ceiling, quadratic_weighted_kappa
+from gates.result import CheckResult
+from grader.metrics import agreement, human_ceiling
 
 QWK_FLOOR = 0.70
 SOURCE_QWK_FLOOR = 0.60
@@ -24,38 +25,12 @@ REGRESSION_MAX = 0.03
 NON_RELEASE_SCOPES = {"mechanics_fixture", "synthetic_fixture", "tiny_fixture"}
 
 
-@dataclass
-class GateResult:
-    status: str
-    summary: str
-    details: dict[str, Any] = field(default_factory=dict)
-
-    def exit_code(self) -> int:
-        return 0 if self.status != "FAIL" else 1
-
-    def print(self) -> None:
-        icon = {"PASS": "✓", "FAIL": "✗", "SKIP": "⊘"}[self.status]
-        print(f"\n{icon} PUBLIC PROXY QUALITY GATE: {self.status}")
-        print(f"  {self.summary}")
-        for key, value in self.details.items():
-            print(f"  {key}: {value}")
+class GateResult(CheckResult):
+    label = "PUBLIC PROXY QUALITY GATE"
 
 
-@dataclass
-class FairnessResult:
-    status: str
-    summary: str
-    details: dict[str, Any] = field(default_factory=dict)
-
-    def exit_code(self) -> int:
-        return 0 if self.status != "FAIL" else 1
-
-    def print(self) -> None:
-        icon = {"PASS": "✓", "FAIL": "✗", "SKIP": "⊘"}[self.status]
-        print(f"\n{icon} PUBLIC PROXY FAIRNESS GATE: {self.status}")
-        print(f"  {self.summary}")
-        for key, value in self.details.items():
-            print(f"  {key}: {value}")
+class FairnessResult(CheckResult):
+    label = "PUBLIC PROXY FAIRNESS GATE"
 
 
 @dataclass(frozen=True)

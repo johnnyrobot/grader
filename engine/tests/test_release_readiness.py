@@ -12,7 +12,6 @@ from scripts.release_readiness import (
     _normalize_clean_machine_artifact,
     _normalize_updater_artifact,
     _normalize_updater_channel_artifact,
-    _normalize_updater_key_artifact,
     _signing_preflight,
     build_e2e_matrix,
     build_next_actions,
@@ -366,10 +365,11 @@ def test_normalize_updater_channel_accepts_older_installed_baseline(tmp_path):
     assert channel["status"] == "PASS"
 
 
-def test_normalize_updater_key_artifact_missing_is_non_blocking_skip(tmp_path):
+def test_a_missing_updater_key_artifact_is_a_non_blocking_skip(tmp_path):
+    """The updater key is optional evidence, so its absence must not block."""
     artifact = tmp_path / "missing-updater-key.json"
 
-    updater_key = _normalize_updater_key_artifact(artifact)
+    updater_key = _normalize_artifact(artifact, "SKIP")
 
     assert updater_key["status"] == "SKIP"
     assert updater_key["artifact"] == {"path": str(artifact), "exists": False}

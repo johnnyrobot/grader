@@ -4,9 +4,7 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
-import os
 import platform
 import re
 import subprocess
@@ -18,7 +16,10 @@ from typing import Any
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
+if str(PROJECT_ROOT / "engine") not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT / "engine"))
 
+from gates.result import CheckResult
 from scripts.signing_doctor import collect_signing_diagnostics
 
 
@@ -556,40 +557,20 @@ def _run_jsonish(command: list[str]) -> dict[str, Any]:
     return {"status": status, "command": command, "returncode": proc.returncode, "output": output}
 
 
-def _load_json(path: Path | None) -> dict[str, Any] | None:
-    if path is None or not path.exists():
-        return None
-    return json.loads(path.read_text())
-
-
-def _artifact_ref(path: Path | None) -> dict[str, Any]:
-    if path is None:
-        return {"path": None, "exists": False}
-    ref: dict[str, Any] = {"path": str(path), "exists": path.exists()}
-    if not path.exists():
-        return ref
-    stat = path.stat()
-    ref.update({
-        "size_bytes": stat.st_size,
-        "mtime": datetime.fromtimestamp(stat.st_mtime, timezone.utc).isoformat(),
-        "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
-    })
-    return ref
-
-
 def _normalize_artifact(path: Path | None, default_status: str) -> dict[str, Any]:
-    artifact = _artifact_ref(path)
-    data = _load_json(path)
-    if data is None:
-        return {"status": default_status, "artifact": artifact}
-    data = dict(data)
-    data["artifact"] = artifact
-    if "status" not in data:
-        if data.get("release_status"):
-            data["status"] = data["release_status"]
-        elif data.get("citation_mode", {}).get("release_status"):
-            data["status"] = data["citation_mode"]["release_status"]
-    return data
+    """One check's evidence, as the flat dict the rest of this report expects.
+
+    Reading an artifact — where the status hides, what to do when the file is
+    absent or corrupt, what provenance to record — is gates.result's job now, so
+    every check here reads its evidence by the same rules. `default_status` says
+    what an absent artifact means for this particular check: SKIP where it is
+    optional, a BLOCKED_* reason where its absence is itself the finding.
+    """
+    result = CheckResult.load(path, missing=default_status)
+    # The artifact's own keys, plus a status and provenance — and nothing else.
+    # Consumers downstream read `summary` as a structured block of the check's
+    # own making, so a key the artifact never had cannot be invented here.
+    return {"status": result.status, **result.details}
 
 
 def _app_version_from_config(config_path: Path | None = None) -> str:
@@ -670,14 +651,6 @@ def _normalize_updater_artifact(path: Path | None, expected_version: str) -> dic
             ("details.manifest_version", details.get("manifest_version")),
         ],
     )
-
-
-def _normalize_updater_key_artifact(path: Path | None) -> dict[str, Any]:
-    return _normalize_artifact(path, "SKIP")
-
-
-def _normalize_github_release_artifact(path: Path | None) -> dict[str, Any]:
-    return _normalize_artifact(path, "BLOCKED_GITHUB_RELEASE_PREFLIGHT")
 
 
 def _normalize_updater_channel_artifact(path: Path | None, expected_version: str) -> dict[str, Any]:
@@ -820,8 +793,9 @@ def collect_evidence(args: argparse.Namespace) -> dict[str, Any]:
     evidence["frontend"] = _normalize_artifact(args.frontend_artifact, "SKIP")
     evidence["rust"] = _normalize_artifact(args.rust_artifact, "SKIP")
     evidence["release_version"] = _normalize_artifact(args.release_version_artifact, "BLOCKED_RELEASE_VERSION")
-    evidence["github_release"] = _normalize_github_release_artifact(args.github_release_artifact)
-    evidence["updater_key"] = _normalize_updater_key_artifact(args.updater_key_artifact)
+    evidence["github_release"] = _normalize_artifact(
+        args.github_release_artifact, "BLOCKED_GITHUB_RELEASE_PREFLIGHT")
+    evidence["updater_key"] = _normalize_artifact(args.updater_key_artifact, "SKIP")
     evidence["updater"] = _augment_updater_with_key_diagnostic(
         _normalize_updater_artifact(args.updater_artifact, expected_version),
         evidence["updater_key"],

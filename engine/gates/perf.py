@@ -24,10 +24,11 @@ from __future__ import annotations
 import argparse
 import sys
 import time
-from dataclasses import dataclass, field
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from gates.result import CheckResult
 
 ESSAY_MAX_SECONDS = 90
 BATCH_MAX_SECONDS = 2700  # 45 min
@@ -35,21 +36,8 @@ BATCH_SIZE = 30
 ESSAY_WORD_COUNT = 1500
 
 
-@dataclass
-class PerfResult:
-    status: str
-    summary: str
-    details: dict = field(default_factory=dict)
-
-    def exit_code(self) -> int:
-        return 0 if self.status != "FAIL" else 1
-
-    def print(self) -> None:
-        icon = {"PASS": "✓", "FAIL": "✗", "SKIP": "⊘"}[self.status]
-        print(f"\n{icon} PERFORMANCE GATE: {self.status}")
-        print(f"  {self.summary}")
-        for k, v in self.details.items():
-            print(f"  {k}: {v}")
+class PerfResult(CheckResult):
+    label = "PERFORMANCE GATE"
 
 
 def _check_ollama() -> bool:
