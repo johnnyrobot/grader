@@ -815,3 +815,49 @@ def test_grading_job_defers_to_the_single_cold_start_threshold(
 
     # 4 exemplars, threshold raised to 5: still cold, so no anchors are retrieved.
     assert retriever.retrieved == []
+
+
+def test_canvas_post_will_not_post_the_same_grade_twice(tmp_path, monkeypatch, api_module):
+    """Re-posting overwrites the score harmlessly but appends the comment again.
+
+    The student sees their feedback duplicated, once per retry, and nothing in the
+    request tells the teacher it already went.
+    """
+    api = api_module
+    monkeypatch.setattr(api, "DB_PATH", tmp_path / "grader_engine.db")
+    monkeypatch.setattr(api, "SETTINGS_FILE", tmp_path / "settings.json")
+
+    calls = []
+
+    def fake_post_grades_batch(course_id, assignment_id, grade_data, **connection):
+        calls.append(grade_data)
+        return {"workflow_state": "completed", "completion": 100}
+
+    monkeypatch.setattr("grader.canvas.post_grades_batch", fake_post_grades_batch)
+
+    db = api._db()
+    db.execute(
+        "INSERT INTO submissions (id, assignment_id, student_ref, text, state, created_at) "
+        "VALUES (?,?,?,?,?,?)",
+        ("sub_p", "canvas_10_20", "98765", "student text", "graded", api._now()),
+    )
+    db.execute(
+        "INSERT INTO grade_records (id, submission_id, assignment_id, ai_scores_json, "
+        "ai_feedback, ai_confidence, ai_flags_json, lane, approved_at, created_at) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?)",
+        ("gr_p", "sub_p", "canvas_10_20", json.dumps({"c1": 4.0}), "feedback", 0.8, "[]",
+         "standard", api._now(), api._now()),
+    )
+    db.commit()
+    db.close()
+
+    first = api.canvas_post(
+        api.CanvasPostReq(course_id=10, assignment_id=20, grade_ids=["gr_p"])
+    )
+    assert first["posted"] == 1
+
+    with pytest.raises(HTTPException) as excinfo:
+        api.canvas_post(api.CanvasPostReq(course_id=10, assignment_id=20, grade_ids=["gr_p"]))
+
+    assert "already posted" in str(excinfo.value.detail)
+    assert len(calls) == 1  # Canvas heard about this grade exactly once

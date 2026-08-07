@@ -1014,6 +1014,7 @@ def canvas_post(req: CanvasPostReq) -> dict:
 
     db = _db()
     grade_data: dict[str, dict] = {}
+    posting: list[str] = []
     skipped: list[str] = []
 
     for gid in req.grade_ids:
@@ -1033,6 +1034,11 @@ def canvas_post(req: CanvasPostReq) -> dict:
         if not row["canvas_user_id"]:
             skipped.append(f"{gid}: missing Canvas user id — WILL NOT POST")
             continue
+        if row["posted_at"]:
+            # Canvas overwrites the score but appends the comment, so a repeat
+            # post leaves the student reading their feedback twice.
+            skipped.append(f"{gid}: already posted — WILL NOT POST AGAIN")
+            continue
 
         teacher_scores = json.loads(row["teacher_scores_json"]) if row["teacher_scores_json"] else {}
         ai_scores = json.loads(row["ai_scores_json"]) if row["ai_scores_json"] else {}
@@ -1047,6 +1053,7 @@ def canvas_post(req: CanvasPostReq) -> dict:
             # leave the async Progress object stuck even when the score writes.
             "text_comment": row["teacher_feedback"] or row["ai_feedback"] or "Posted by Grader after teacher approval.",
         }
+        posting.append(gid)
 
     db.close()
 
@@ -1064,6 +1071,16 @@ def canvas_post(req: CanvasPostReq) -> dict:
         _audit(f"canvas_{req.course_id}_{req.assignment_id}", "canvas", "post_failed",
                {"error": str(e)[:200], "count": len(grade_data)})
         raise HTTPException(502, f"Canvas post failed: {str(e)[:200]}")
+
+    # Only once Canvas has accepted them: a failed post must stay retryable.
+    posted_at = _now()
+    db = _db()
+    db.executemany(
+        "UPDATE grade_records SET posted_at = ? WHERE id = ?",
+        [(posted_at, gid) for gid in posting],
+    )
+    db.commit()
+    db.close()
 
     _audit(f"canvas_{req.course_id}_{req.assignment_id}", "canvas", "post",
            {"posted": len(grade_data), "skipped": len(skipped),
