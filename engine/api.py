@@ -91,6 +91,7 @@ CREATE TABLE IF NOT EXISTS grade_records (
     submission_id   TEXT NOT NULL,
     assignment_id   TEXT NOT NULL,
     rubric_version  INTEGER NOT NULL DEFAULT 1,
+    rubric_title    TEXT,
     ai_scores_json  TEXT,
     ai_feedback     TEXT,
     ai_confidence   REAL,
@@ -118,10 +119,23 @@ CREATE INDEX IF NOT EXISTS idx_audit_entity ON audit_events(entity_ref);
 """
 
 
+def _migrate_grade_records(db: sqlite3.Connection) -> None:
+    """Add rubric_title to grade_records on databases made before it existed.
+
+    CREATE TABLE IF NOT EXISTS leaves an existing table alone, so a teacher
+    upgrading from an earlier build needs the ALTER.
+    """
+    columns = {r["name"] for r in db.execute("PRAGMA table_info(grade_records)")}
+    if "rubric_title" not in columns:
+        db.execute("ALTER TABLE grade_records ADD COLUMN rubric_title TEXT")
+        db.commit()
+
+
 def _db() -> sqlite3.Connection:
     db = sqlite3.connect(str(DB_PATH))
     db.row_factory = sqlite3.Row
     db.executescript(DB_SCHEMA)
+    _migrate_grade_records(db)
     db.execute("PRAGMA journal_mode=WAL")
     return db
 
@@ -251,10 +265,10 @@ def _run_grading_job(
         db = _db()
         db.execute(
             "INSERT OR REPLACE INTO grade_records "
-            "(id, submission_id, assignment_id, rubric_version, ai_scores_json, ai_feedback, "
-            "ai_confidence, ai_flags_json, lane, created_at) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?)",
-            (record_id, sub_id, assignment_id, 1,
+            "(id, submission_id, assignment_id, rubric_version, rubric_title, ai_scores_json, "
+            "ai_feedback, ai_confidence, ai_flags_json, lane, created_at) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            (record_id, sub_id, assignment_id, 1, rubric.title,
              json.dumps(record.get("ai_scores")) if record.get("ai_scores") else None,
              record.get("ai_feedback"),
              record.get("confidence"),
@@ -295,6 +309,7 @@ class CreateRubric(BaseModel):
 
 class GradeBatch(BaseModel):
     assignment_id: str
+    rubric_title: str | None = None
     model: str | None = None
     materials: str = ""
     submission_ids: list[str] | None = None
@@ -370,14 +385,34 @@ def get_rubric(title: str, version: int | None = None) -> dict:
     return json.loads(r.model_dump_json())
 
 
+def _resolve_rubric(title: str | None) -> Rubric:
+    """Pick the Rubric to grade against, refusing to guess between several.
+
+    Grading against the wrong Rubric is silent: the scores look plausible, and the
+    Exemplars derived from the teacher's Overrides then carry the wrong ceiling into
+    every later batch. So when more than one Rubric exists and the caller named none,
+    fail loudly rather than taking whichever sorts first.
+    """
+    saved = _rubric_store.list()
+    if not saved:
+        raise HTTPException(400, "no rubric — create one first")
+    if title is None:
+        if len(saved) > 1:
+            raise HTTPException(
+                400,
+                "more than one rubric exists — name the one to grade against: "
+                + ", ".join(r["title"] for r in saved),
+            )
+        title = str(saved[0]["title"])
+    rubric = _rubric_store.get(title)
+    if not rubric:
+        raise HTTPException(400, f"rubric not found: {title}")
+    return rubric
+
+
 @app.post("/api/grade/batch", dependencies=[Depends(_auth)])
 def grade_batch(req: GradeBatch) -> dict:
-    rubrics = _rubric_store.list()
-    if not rubrics:
-        raise HTTPException(400, "no rubric — create one first")
-    rubric = _rubric_store.get(rubrics[0]["title"])
-    if not rubric:
-        raise HTTPException(400, "rubric not found")
+    rubric = _resolve_rubric(req.rubric_title)
 
     db = _db()
     if req.submission_ids:
@@ -522,9 +557,23 @@ def override_grade(grade_id: str, req: OverrideRequest) -> dict:
         flags=[Flag(f) for f in ai_flags],
     )
 
-    rubric_row = _rubric_store.list()
-    rubric = _rubric_store.get(rubric_row[0]["title"]) if rubric_row else None
-    max_total = rubric.total_points if rubric else 5.0
+    # The Override is scaled against the Rubric this grade was actually produced
+    # against — not whichever one happens to be saved now.
+    graded_against = row["rubric_title"]
+    rubric = _rubric_store.get(str(graded_against)) if graded_against else None
+    if rubric is None:
+        # Graded before rubric_title was recorded: inferring is only safe when
+        # there is exactly one Rubric to infer from.
+        saved = _rubric_store.list()
+        if len(saved) == 1:
+            rubric = _rubric_store.get(str(saved[0]["title"]))
+    if rubric is None:
+        raise HTTPException(
+            400,
+            "cannot tell which rubric this grade was produced against — "
+            "re-grade this submission before overriding it",
+        )
+    max_total = rubric.total_points
 
     exemplars = _exemplar_store.for_model(str(_load_settings()["model_embed"]))
     ov = apply_override(

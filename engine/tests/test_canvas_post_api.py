@@ -1,10 +1,12 @@
 import json
 import importlib
+import sqlite3
 import sys
 import types
 from pathlib import Path
 
 import pytest
+from fastapi import HTTPException
 from pydantic import ValidationError
 
 sys.path.insert(0, str(Path(__file__).parents[1]))
@@ -452,6 +454,8 @@ def test_override_grade_does_not_mutate_the_shared_exemplar_store(tmp_path, monk
         raise RuntimeError("stop after the store is bound")
 
     monkeypatch.setattr(api, "apply_override", fake_apply_override)
+    monkeypatch.setattr(api._rubric_store, "get",
+                        lambda title: types.SimpleNamespace(total_points=5.0))
 
     db = api._db()
     db.execute(
@@ -460,10 +464,10 @@ def test_override_grade_does_not_mutate_the_shared_exemplar_store(tmp_path, monk
         ("sub_ov", "a1", "s1", "student text", "graded", api._now()),
     )
     db.execute(
-        "INSERT INTO grade_records (id, submission_id, assignment_id, ai_scores_json, "
-        "ai_feedback, ai_confidence, ai_flags_json, lane, created_at) "
-        "VALUES (?,?,?,?,?,?,?,?,?)",
-        ("gr_ov", "sub_ov", "a1", json.dumps({"c1": 3.0}), "draft", 0.7, "[]",
+        "INSERT INTO grade_records (id, submission_id, assignment_id, rubric_title, "
+        "ai_scores_json, ai_feedback, ai_confidence, ai_flags_json, lane, created_at) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?)",
+        ("gr_ov", "sub_ov", "a1", "Essay", json.dumps({"c1": 3.0}), "draft", 0.7, "[]",
          "standard", api._now()),
     )
     db.commit()
@@ -562,3 +566,144 @@ def test_unattributable_validation_error_falls_back_to_defaults(tmp_path, monkey
 
     assert result == api.DEFAULT_SETTINGS
     assert caplog.records
+
+
+# ---------------------------------------------------------------------------
+# Which rubric a submission is graded against
+# ---------------------------------------------------------------------------
+
+def _seed_submission(api, assignment_id="canvas_10_20", sub_id="sub_1"):
+    db = api._db()
+    db.execute(
+        "INSERT INTO submissions (id, assignment_id, student_ref, text, state, created_at) "
+        "VALUES (?,?,?,?,?,?)",
+        (sub_id, assignment_id, sub_id, "student text", "imported", api._now()),
+    )
+    db.commit()
+    db.close()
+
+
+def test_grade_batch_refuses_to_pick_between_rubrics(tmp_path, monkeypatch, api_module):
+    """Grading against the wrong rubric is silent, so ambiguity must be loud.
+
+    Before this guard, both grade_batch and override_grade took whichever rubric
+    sorted first alphabetically, regardless of the assignment.
+    """
+    api = api_module
+    monkeypatch.setattr(api, "DB_PATH", tmp_path / "grader_engine.db")
+    monkeypatch.setattr(api._rubric_store, "list",
+                        lambda: [{"title": "Essay 1"}, {"title": "Essay 2"}])
+    _seed_submission(api)
+
+    with pytest.raises(HTTPException) as excinfo:
+        api.grade_batch(api.GradeBatch(assignment_id="canvas_10_20"))
+
+    assert excinfo.value.status_code == 400
+    assert "Essay 1" in excinfo.value.detail and "Essay 2" in excinfo.value.detail
+
+
+def test_grade_batch_grades_against_the_named_rubric(tmp_path, monkeypatch, api_module):
+    api = api_module
+    monkeypatch.setattr(api, "DB_PATH", tmp_path / "grader_engine.db")
+    monkeypatch.setattr(api._rubric_store, "list",
+                        lambda: [{"title": "Essay 1"}, {"title": "Essay 2"}])
+    monkeypatch.setattr(api._rubric_store, "get",
+                        lambda title: types.SimpleNamespace(title=title, criteria=[]))
+
+    captured = {}
+
+    class FakeThread:
+        def __init__(self, *, target, args, daemon):
+            captured["args"] = args
+
+        def start(self):
+            captured["started"] = True
+
+    monkeypatch.setattr(api.threading, "Thread", FakeThread)
+    _seed_submission(api)
+
+    result = api.grade_batch(
+        api.GradeBatch(assignment_id="canvas_10_20", rubric_title="Essay 2")
+    )
+
+    assert result["total"] == 1
+    assert captured["args"][3].title == "Essay 2"
+
+
+def test_override_scales_against_the_rubric_the_grade_was_produced_against(
+    tmp_path, monkeypatch, api_module
+):
+    """A second saved rubric must not change how an existing grade is scaled."""
+    api = api_module
+    monkeypatch.setattr(api, "DB_PATH", tmp_path / "grader_engine.db")
+    monkeypatch.setattr(api, "SETTINGS_FILE", tmp_path / "settings.json")
+    monkeypatch.setattr(api._rubric_store, "list",
+                        lambda: [{"title": "Essay 1"}, {"title": "Essay 2"}])
+    monkeypatch.setattr(
+        api._rubric_store, "get",
+        lambda title: types.SimpleNamespace(total_points={"Essay 1": 5.0, "Essay 2": 100.0}[title]),
+    )
+
+    recorded = {}
+
+    def fake_apply_override(override_store, exemplar_store, **kwargs):
+        recorded["max_total"] = kwargs["max_total"]
+        raise RuntimeError("stop once the rubric is resolved")
+
+    monkeypatch.setattr(api, "apply_override", fake_apply_override)
+
+    db = api._db()
+    db.execute(
+        "INSERT INTO submissions (id, assignment_id, student_ref, text, state, created_at) "
+        "VALUES (?,?,?,?,?,?)",
+        ("sub_ov", "a1", "s1", "student text", "graded", api._now()),
+    )
+    db.execute(
+        "INSERT INTO grade_records (id, submission_id, assignment_id, rubric_title, "
+        "ai_scores_json, ai_feedback, ai_confidence, ai_flags_json, lane, created_at) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?)",
+        ("gr_ov", "sub_ov", "a1", "Essay 2", json.dumps({"c1": 3.0}), "draft", 0.7, "[]",
+         "standard", api._now()),
+    )
+    db.commit()
+    db.close()
+
+    with pytest.raises(RuntimeError):
+        api.override_grade("gr_ov", api.OverrideRequest(
+            teacher_scores={"c1": 4.0}, teacher_feedback="raised",
+        ))
+
+    # "Essay 2", not the alphabetically-first "Essay 1".
+    assert recorded["max_total"] == 100.0
+
+
+def test_grade_records_gains_rubric_title_on_an_older_database(tmp_path, monkeypatch, api_module):
+    """Databases made by an earlier build predate the column and must gain it."""
+    api = api_module
+    db_path = tmp_path / "grader_engine.db"
+    monkeypatch.setattr(api, "DB_PATH", db_path)
+
+    # The real grade_records as it shipped, minus rubric_title.
+    legacy = sqlite3.connect(str(db_path))
+    legacy.executescript(
+        "CREATE TABLE grade_records ("
+        "id TEXT PRIMARY KEY, submission_id TEXT NOT NULL, assignment_id TEXT NOT NULL, "
+        "rubric_version INTEGER NOT NULL DEFAULT 1, ai_scores_json TEXT, ai_feedback TEXT, "
+        "ai_confidence REAL, ai_flags_json TEXT, teacher_scores_json TEXT, "
+        "teacher_feedback TEXT, lane TEXT, approved_at TEXT, posted_at TEXT, "
+        "created_at TEXT NOT NULL);"
+    )
+    legacy.execute(
+        "INSERT INTO grade_records (id, submission_id, assignment_id, created_at) "
+        "VALUES ('gr_old', 'sub_old', 'a1', '2026-01-01T00:00:00Z')"
+    )
+    legacy.commit()
+    legacy.close()
+
+    db = api._db()
+    columns = {r["name"] for r in db.execute("PRAGMA table_info(grade_records)")}
+    row = db.execute("SELECT * FROM grade_records WHERE id = 'gr_old'").fetchone()
+    db.close()
+
+    assert "rubric_title" in columns
+    assert row["rubric_title"] is None  # existing rows survive, unattributed
