@@ -882,9 +882,34 @@ def canvas_post(req: CanvasPostReq, settings: Settings = Depends(current_setting
             **settings.canvas.as_kwargs(),
         )
     except Exception as e:
-        _audit(f"canvas_{req.course_id}_{req.assignment_id}", "canvas", "post_failed",
-               {"error": str(e)[:200], "count": len(grade_data)})
-        raise HTTPException(502, f"Canvas post failed: {str(e)[:200]}")
+        # PRD FR-3.5: posts queue until connectivity. A 502 here used to throw
+        # the teacher's approval away — they approved the grade, Canvas was
+        # merely unreachable, and nothing had ever put an entry in the queue
+        # this engine exposes at /api/canvas/post-queue.
+        #
+        # Queueing cannot post an unapproved grade: every entry below came from
+        # batch.ready, which is postable()'s output. mark_posted stays uncalled,
+        # because queued is not posted.
+        for grade in batch.ready:
+            _post_queue.enqueue(
+                str(req.course_id),
+                str(req.assignment_id),
+                grade.canvas_user_id,
+                str(grade.posted_grade),
+                comment=grade.text_comment,
+                approved_at=grade.approved_at,
+            )
+        _audit(f"canvas_{req.course_id}_{req.assignment_id}", "canvas", "post_queued",
+               {"error": str(e)[:200], "queued": len(batch.ready)})
+        return {
+            "posted": 0,
+            "queued": len(batch.ready),
+            "queued_reason": str(e)[:200],
+            "skipped": batch.skip_details,
+            "posted_scores": {},
+            "progress_state": "queued",
+            "completion": 0,
+        }
 
     # Only once Canvas has accepted them: a failed post must stay retryable.
     _approvals.mark_posted(batch.grade_ids)
@@ -895,6 +920,7 @@ def canvas_post(req: CanvasPostReq, settings: Settings = Depends(current_setting
 
     return {
         "posted": len(grade_data),
+        "queued": 0,
         "skipped": batch.skip_details,
         "posted_scores": {
             user_id: payload["posted_grade"]

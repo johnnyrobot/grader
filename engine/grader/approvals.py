@@ -96,6 +96,10 @@ class PostableGrade:
     canvas_user_id: str
     posted_grade: float
     text_comment: str
+    # Carried so a caller that has to defer the post — queueing it while Canvas
+    # is unreachable — records when the teacher actually approved, rather than
+    # stamping the moment the queue happened to accept it.
+    approved_at: str
 
 
 @dataclass(frozen=True)
@@ -242,6 +246,7 @@ class ApprovalStore:
                     posted_grade=sum(scores.values()) if scores else 0.0,
                     text_comment=row["teacher_feedback"] or row["ai_feedback"]
                     or DEFAULT_COMMENT,
+                    approved_at=row["approved_at"],
                 )
             )
         return PostableBatch(ready=ready, skipped=skipped)

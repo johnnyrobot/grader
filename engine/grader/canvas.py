@@ -456,6 +456,12 @@ def upload_file(
 # Offline post queue
 # ---------------------------------------------------------------------------
 
+# How many times a queued post may be retried before the queue stops trying.
+# Five spans a long outage without letting an entry Canvas will never accept
+# re-post on every flush forever.
+MAX_POST_ATTEMPTS = 5
+
+
 class OfflinePostQueue:
     """Queues grade posts when offline; flushes when connectivity returns.
 
@@ -526,10 +532,25 @@ class OfflinePostQueue:
         self.db.commit()
 
     def flush(self, *, base_url: str | None = None, token: str | None = None) -> dict:
-        """Attempt to post all queued grades. Returns {posted, failed, remaining}."""
+        """Attempt to post all queued grades.
+
+        Returns {posted, failed, abandoned, remaining}.
+
+        `canvas-pp-cli` reports every failure as one RuntimeError, so the queue
+        cannot tell a network outage from a grade Canvas will never accept — a
+        student who dropped the course, say. Retrying is therefore right by
+        default and wrong forever: without a bound, one such entry re-posts on
+        every flush for the life of the install. Past MAX_POST_ATTEMPTS an entry
+        stops being retried but stays in the queue, so it surfaces to the
+        teacher through /api/canvas/post-queue instead of failing silently.
+        """
         posted = 0
         failed = 0
+        abandoned = 0
         for item in self.pending():
+            if item["attempts"] >= MAX_POST_ATTEMPTS:
+                abandoned += 1
+                continue
             try:
                 ra = json.loads(item["rubric_assessment"]) if item["rubric_assessment"] else None
                 fids = json.loads(item["file_ids"]) if item["file_ids"] else None
@@ -545,4 +566,9 @@ class OfflinePostQueue:
                 self.mark_failed(item["id"], str(e))
                 failed += 1
         remaining = len(self.pending())
-        return {"posted": posted, "failed": failed, "remaining": remaining}
+        return {
+            "posted": posted,
+            "failed": failed,
+            "abandoned": abandoned,
+            "remaining": remaining,
+        }
