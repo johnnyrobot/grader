@@ -56,6 +56,53 @@ The current channel preflight returns `PASS`, and the consolidated report return
 notarization, updater-bundle generation, channel preflight, and the in-app N→N+1 path before
 replacing these artifacts.
 
+### 1b. Session of 2026-08-07 — what the gates were not measuring
+
+Three defects, all in code with no direct tests, all found by measuring coverage rather than by
+re-reading the diff. Two were *unimplemented promises*: a module fully written, wired into the
+API, documented — and never called by anything.
+
+- **The offline post queue was never filled.** `OfflinePostQueue.enqueue()` had zero callers.
+  `/api/canvas/post-queue` and `/api/canvas/flush` both answered zero forever, and
+  `post_queue.db` was always empty. PRD **FR-3.5** ("posts queue until connectivity") was
+  therefore not implemented: with Canvas unreachable, `/api/canvas/post` raised 502 and the
+  teacher's approval was discarded. Offline grading is a stated core use case (PRD B2). Fixed;
+  `flush()` also gained a retry bound, because canvas-pp-cli reports every failure as one
+  `RuntimeError` and an entry Canvas will never accept would otherwise retry forever.
+- **A document Docling could not read was graded as if it were prose.** `parse()` falls back to
+  decoding raw bytes as UTF-8. For a PDF that yields `%PDF-1.4` plus replacement characters, and
+  that string was returned as `markdown` — non-empty, so the Canvas import path stored it as the
+  student's submission and the model graded it. `ParsedDoc.confidence` was 0.3 and *no caller has
+  ever read it*; triage routes on the grader's self-reported confidence, which is a different
+  signal with the same name. Fixed at both ends.
+- **`build_public_proxy.py` could not resume.** It forked the grading child on every non-Windows
+  platform. On macOS the child resolves proxies through `SCDynamicStoreCopyProxiesWithOptions`,
+  CoreFoundation is not fork-safe, and the child dies with SIGSEGV — but only once the parent has
+  touched CoreFoundation, which a *fresh* run does not and a *resumed* run does. So it broke
+  exactly the runs that regenerate existing release evidence: 36 of 40 items came back unscored,
+  each recorded as a per-item `grade_error`, and the process still exited 0. Now `spawn`
+  everywhere but Linux. Release tooling only — the shipped engine never forks.
+
+**The quality gate replays frozen scores; it does not grade.** `examples.jsonl` carries
+`ai_scores` written when the dataset was built (2026-07-13), and the gate reads them. To check
+whether HEAD still grades the same way you must rebuild with `--grade`. Done this session: a
+full regrade of the 40-item pilot under HEAD produced **ai_scores identical on all 40 items**
+(different file, different SHA), so QWK 0.845 is a real property of current HEAD and the seven
+refactor commits preserved grading behaviour exactly. At temperature 0 this is the expected
+result — and it is worth re-running after any change to the grading path, because it is cheap
+(~45 min) and it is the only check that actually exercises the model.
+
+**Still promised and still not wired:** `upload_file()` (the Canvas 3-step comment-attachment
+flow) has zero callers, so PRD line 110 / FR-3.4 "annotated files upload as comment attachments"
+is unimplemented. P3 above already scopes this as "attachment write-back still needs separate
+release evidence". Likewise `handwriting.py`'s "Scanned work defaults to REVIEW_FIRST" — nothing
+records OCR provenance on a submission, so triage cannot route on it.
+
+**Performance has much less headroom than recorded.** The gate passes, but a 1500-word essay now
+measures 67–77s against a 90s budget where 2026-07-12 recorded 33.5s, and it read 123s (a FAIL)
+while a VM was competing for the machine. Measure it on a quiet machine, and do not treat the
+recorded number as stable.
+
 ---
 
 ## 2. The repo
