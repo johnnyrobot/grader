@@ -7,9 +7,12 @@ the shell is a thin client.
 Run:
   uv run uvicorn engine.api:app --host 127.0.0.1 --port 8756 --reload
 
-The engine reuses grader.agent.grade, grader.triage.triage, grader.overrides.apply_override,
+The engine reuses grader.agent.grade, grader.triage.triage, grader.approvals.ApprovalStore,
 grader.calibration.compute_health, grader.calibration.can_draft as-is — no logic is
 duplicated from the package.
+
+Approval is not this module's to grant. grade_records.approved_at is written only
+by grader.approvals, and canvas_post asks postable() rather than reading it.
 """
 
 from __future__ import annotations
@@ -31,11 +34,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, ValidationError, field_validator, model_validator
 
 from grader.agent import grade
+from grader.approvals import AlreadyApproved, ApprovalStore, GradeNotFound
 from grader.calibration import can_draft, cold_start_status, compute_health
 from grader.canvas import OfflinePostQueue
 from grader.db import Database
 from grader.exemplars import ExemplarStore, render_anchors
-from grader.overrides import OverrideStore, apply_override, detect_patterns
+from grader.overrides import OverrideStore, detect_patterns
 from grader.rubrics import RubricStore, parse_pasted_rubric
 from grader.schema import GradeDraft, Rubric
 from grader.triage import triage
@@ -165,6 +169,10 @@ _exemplar_store = ExemplarStore(Database.at(DATA_DIR / "exemplars.db"))
 _override_store = OverrideStore(Database.at(DATA_DIR / "overrides.db"))
 _rubric_store = RubricStore(Database.at(DATA_DIR / "rubrics.db"))
 _post_queue = OfflinePostQueue(Database.at(DATA_DIR / "post_queue.db"))
+
+# Sole owner of grade_records.approved_at and posted_at. Takes _db itself rather
+# than a connection so that redirecting DB_PATH after import still reaches it.
+_approvals = ApprovalStore(_db, _audit)
 
 
 # ---------------------------------------------------------------------------
@@ -528,19 +536,13 @@ def get_queue(assignment_id: str | None = None, lane: str | None = None) -> dict
 
 @app.post("/api/grades/{grade_id}/approve", dependencies=[Depends(_auth)])
 def approve_grade(grade_id: str) -> dict:
-    db = _db()
-    row = db.execute("SELECT * FROM grade_records WHERE id = ?", (grade_id,)).fetchone()
-    if not row:
-        db.close()
+    try:
+        approval = _approvals.approve(grade_id)
+    except GradeNotFound:
         raise HTTPException(404, "grade not found")
-    if row["approved_at"]:
-        db.close()
+    except AlreadyApproved:
         raise HTTPException(409, "already approved")
-    db.execute("UPDATE grade_records SET approved_at = ? WHERE id = ?", (_now(), grade_id))
-    db.commit()
-    db.close()
-    _audit(grade_id, "teacher", "approve", {})
-    return {"approved": True, "grade_id": grade_id}
+    return {"approved": True, "grade_id": approval.grade_id}
 
 
 @app.post("/api/grades/{grade_id}/override", dependencies=[Depends(_auth)])
@@ -583,27 +585,17 @@ def override_grade(grade_id: str, req: OverrideRequest) -> dict:
     max_total = rubric.total_points
 
     exemplars = _exemplar_store.for_model(str(_load_settings()["model_embed"]))
-    ov = apply_override(
-        _override_store, exemplars,
+    ov = _approvals.override(
+        grade_id,
+        override_store=_override_store,
+        exemplar_store=exemplars,
         assignment_id=row["assignment_id"],
         submission_text=sub_row["text"] if sub_row else "",
         ai_draft=draft,
         teacher_scores=req.teacher_scores,
         teacher_feedback=req.teacher_feedback,
         max_total=max_total,
-    )
-
-    db = _db()
-    db.execute(
-        "UPDATE grade_records SET teacher_scores_json = ?, teacher_feedback = ?, "
-        "approved_at = ? WHERE id = ?",
-        (json.dumps(req.teacher_scores), req.teacher_feedback, _now(), grade_id),
-    )
-    db.commit()
-    db.close()
-
-    _audit(grade_id, "teacher", "override",
-           {"ai_total": ov.ai_total, "teacher_total": ov.teacher_total, "delta": ov.criterion_delta})
+    ).override
 
     proposals = detect_patterns(_override_store.list(row["assignment_id"]), min_pattern=3)
     return {
@@ -999,59 +991,22 @@ def canvas_import(req: CanvasImportReq) -> dict:
 def canvas_post(req: CanvasPostReq) -> dict:
     """Post approved grades back to Canvas.
 
-    Enforces the invariant: NOTHING posts without teacher_final.approved_at.
-    Bulk post polls Progress to completion (gotcha #1) before reporting success.
+    This route cannot read approved_at — it asks _approvals.postable(), which is
+    the only way the question can be asked. Bulk post polls Progress to
+    completion (gotcha #1) before reporting success.
+
+    Do not send local rubric criterion slugs as Canvas rubric IDs. Canvas bulk
+    updates accept rubric_assessment only for assignments with real Canvas
+    criterion identifiers; invalid local keys can leave the async Progress
+    object stuck even when the score writes.
     """
     from grader.canvas import post_grades_batch
 
-    db = _db()
-    grade_data: dict[str, dict] = {}
-    posting: list[str] = []
-    skipped: list[str] = []
+    batch = _approvals.postable(req.grade_ids)
+    if not batch.ready:
+        raise HTTPException(400, f"no approved grades to post. Skipped: {batch.skip_details}")
 
-    for gid in req.grade_ids:
-        row = db.execute(
-            "SELECT gr.*, s.student_ref AS canvas_user_id "
-            "FROM grade_records gr "
-            "LEFT JOIN submissions s ON s.id = gr.submission_id "
-            "WHERE gr.id = ?",
-            (gid,),
-        ).fetchone()
-        if not row:
-            skipped.append(f"{gid}: not found")
-            continue
-        if not row["approved_at"]:
-            skipped.append(f"{gid}: not approved — WILL NOT POST")
-            continue
-        if not row["canvas_user_id"]:
-            skipped.append(f"{gid}: missing Canvas user id — WILL NOT POST")
-            continue
-        if row["posted_at"]:
-            # Canvas overwrites the score but appends the comment, so a repeat
-            # post leaves the student reading their feedback twice.
-            skipped.append(f"{gid}: already posted — WILL NOT POST AGAIN")
-            continue
-
-        teacher_scores = json.loads(row["teacher_scores_json"]) if row["teacher_scores_json"] else {}
-        ai_scores = json.loads(row["ai_scores_json"]) if row["ai_scores_json"] else {}
-        scores = teacher_scores or ai_scores
-        total = sum(scores.values()) if scores else 0.0
-
-        grade_data[str(row["canvas_user_id"])] = {
-            "posted_grade": total,
-            # Do not send local rubric criterion slugs as Canvas rubric IDs.
-            # Canvas bulk updates accept rubric_assessment only for assignments
-            # with real Canvas criterion identifiers; invalid local keys can
-            # leave the async Progress object stuck even when the score writes.
-            "text_comment": row["teacher_feedback"] or row["ai_feedback"] or "Posted by Grader after teacher approval.",
-        }
-        posting.append(gid)
-
-    db.close()
-
-    if not grade_data:
-        raise HTTPException(400, f"no approved grades to post. Skipped: {skipped}")
-
+    grade_data = batch.grade_data()
     try:
         result = post_grades_batch(
             req.course_id,
@@ -1065,22 +1020,15 @@ def canvas_post(req: CanvasPostReq) -> dict:
         raise HTTPException(502, f"Canvas post failed: {str(e)[:200]}")
 
     # Only once Canvas has accepted them: a failed post must stay retryable.
-    posted_at = _now()
-    db = _db()
-    db.executemany(
-        "UPDATE grade_records SET posted_at = ? WHERE id = ?",
-        [(posted_at, gid) for gid in posting],
-    )
-    db.commit()
-    db.close()
+    _approvals.mark_posted(batch.grade_ids)
 
     _audit(f"canvas_{req.course_id}_{req.assignment_id}", "canvas", "post",
-           {"posted": len(grade_data), "skipped": len(skipped),
+           {"posted": len(grade_data), "skipped": len(batch.skipped),
             "progress": result.get("workflow_state", "unknown")})
 
     return {
         "posted": len(grade_data),
-        "skipped": skipped,
+        "skipped": batch.skip_details,
         "posted_scores": {
             user_id: payload["posted_grade"]
             for user_id, payload in grade_data.items()

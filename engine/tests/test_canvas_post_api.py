@@ -453,7 +453,8 @@ def test_override_grade_does_not_mutate_the_shared_exemplar_store(tmp_path, monk
         recorded["view_model"] = exemplar_store.embedding_model
         raise RuntimeError("stop after the store is bound")
 
-    monkeypatch.setattr(api, "apply_override", fake_apply_override)
+    # api.py no longer calls apply_override; ApprovalStore.override() does.
+    monkeypatch.setattr("grader.approvals.apply_override", fake_apply_override)
     monkeypatch.setattr(api._rubric_store, "get",
                         lambda title: types.SimpleNamespace(total_points=5.0))
 
@@ -650,7 +651,8 @@ def test_override_scales_against_the_rubric_the_grade_was_produced_against(
         recorded["max_total"] = kwargs["max_total"]
         raise RuntimeError("stop once the rubric is resolved")
 
-    monkeypatch.setattr(api, "apply_override", fake_apply_override)
+    # api.py no longer calls apply_override; ApprovalStore.override() does.
+    monkeypatch.setattr("grader.approvals.apply_override", fake_apply_override)
 
     db = api._db()
     db.execute(
