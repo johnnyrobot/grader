@@ -27,7 +27,8 @@ import statistics
 from dataclasses import dataclass, field
 from enum import Enum
 
-from grader.agent import GradeRun, grade
+from grader.ports import Judge
+from grader.schema import GradeRun
 from grader.schema import CriterionType, Flag, GradeDraft, Rubric
 
 
@@ -66,7 +67,7 @@ def triage(
     rubric: Rubric,
     submission: str,
     *,
-    model_name: str = "grader-text:8b",
+    judge: Judge | None = None,
     consistency_samples: int = 3,
     anchors: str = "",
     materials: str = "",
@@ -98,11 +99,16 @@ def triage(
         # Expensive signal, bought only where it matters. Resampling at temperature 0 still
         # varies because the retrieved anchors and decode path aren't perfectly fixed; what
         # we're measuring is whether the grade is stable under re-derivation.
+        if judge is None:
+            raise ValueError(
+                "a consistency vote re-grades the submission, so it needs a judge; "
+                "pass one, or allow_vote=False to route on confidence alone"
+            )
         reasons.append(f"low confidence ({conf:.2f}) -> consistency vote")
         votes = [draft.total]
         for _ in range(consistency_samples - 1):
-            run: GradeRun = grade(rubric, submission, model_name=model_name, mode="tool",
-                                  anchors=anchors, materials=materials)
+            run: GradeRun = judge.grade(rubric, submission,
+                                        anchors=anchors, materials=materials)
             if run.ok:
                 votes.append(run.draft.total)
 

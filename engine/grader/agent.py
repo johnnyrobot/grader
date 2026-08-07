@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass
-from typing import Literal
 
 from pydantic_ai import Agent, ModelRetry
 from pydantic_ai.models.openai import OpenAIChatModel
@@ -16,9 +15,7 @@ from pydantic_ai.output import NativeOutput, PromptedOutput, ToolOutput
 from pydantic_ai.providers.openai import OpenAIProvider
 from pydantic_ai.settings import ModelSettings
 
-from grader.schema import GradeDraft, Rubric
-
-OutputMode = Literal["tool", "native", "prompted"]
+from grader.schema import GradeDraft, GradeRun, OutputMode, Rubric
 
 # Grade at temperature 0. Same-verdict reproducibility is >95% at temp 0 and falls to ~70%
 # at temp 1 (arXiv 2603.28304); temperature mainly buys variance, not accuracy. Uncertainty
@@ -43,22 +40,6 @@ that cannot be acted on is noise.
 you've been shown, say so with a LOW confidence value. Routing hard cases to a human is \
 the correct outcome, not a failure.
 """
-
-
-@dataclass
-class GradeRun:
-    """One grading attempt, with the telemetry P0 exists to collect."""
-
-    draft: GradeDraft | None
-    mode: OutputMode
-    model: str
-    seconds: float
-    retries: int
-    error: str | None = None
-
-    @property
-    def ok(self) -> bool:
-        return self.draft is not None
 
 
 def build_model(model_name: str, base_url: str = "http://localhost:11434/v1") -> OpenAIChatModel:
@@ -153,3 +134,30 @@ def grade(
         return GradeRun(result.output, mode, model_name, time.perf_counter() - t0, retries)
     except Exception as exc:  # noqa: BLE001 - a failed grade is data, not a crash
         return GradeRun(None, mode, model_name, time.perf_counter() - t0, retries, error=f"{type(exc).__name__}: {exc}")
+
+
+@dataclass(frozen=True)
+class PydanticAIJudge:
+    """The production Judge: pydantic_ai against an OpenAI-compatible local server.
+
+    Frozen, and the model is fixed at construction — there is no setter for a
+    caller to reach for mid-batch.
+    """
+
+    model_name: str = "grader-text:8b"
+    mode: OutputMode = "tool"
+    base_url: str | None = None
+
+    def grade(
+        self,
+        rubric: Rubric,
+        submission: str,
+        *,
+        anchors: str = "",
+        materials: str = "",
+    ) -> GradeRun:
+        return grade(
+            rubric, submission,
+            model_name=self.model_name, mode=self.mode,
+            anchors=anchors, materials=materials, base_url=self.base_url,
+        )

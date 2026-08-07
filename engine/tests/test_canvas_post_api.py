@@ -12,49 +12,18 @@ from pydantic import ValidationError
 sys.path.insert(0, str(Path(__file__).parents[1]))
 
 
-class _Noop:
-    def __init__(self, *args, **kwargs):
-        pass
-
-    def output_validator(self, func):
-        return func
-
-
 @pytest.fixture
-def api_module(monkeypatch):
-    pydantic_ai = types.ModuleType("pydantic_ai")
-    pydantic_ai.Agent = _Noop
-    pydantic_ai.ModelRetry = RuntimeError
-    monkeypatch.setitem(sys.modules, "pydantic_ai", pydantic_ai)
+def api_module():
+    """Import the engine fresh per test.
 
-    models = types.ModuleType("pydantic_ai.models")
-    models_openai = types.ModuleType("pydantic_ai.models.openai")
-    models_openai.OpenAIChatModel = _Noop
-    monkeypatch.setitem(sys.modules, "pydantic_ai.models", models)
-    monkeypatch.setitem(sys.modules, "pydantic_ai.models.openai", models_openai)
-
-    output = types.ModuleType("pydantic_ai.output")
-    output.NativeOutput = _Noop
-    output.PromptedOutput = _Noop
-    output.ToolOutput = _Noop
-    monkeypatch.setitem(sys.modules, "pydantic_ai.output", output)
-
-    providers = types.ModuleType("pydantic_ai.providers")
-    providers_openai = types.ModuleType("pydantic_ai.providers.openai")
-    providers_openai.OpenAIProvider = _Noop
-    monkeypatch.setitem(sys.modules, "pydantic_ai.providers", providers)
-    monkeypatch.setitem(sys.modules, "pydantic_ai.providers.openai", providers_openai)
-
-    settings = types.ModuleType("pydantic_ai.settings")
-    settings.ModelSettings = _Noop
-    monkeypatch.setitem(sys.modules, "pydantic_ai.settings", settings)
-
+    No pydantic_ai stubbing: api.py imports it only inside _run_grading_job, so
+    loading the engine no longer drags in the LLM library. Tests that grade pass
+    a Judge instead.
+    """
     sys.modules.pop("api", None)
-    sys.modules.pop("grader.agent", None)
     module = importlib.import_module("api")
     yield module
     sys.modules.pop("api", None)
-    sys.modules.pop("grader.agent", None)
 
 
 def test_canvas_post_uses_canvas_user_id_from_imported_submission(tmp_path, monkeypatch, api_module):
@@ -722,17 +691,27 @@ def _fake_draft(schema):
     )
 
 
+class FakeJudge:
+    """A Judge that grades without a model. Nothing here touches pydantic_ai."""
+
+    def __init__(self):
+        from grader import schema as schema_mod
+
+        self.graded = []
+        self._schema = schema_mod
+
+    def grade(self, rubric, submission, *, anchors="", materials=""):
+        self.graded.append(submission)
+        return self._schema.GradeRun(
+            draft=_fake_draft(self._schema), mode="tool", model="fake",
+            seconds=0.1, retries=0,
+        )
+
+
 def _stub_grading(api, monkeypatch, *, anchor_count=0):
-    """Run the pipeline without Ollama: canned grade + triage, no exemplars."""
-    from grader import schema as schema_mod
+    """Run the pipeline without Ollama: a fake Judge, canned triage, no exemplars."""
     from grader import triage as triage_mod
 
-    monkeypatch.setattr(
-        api, "grade",
-        lambda rubric, text, **kw: types.SimpleNamespace(
-            draft=_fake_draft(schema_mod), ok=True, seconds=0.1, retries=0, error=None,
-        ),
-    )
     monkeypatch.setattr(
         api, "triage",
         lambda draft, rubric, text, **kw: triage_mod.Triage(
@@ -774,6 +753,7 @@ def test_grading_job_accounts_for_every_submission_it_was_given(
         rubric=types.SimpleNamespace(title="Essay", criteria=[]),
         model="grader-text:8b", materials="",
         low_confidence=0.6, high_confidence=0.9, embedding_model="nomic-embed-text:v1.5",
+        judge=FakeJudge(),
     )
 
     job = api._jobs["job_1"]
@@ -813,6 +793,7 @@ def test_grading_job_defers_to_the_single_cold_start_threshold(
         rubric=types.SimpleNamespace(title="Essay", criteria=[]),
         model="grader-text:8b", materials="",
         low_confidence=0.6, high_confidence=0.9, embedding_model="nomic-embed-text:v1.5",
+        judge=FakeJudge(),
     )
 
     # 4 exemplars, threshold raised to 5: still cold, so no anchors are retrieved.

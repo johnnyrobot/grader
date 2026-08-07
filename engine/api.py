@@ -33,13 +33,13 @@ from fastapi import Depends, FastAPI, Header, HTTPException, WebSocket, WebSocke
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, ValidationError, field_validator, model_validator
 
-from grader.agent import grade
 from grader.approvals import AlreadyApproved, ApprovalStore, GradeNotFound
 from grader.calibration import can_draft, cold_start_status, compute_health
 from grader.canvas import OfflinePostQueue
 from grader.db import Database
 from grader.exemplars import ExemplarStore, render_anchors
 from grader.overrides import OverrideStore, detect_patterns
+from grader.ports import Judge
 from grader.rubrics import RubricStore, parse_pasted_rubric
 from grader.schema import GradeDraft, Rubric
 from grader.triage import triage
@@ -202,12 +202,21 @@ def _run_grading_job(
     low_confidence: float,
     high_confidence: float,
     embedding_model: str,
+    judge: Judge | None = None,
 ) -> None:
+    if judge is None:
+        # Imported here rather than at module scope: this is the only place the
+        # engine needs pydantic_ai, and importing it up top made every route test
+        # stub four fake submodules before it could load the engine at all.
+        from grader.agent import PydanticAIJudge
+
+        judge = PydanticAIJudge(model_name=model)
+
     with _job_lock:
         _jobs[job_id]["status"] = "running"
 
-    # Bound once for the life of the job: a concurrent settings change must not
-    # retarget retrieval half-way through a batch.
+    # Both bound once for the life of the job: a concurrent settings change must
+    # not retarget retrieval, or the model, half-way through a batch.
     exemplars = _exemplar_store.for_model(embedding_model)
 
     total = len(submission_ids)
@@ -249,8 +258,8 @@ def _run_grading_job(
             anchor_ids = [c.id for c in rubric.criteria]
             anchors_txt = render_anchors(hits, anchor_ids)
 
-        run = grade(rubric, submission_text, model_name=model, mode="tool",
-                    anchors=anchors_txt, materials=materials)
+        run = judge.grade(rubric, submission_text,
+                          anchors=anchors_txt, materials=materials)
 
         if not run.ok:
             state = "error"
@@ -264,7 +273,7 @@ def _run_grading_job(
                 run.draft,
                 rubric,
                 submission_text,
-                model_name=model,
+                judge=judge,
                 anchors=anchors_txt,
                 materials=materials,
                 low_confidence=low_confidence,
