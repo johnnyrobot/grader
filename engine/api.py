@@ -410,7 +410,11 @@ def import_submissions(req: ImportSubmissions) -> dict:
 @app.post("/api/rubrics", dependencies=[Depends(_auth)])
 def create_rubric(req: CreateRubric) -> dict:
     if req.rubric_text:
-        rubric = parse_pasted_rubric(req.rubric_text, title=req.title)
+        try:
+            rubric = parse_pasted_rubric(req.rubric_text, title=req.title)
+        except ValueError as exc:
+            # Unreadable paste is the teacher's input, not an engine failure.
+            raise HTTPException(400, str(exc)) from exc
     elif req.title:
         rubric = Rubric(title=req.title, criteria=[])
     else:

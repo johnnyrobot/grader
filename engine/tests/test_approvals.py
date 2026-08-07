@@ -164,10 +164,79 @@ def test_override_records_the_correction_before_approving_it(seeded, audit_log, 
             teacher_scores={"c1": 4.0}, teacher_feedback="raised", max_total=5.0,
         )
 
-    db = seeded()
-    row = db.execute("SELECT approved_at FROM grade_records WHERE id='gr_1'").fetchone()
-    db.close()
+    row = seeded().execute(
+        "SELECT approved_at FROM grade_records WHERE id='gr_1'"
+    ).fetchone()
     assert row["approved_at"] is None
+
+
+def test_override_turns_the_correction_into_an_anchor_and_approves(
+    seeded, audit_log, monkeypatch
+):
+    """The whole loop, with the real apply_override: correct, anchor, approve.
+
+    Every other override test stubs the derivation out. This one runs it, because
+    "the teacher's correction is retrievable as an anchor for the next
+    submission" is the promise calibration rests on.
+    """
+    from grader.approvals import ApprovalStore
+
+    events, audit = audit_log
+    override_store, exemplar_store = _stores()
+    approvals = ApprovalStore(seeded, audit)
+    # The only thing in the loop that would leave the machine.
+    monkeypatch.setattr("grader.exemplars.embed", lambda texts, **kw: [[0.1, 0.2]] * len(texts))
+
+    approval = approvals.override(
+        "gr_1", override_store=override_store, exemplar_store=exemplar_store,
+        assignment_id="a1", submission_text="student text", ai_draft=_draft(),
+        teacher_scores={"c1": 4.0}, teacher_feedback="raised", max_total=5.0,
+    )
+
+    # The correction is recorded, with the difference from what the AI proposed...
+    assert approval.override.ai_total == 3.0
+    assert approval.override.teacher_total == 4.0
+    assert approval.override.criterion_delta == {"c1": 1.0}
+
+    # ...it is immediately an anchor for the next submission...
+    assert exemplar_store.count("a1") == 1
+    anchor = exemplar_store._all("a1")[0]
+    assert anchor.source == "override"
+    assert anchor.total == 4.0
+    assert anchor.scores == {"c1": 4.0}
+    assert anchor.comment == "raised"
+
+    # ...and the grade is approved, once, with one moment of record.
+    row = seeded().execute(
+        "SELECT approved_at, teacher_scores_json, teacher_feedback "
+        "FROM grade_records WHERE id='gr_1'"
+    ).fetchone()
+    assert row["approved_at"] == approval.approved_at
+    assert json.loads(row["teacher_scores_json"]) == {"c1": 4.0}
+    assert row["teacher_feedback"] == "raised"
+    assert [e[2] for e in events] == ["override"]
+
+
+def test_overriding_an_already_approved_grade_is_allowed(seeded, audit_log, monkeypatch):
+    """A teacher revising their own correction is legitimate; approve() is not."""
+    from grader.approvals import AlreadyApproved, ApprovalStore
+
+    _, audit = audit_log
+    override_store, exemplar_store = _stores()
+    approvals = ApprovalStore(seeded, audit)
+    monkeypatch.setattr("grader.exemplars.embed", lambda texts, **kw: [[0.1, 0.2]] * len(texts))
+
+    kwargs = dict(
+        override_store=override_store, exemplar_store=exemplar_store,
+        assignment_id="a1", submission_text="student text", ai_draft=_draft(),
+        teacher_feedback="raised", max_total=5.0,
+    )
+    approvals.override("gr_1", teacher_scores={"c1": 4.0}, **kwargs)
+    second = approvals.override("gr_1", teacher_scores={"c1": 5.0}, **kwargs)
+
+    assert second.override.teacher_total == 5.0
+    with pytest.raises(AlreadyApproved):
+        approvals.approve("gr_1")
 
 
 # ---------------------------------------------------------------------------
