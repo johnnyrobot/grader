@@ -59,6 +59,10 @@ dist/
 build/
 target/
 *.db
+# WAL puts its log and shared-memory index beside the database. These don't
+# match *.db, and they appear as soon as anything opens a store.
+*.db-wal
+*.db-shm
 *.sqlite
 *.sqlite3
 .DS_Store
