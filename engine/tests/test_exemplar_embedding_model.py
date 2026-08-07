@@ -15,6 +15,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 pytest = __import__("pytest")
 
+from grader.db import Database
 from grader.exemplars import EMBED_MODEL, Exemplar, ExemplarStore, cosine
 
 
@@ -46,7 +47,7 @@ def test_cosine_rejects_dimension_mismatch():
 
 
 def test_retrieve_excludes_exemplars_embedded_by_a_different_model(tmp_path, monkeypatch):
-    store = ExemplarStore(tmp_path / "ex.db", embedding_model="model-a")
+    store = ExemplarStore(Database.at(tmp_path / "ex.db"), embedding_model="model-a")
     monkeypatch.setattr("grader.exemplars.embed", _fixed_embed([1.0, 0.0]))
     store.add(_exemplar("written under model-a"))
 
@@ -58,7 +59,7 @@ def test_retrieve_excludes_exemplars_embedded_by_a_different_model(tmp_path, mon
 
 
 def test_retrieve_returns_exemplars_embedded_by_the_current_model(tmp_path, monkeypatch):
-    store = ExemplarStore(tmp_path / "ex.db", embedding_model="model-a")
+    store = ExemplarStore(Database.at(tmp_path / "ex.db"), embedding_model="model-a")
     monkeypatch.setattr("grader.exemplars.embed", _fixed_embed([1.0, 0.0]))
     store.add(_exemplar("written under model-a"))
 
@@ -108,14 +109,14 @@ def test_legacy_database_without_the_column_migrates_and_stays_retrievable(tmp_p
     assert "embedding_model" not in columns, "fixture must start without the column"
 
     monkeypatch.setattr("grader.exemplars.embed", _fixed_embed([1.0, 0.0]))
-    migrated = ExemplarStore(db_path, embedding_model=EMBED_MODEL)
+    migrated = ExemplarStore(Database.at(db_path), embedding_model=EMBED_MODEL)
 
     assert migrated.count("a1") == 1
     assert [e.text for e, _ in migrated.retrieve("a1", "query")] == ["legacy row"]
 
 
 def test_add_records_the_model_that_produced_the_vector(tmp_path, monkeypatch):
-    store = ExemplarStore(tmp_path / "ex.db", embedding_model="model-a")
+    store = ExemplarStore(Database.at(tmp_path / "ex.db"), embedding_model="model-a")
     monkeypatch.setattr("grader.exemplars.embed", _fixed_embed([1.0, 0.0]))
     store.add(_exemplar("row"))
 
@@ -131,7 +132,7 @@ def test_count_reflects_only_exemplars_usable_by_the_current_model(tmp_path, mon
     If it counted rows retrieval cannot use, the app would report a calibrated store
     while grading with zero anchors.
     """
-    store = ExemplarStore(tmp_path / "ex.db", embedding_model="model-a")
+    store = ExemplarStore(Database.at(tmp_path / "ex.db"), embedding_model="model-a")
     monkeypatch.setattr("grader.exemplars.embed", _fixed_embed([1.0, 0.0]))
     store.add(_exemplar("row"))
     assert store.count("a1") == 1
@@ -147,7 +148,7 @@ def test_for_model_view_does_not_mutate_the_shared_store(tmp_path):
     The store is a module-level singleton shared with grading worker threads; mutating
     it mid-request retargets a running batch's retrieval.
     """
-    store = ExemplarStore(tmp_path / "ex.db", embedding_model="model-a")
+    store = ExemplarStore(Database.at(tmp_path / "ex.db"), embedding_model="model-a")
 
     view = store.for_model("model-b")
 
@@ -157,7 +158,7 @@ def test_for_model_view_does_not_mutate_the_shared_store(tmp_path):
 
 
 def test_add_rejects_a_precomputed_vector_from_another_model(tmp_path):
-    store = ExemplarStore(tmp_path / "ex.db", embedding_model="model-a")
+    store = ExemplarStore(Database.at(tmp_path / "ex.db"), embedding_model="model-a")
     foreign = _exemplar("from another model")
     foreign.embedding = [1.0, 0.0]
     foreign.embedding_model = "model-b"
@@ -167,7 +168,7 @@ def test_add_rejects_a_precomputed_vector_from_another_model(tmp_path):
 
 
 def test_add_accepts_a_precomputed_vector_from_the_same_model(tmp_path):
-    store = ExemplarStore(tmp_path / "ex.db", embedding_model="model-a")
+    store = ExemplarStore(Database.at(tmp_path / "ex.db"), embedding_model="model-a")
     native = _exemplar("same model")
     native.embedding = [1.0, 0.0]
     native.embedding_model = "model-a"

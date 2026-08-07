@@ -19,10 +19,11 @@ import json
 import sqlite3
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from pathlib import Path
 
 from grader.exemplars import Exemplar, ExemplarStore
 from grader.schema import GradeDraft
+
+from grader.db import Database
 
 
 SCHEMA = """
@@ -77,13 +78,8 @@ class Override:
 class OverrideStore:
     """SQLite-backed override history with pattern detection for rubric refinement."""
 
-    def __init__(self, path: Path | str = "fixtures/overrides.db") -> None:
-        self.path = Path(path)
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.db = sqlite3.connect(self.path)
-        # Shared across the request threadpool and the grading thread; see exemplars.py.
-        self.db.execute("PRAGMA journal_mode=WAL")
-        self.db.row_factory = sqlite3.Row
+    def __init__(self, db: Database) -> None:
+        self.db = db
         self.db.executescript(SCHEMA)
 
     def record(

@@ -32,6 +32,8 @@ from pydantic import BaseModel, Field, ValidationError, field_validator, model_v
 
 from grader.agent import grade
 from grader.calibration import can_draft, cold_start_status, compute_health
+from grader.canvas import OfflinePostQueue
+from grader.db import Database
 from grader.exemplars import ExemplarStore, render_anchors
 from grader.overrides import OverrideStore, apply_override, detect_patterns
 from grader.rubrics import RubricStore, parse_pasted_rubric
@@ -159,20 +161,10 @@ def _audit(entity: str, actor: str, event: str, payload: dict) -> None:
 # Stores (shared across requests)
 # ---------------------------------------------------------------------------
 
-_exemplar_store = ExemplarStore(DATA_DIR / "exemplars.db")
-_exemplar_store.db.close()
-_exemplar_store.db = sqlite3.connect(str(DATA_DIR / "exemplars.db"), check_same_thread=False)
-_exemplar_store.db.row_factory = sqlite3.Row
-
-_override_store = OverrideStore(DATA_DIR / "overrides.db")
-_override_store.db.close()
-_override_store.db = sqlite3.connect(str(DATA_DIR / "overrides.db"), check_same_thread=False)
-_override_store.db.row_factory = sqlite3.Row
-
-_rubric_store = RubricStore(DATA_DIR / "rubrics.db")
-_rubric_store.db.close()
-_rubric_store.db = sqlite3.connect(str(DATA_DIR / "rubrics.db"), check_same_thread=False)
-_rubric_store.db.row_factory = sqlite3.Row
+_exemplar_store = ExemplarStore(Database.at(DATA_DIR / "exemplars.db"))
+_override_store = OverrideStore(Database.at(DATA_DIR / "overrides.db"))
+_rubric_store = RubricStore(Database.at(DATA_DIR / "rubrics.db"))
+_post_queue = OfflinePostQueue(Database.at(DATA_DIR / "post_queue.db"))
 
 
 # ---------------------------------------------------------------------------
@@ -1101,18 +1093,14 @@ def canvas_post(req: CanvasPostReq) -> dict:
 @app.get("/api/canvas/post-queue", dependencies=[Depends(_auth)])
 def canvas_post_queue_status() -> dict:
     """Check the offline post queue status."""
-    from grader.canvas import OfflinePostQueue
-    queue = OfflinePostQueue(DATA_DIR / "post_queue.db")
-    pending = queue.pending()
+    pending = _post_queue.pending()
     return {"pending": len(pending), "items": pending}
 
 
 @app.post("/api/canvas/flush", dependencies=[Depends(_auth)])
 def canvas_flush_queue() -> dict:
     """Flush the offline post queue — attempt to post all pending grades."""
-    from grader.canvas import OfflinePostQueue
-    queue = OfflinePostQueue(DATA_DIR / "post_queue.db")
-    result = queue.flush(**_canvas_connection())
+    result = _post_queue.flush(**_canvas_connection())
     _audit("canvas_queue", "engine", "flush", result)
     return result
 

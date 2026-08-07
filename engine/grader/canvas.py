@@ -27,6 +27,8 @@ from typing import Any
 
 import httpx
 
+from grader.db import Database
+
 CLI_PATH = os.environ.get("CANVAS_PP_CLI", "canvas-pp-cli")
 CREDS_PATHS = [
     Path.home() / ".local/share/canvas-pp-cli/credentials.toml",
@@ -461,14 +463,8 @@ class OfflinePostQueue:
     Each entry carries enough context to retry without re-computing the grade.
     """
 
-    def __init__(self, path: Path | str = "fixtures/post_queue.db") -> None:
-        import sqlite3
-        self.path = Path(path)
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.db = sqlite3.connect(str(self.path), check_same_thread=False)
-        # Shared across the request threadpool and the grading thread; see exemplars.py.
-        self.db.execute("PRAGMA journal_mode=WAL")
-        self.db.row_factory = sqlite3.Row
+    def __init__(self, db: Database) -> None:
+        self.db = db
         self.db.executescript("""
             CREATE TABLE IF NOT EXISTS post_queue (
                 id          INTEGER PRIMARY KEY,

@@ -27,10 +27,11 @@ import math
 import sqlite3
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Iterable
 
 import httpx
+
+from grader.db import Database
 
 EMBED_MODEL = "nomic-embed-text"
 EMBED_URL = "http://localhost:11434/api/embeddings"
@@ -89,6 +90,26 @@ def embed(texts: list[str], *, url: str = EMBED_URL, model: str = EMBED_MODEL) -
     return out
 
 
+def _backfill_embedding_model(conn: sqlite3.Connection) -> None:
+    """Add and backfill `embedding_model` on stores written before it existed.
+
+    Any vector already on disk was produced while the model was the hardcoded
+    EMBED_MODEL constant, so backfilling that value is accurate rather than a guess
+    — and it keeps a teacher's existing exemplars retrievable across the upgrade.
+
+    Introspects rather than assuming: this has to run against databases that
+    predate the migration ledger and therefore already have the column.
+    """
+    columns = {r["name"] for r in conn.execute("PRAGMA table_info(exemplars)")}
+    if "embedding_model" not in columns:
+        conn.execute("ALTER TABLE exemplars ADD COLUMN embedding_model TEXT")
+    conn.execute(
+        "UPDATE exemplars SET embedding_model = ? "
+        "WHERE embedding_model IS NULL AND embedding IS NOT NULL",
+        (EMBED_MODEL,),
+    )
+
+
 def cosine(a: list[float], b: list[float]) -> float:
     if len(a) != len(b):
         # zip() would truncate to the shorter vector and return a plausible-looking
@@ -113,37 +134,14 @@ class ExemplarStore:
 
     def __init__(
         self,
-        path: Path | str = "fixtures/exemplars.db",
+        db: Database,
         *,
         embedding_model: str = EMBED_MODEL,
     ) -> None:
-        self.path = Path(path)
+        self.db = db
         self.embedding_model = embedding_model
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.db = sqlite3.connect(self.path)
-        # Read by the request threadpool while the grading thread writes. WAL is
-        # written into the file header, so a replacement connection inherits it.
-        self.db.execute("PRAGMA journal_mode=WAL")
-        self.db.row_factory = sqlite3.Row
         self.db.executescript(SCHEMA)
-        self._migrate_embedding_model()
-
-    def _migrate_embedding_model(self) -> None:
-        """Add and backfill `embedding_model` on stores written before it existed.
-
-        Any vector already on disk was produced while the model was the hardcoded
-        EMBED_MODEL constant, so backfilling that value is accurate rather than a guess
-        — and it keeps a teacher's existing exemplars retrievable across the upgrade.
-        """
-        columns = {r["name"] for r in self.db.execute("PRAGMA table_info(exemplars)")}
-        if "embedding_model" not in columns:
-            self.db.execute("ALTER TABLE exemplars ADD COLUMN embedding_model TEXT")
-        self.db.execute(
-            "UPDATE exemplars SET embedding_model = ? "
-            "WHERE embedding_model IS NULL AND embedding IS NOT NULL",
-            (EMBED_MODEL,),
-        )
-        self.db.commit()
+        self.db.migrate("exemplars", [_backfill_embedding_model])
 
     def for_model(self, embedding_model: str) -> ExemplarStore:
         """A view of this store bound to one embedding model, sharing its connection.
