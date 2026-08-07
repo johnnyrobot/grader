@@ -7,7 +7,6 @@ Exemplar derived from it, had no test at all.
 """
 
 import json
-import sqlite3
 import sys
 from pathlib import Path
 
@@ -18,7 +17,7 @@ sys.path.insert(0, str(Path(__file__).parents[1]))
 from grader.db import Database
 from grader.exemplars import ExemplarStore
 from grader.overrides import OverrideStore
-from grader.schema import CriterionScore, Flag, GradeDraft
+from grader.schema import CriterionScore, GradeDraft
 
 GRADE_SCHEMA = """
 CREATE TABLE IF NOT EXISTS submissions (
@@ -37,16 +36,11 @@ CREATE TABLE IF NOT EXISTS grade_records (
 
 @pytest.fixture
 def engine_db(tmp_path):
-    """A stand-in for api._db: a fresh connection per call, same file."""
-    path = tmp_path / "engine.db"
-
-    def factory():
-        conn = sqlite3.connect(str(path))
-        conn.row_factory = sqlite3.Row
-        conn.executescript(GRADE_SCHEMA)
-        return conn
-
-    return factory
+    """A stand-in for api._db: one connection, handed back on every call."""
+    db = Database.at(tmp_path / "engine.db")
+    db.executescript(GRADE_SCHEMA)
+    yield lambda: db
+    db.close()
 
 
 @pytest.fixture
@@ -71,7 +65,6 @@ def seeded(engine_db):
         (json.dumps({"c1": 3.0}),),
     )
     db.commit()
-    db.close()
     return engine_db
 
 
@@ -199,7 +192,6 @@ def _add_grade(engine_db, gid, *, student_ref="98765", approved=True, posted=Fal
          "2026-01-02T00:00:00Z" if posted else None),
     )
     db.commit()
-    db.close()
 
 
 def test_postable_sorts_grades_by_why_they_may_or_may_not_go(engine_db, audit_log):

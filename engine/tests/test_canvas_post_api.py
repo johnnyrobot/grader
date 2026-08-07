@@ -81,7 +81,6 @@ def test_canvas_post_uses_canvas_user_id_from_imported_submission(tmp_path, monk
         ),
     )
     db.commit()
-    db.close()
 
     result = api.canvas_post(
         api.CanvasPostReq(course_id=10, assignment_id=20, grade_ids=["grade_local"]),
@@ -134,7 +133,6 @@ def test_canvas_post_skips_grade_without_canvas_user_id(tmp_path, monkeypatch, a
         ),
     )
     db.commit()
-    db.close()
 
     with pytest.raises(Exception) as exc_info:
         api.canvas_post(
@@ -191,7 +189,6 @@ def test_grade_batch_can_limit_to_requested_submission_ids(tmp_path, monkeypatch
             (sub_id, "canvas_10_20", sub_id, "student text", "imported", api._now()),
         )
     db.commit()
-    db.close()
 
     result = api.grade_batch(
         api.GradeBatch(assignment_id="canvas_10_20", submission_ids=["sub_keep"]),
@@ -467,7 +464,6 @@ def test_override_grade_does_not_mutate_the_shared_exemplar_store(tmp_path, monk
          "standard", api._now()),
     )
     db.commit()
-    db.close()
 
     with pytest.raises(RuntimeError):
         api.override_grade("gr_ov", api.OverrideRequest(
@@ -492,7 +488,6 @@ def _seed_submission(api, assignment_id="canvas_10_20", sub_id="sub_1"):
         (sub_id, assignment_id, sub_id, "student text", "imported", api._now()),
     )
     db.commit()
-    db.close()
 
 
 def test_grade_batch_refuses_to_pick_between_rubrics(tmp_path, monkeypatch, api_module):
@@ -582,7 +577,6 @@ def test_override_scales_against_the_rubric_the_grade_was_produced_against(
          "standard", api._now()),
     )
     db.commit()
-    db.close()
 
     with pytest.raises(RuntimeError):
         api.override_grade("gr_ov", api.OverrideRequest(
@@ -619,7 +613,6 @@ def test_grade_records_gains_rubric_title_on_an_older_database(tmp_path, monkeyp
     db = api._db()
     columns = {r["name"] for r in db.execute("PRAGMA table_info(grade_records)")}
     row = db.execute("SELECT * FROM grade_records WHERE id = 'gr_old'").fetchone()
-    db.close()
 
     assert "rubric_title" in columns
     assert row["rubric_title"] is None  # existing rows survive, unattributed
@@ -684,7 +677,6 @@ def test_grading_job_accounts_for_every_submission_it_was_given(
         ("sub_real", "a1", "s1", "student text", "imported", api._now()),
     )
     db.commit()
-    db.close()
 
     api._jobs["job_1"] = {"status": "queued", "total": 2, "done": 0, "assignment_id": "a1"}
     api._run_grading_job(
@@ -724,7 +716,6 @@ def test_grading_job_defers_to_the_single_cold_start_threshold(
         ("sub_1", "a1", "s1", "student text", "imported", api._now()),
     )
     db.commit()
-    db.close()
 
     api._jobs["job_c"] = {"status": "queued", "total": 1, "done": 0, "assignment_id": "a1"}
     api._run_grading_job(
@@ -771,7 +762,6 @@ def test_canvas_post_will_not_post_the_same_grade_twice(tmp_path, monkeypatch, a
          "standard", api._now(), api._now()),
     )
     db.commit()
-    db.close()
 
     first = api.canvas_post(
         api.CanvasPostReq(course_id=10, assignment_id=20, grade_ids=["gr_p"]),

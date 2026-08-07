@@ -21,7 +21,6 @@ import json
 import logging
 import os
 import secrets
-import sqlite3
 import threading
 from collections import defaultdict
 from datetime import datetime, timezone
@@ -152,7 +151,7 @@ CREATE INDEX IF NOT EXISTS idx_audit_entity ON audit_events(entity_ref);
 """
 
 
-def _migrate_grade_records(db: sqlite3.Connection) -> None:
+def _migrate_grade_records(db: Database) -> None:
     """Add rubric_title to grade_records on databases made before it existed.
 
     CREATE TABLE IF NOT EXISTS leaves an existing table alone, so a teacher
@@ -164,13 +163,38 @@ def _migrate_grade_records(db: sqlite3.Connection) -> None:
         db.commit()
 
 
-def _db() -> sqlite3.Connection:
-    db = sqlite3.connect(str(DB_PATH))
-    db.row_factory = sqlite3.Row
-    db.executescript(DB_SCHEMA)
-    _migrate_grade_records(db)
-    db.execute("PRAGMA journal_mode=WAL")
-    return db
+_engine_db: Database | None = None
+_engine_db_path: Path | None = None
+_engine_db_lock = threading.Lock()
+
+
+def _db() -> Database:
+    """The engine's own tables, on one connection held for the process lifetime.
+
+    This used to open a connection and re-run executescript(DB_SCHEMA) on every
+    one of nineteen call sites. Now it matches the policy grader.db already sets
+    for the four other stores: one connection, WAL, a busy timeout, and
+    check_same_thread off, because the request threadpool reads while the
+    background grading thread writes.
+
+    Callers must not close it — closing a shared connection breaks the next
+    request, not the current one.
+
+    Opened lazily and keyed on DB_PATH. Tests rebind DB_PATH after import, so
+    connecting at import would bind the real data directory, and caching without
+    the key would keep serving the previous test's database.
+    """
+    global _engine_db, _engine_db_path
+    with _engine_db_lock:
+        if _engine_db is None or _engine_db_path != DB_PATH:
+            if _engine_db is not None:
+                _engine_db.close()
+            db = Database.at(DB_PATH)
+            db.executescript(DB_SCHEMA)
+            _migrate_grade_records(db)
+            db.commit()
+            _engine_db, _engine_db_path = db, DB_PATH
+        return _engine_db
 
 
 def _now() -> str:
@@ -185,7 +209,6 @@ def _audit(entity: str, actor: str, event: str, payload: dict) -> None:
         (entity, actor, event, json.dumps(payload), _now()),
     )
     db.commit()
-    db.close()
 
 
 # ---------------------------------------------------------------------------
@@ -222,17 +245,15 @@ def _broadcast(msg: dict) -> None:
 class _SqliteGradeStore:
     """The engine's own tables, behind the GradeStore port.
 
-    A fresh connection per operation, matching every other writer here.
+    Runs on the background grading thread, against the same connection the
+    request threadpool uses — which is what WAL and the busy timeout in
+    grader.db are for.
     """
 
     def fetch_submission(self, submission_id: str) -> SubmissionText | None:
-        db = _db()
-        try:
-            row = db.execute(
-                "SELECT * FROM submissions WHERE id = ?", (submission_id,)
-            ).fetchone()
-        finally:
-            db.close()
+        row = _db().execute(
+            "SELECT * FROM submissions WHERE id = ?", (submission_id,)
+        ).fetchone()
         if row is None:
             return None
         return SubmissionText(
@@ -242,27 +263,24 @@ class _SqliteGradeStore:
     def save(self, outcome: GradeOutcome, *, rubric_title: str) -> None:
         record = outcome.record
         db = _db()
-        try:
-            db.execute(
-                "INSERT OR REPLACE INTO grade_records "
-                "(id, submission_id, assignment_id, rubric_version, rubric_title, "
-                "ai_scores_json, ai_feedback, ai_confidence, ai_flags_json, lane, created_at) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-                (outcome.record_id, outcome.submission_id, record["assignment_id"], 1,
-                 rubric_title,
-                 json.dumps(record.get("ai_scores")) if record.get("ai_scores") else None,
-                 record.get("ai_feedback"),
-                 record.get("confidence"),
-                 json.dumps(record.get("flags")) if record.get("flags") else None,
-                 record.get("lane"), _now()),
-            )
-            db.execute(
-                "UPDATE submissions SET state = ? WHERE id = ?",
-                (outcome.state, outcome.submission_id),
-            )
-            db.commit()
-        finally:
-            db.close()
+        db.execute(
+            "INSERT OR REPLACE INTO grade_records "
+            "(id, submission_id, assignment_id, rubric_version, rubric_title, "
+            "ai_scores_json, ai_feedback, ai_confidence, ai_flags_json, lane, created_at) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            (outcome.record_id, outcome.submission_id, record["assignment_id"], 1,
+             rubric_title,
+             json.dumps(record.get("ai_scores")) if record.get("ai_scores") else None,
+             record.get("ai_feedback"),
+             record.get("confidence"),
+             json.dumps(record.get("flags")) if record.get("flags") else None,
+             record.get("lane"), _now()),
+        )
+        db.execute(
+            "UPDATE submissions SET state = ? WHERE id = ?",
+            (outcome.state, outcome.submission_id),
+        )
+        db.commit()
 
     def audit(self, entity: str, actor: str, event: str, payload: dict) -> None:
         _audit(entity, actor, event, payload)
@@ -385,7 +403,6 @@ def import_submissions(req: ImportSubmissions) -> dict:
         )
         count += 1
     db.commit()
-    db.close()
     _audit(req.assignment_id, "teacher", "import", {"count": count})
     return {"imported": count}
 
@@ -458,7 +475,6 @@ def grade_batch(req: GradeBatch, settings: Settings = Depends(current_settings))
             "SELECT id FROM submissions WHERE assignment_id = ? AND state = 'imported'",
             (req.assignment_id,),
         ).fetchall()
-    db.close()
     sub_ids = [r["id"] for r in rows]
     if not sub_ids:
         raise HTTPException(400, "no submissions to grade for this assignment")
@@ -507,7 +523,6 @@ def get_queue(assignment_id: str | None = None, lane: str | None = None) -> dict
         query += " WHERE " + " AND ".join(conditions)
     query += " ORDER BY created_at DESC"
     rows = db.execute(query, params).fetchall()
-    db.close()
 
     items = []
     lane_counts: dict[str, int] = defaultdict(int)
@@ -566,10 +581,8 @@ def override_grade(grade_id: str, req: OverrideRequest,
     db = _db()
     row = db.execute("SELECT * FROM grade_records WHERE id = ?", (grade_id,)).fetchone()
     if not row:
-        db.close()
         raise HTTPException(404, "grade not found")
     sub_row = db.execute("SELECT * FROM submissions WHERE id = ?", (row["submission_id"],)).fetchone()
-    db.close()
 
     ai_scores = json.loads(row["ai_scores_json"]) if row["ai_scores_json"] else {}
     ai_flags = json.loads(row["ai_flags_json"]) if row["ai_flags_json"] else []
@@ -719,7 +732,6 @@ def get_audit(entity: str | None = None, limit: int = 50) -> list[dict]:
         rows = db.execute(
             "SELECT * FROM audit_events ORDER BY id DESC LIMIT ?", (limit,),
         ).fetchall()
-    db.close()
     return [{"id": r["id"], "entity": r["entity_ref"], "actor": r["actor"],
              "event": r["event_type"], "payload": json.loads(r["payload"]),
              "created_at": r["created_at"]} for r in rows]
@@ -833,7 +845,6 @@ def canvas_import(req: CanvasImportReq,
         imported_submissions.append({"id": sub_id, "canvas_user_id": str(user_id)})
 
     db.commit()
-    db.close()
     _audit(f"canvas_{req.course_id}_{req.assignment_id}", "canvas", "import",
            {"imported": imported, "failures": len(failures)})
     return {"imported": imported, "submissions": imported_submissions, "failures": failures}

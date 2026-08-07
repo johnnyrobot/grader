@@ -113,3 +113,97 @@ def test_store_accepts_a_database(store_cls):
 
     store = store_cls(Database.memory())
     assert store.db.execute("SELECT 1").fetchone()[0] == 1
+
+
+# ---------------------------------------------------------------------------
+# The engine's own tables get the same policy as the four stores
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def api_module():
+    import importlib
+
+    sys.modules.pop("api", None)
+    yield importlib.import_module("api")
+    sys.modules.pop("api", None)
+
+
+def test_engine_db_is_opened_once_and_reused(tmp_path, monkeypatch, api_module):
+    """Nineteen call sites used to reconnect and re-run the schema every time."""
+    api = api_module
+    monkeypatch.setattr(api, "DB_PATH", tmp_path / "engine.db")
+
+    assert api._db() is api._db()
+
+
+def test_engine_db_is_not_opened_at_import(tmp_path, monkeypatch, api_module):
+    """Tests rebind DB_PATH after import; connecting eagerly would miss that."""
+    api = api_module
+    monkeypatch.setattr(api, "DB_PATH", tmp_path / "engine.db")
+
+    assert api._db().path == tmp_path / "engine.db"
+
+
+def test_rebinding_db_path_reaches_the_new_database(tmp_path, monkeypatch, api_module):
+    """A cache without this key would serve the previous test's database."""
+    api = api_module
+    monkeypatch.setattr(api, "DB_PATH", tmp_path / "first.db")
+    first = api._db()
+    first.execute(
+        "INSERT INTO submissions (id, assignment_id, text, created_at) "
+        "VALUES ('s1', 'a1', 'text', 'now')"
+    )
+    first.commit()
+
+    monkeypatch.setattr(api, "DB_PATH", tmp_path / "second.db")
+    second = api._db()
+
+    assert second is not first
+    assert second.execute("SELECT COUNT(*) FROM submissions").fetchone()[0] == 0
+
+
+def test_engine_db_gets_the_app_connection_policy(tmp_path, monkeypatch, api_module):
+    api = api_module
+    monkeypatch.setattr(api, "DB_PATH", tmp_path / "engine.db")
+
+    db = api._db()
+
+    assert db.execute("PRAGMA journal_mode").fetchone()[0].lower() == "wal"
+    assert db.execute("PRAGMA busy_timeout").fetchone()[0] > 0
+
+
+def test_engine_db_is_usable_from_the_background_grading_thread(
+    tmp_path, monkeypatch, api_module
+):
+    """Grading runs off-thread and writes through the same connection.
+
+    A connection left on sqlite3's default check_same_thread would raise here
+    rather than at import, so nothing but a cross-thread write catches it.
+    """
+    import threading
+
+    api = api_module
+    monkeypatch.setattr(api, "DB_PATH", tmp_path / "engine.db")
+    api._db()  # opened on this thread
+
+    failure = []
+
+    def write():
+        try:
+            db = api._db()
+            db.execute(
+                "INSERT INTO submissions (id, assignment_id, text, created_at) "
+                "VALUES ('s1', 'a1', 'from another thread', 'now')"
+            )
+            db.commit()
+        except Exception as exc:  # noqa: BLE001 — reported, not swallowed
+            failure.append(exc)
+
+    thread = threading.Thread(target=write)
+    thread.start()
+    thread.join()
+
+    assert not failure, failure
+    assert api._db().execute(
+        "SELECT text FROM submissions WHERE id = 's1'"
+    ).fetchone()["text"] == "from another thread"

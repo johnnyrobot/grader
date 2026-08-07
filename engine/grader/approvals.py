@@ -24,14 +24,16 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import Enum
 
+from grader.db import Database
 from grader.exemplars import ExemplarStore
 from grader.overrides import Override, OverrideStore, apply_override
 from grader.schema import GradeDraft
 
-# A fresh connection per call, matching engine.api._db. Passed as a callable
-# rather than a connection so that redirecting the database after import — which
-# every test does — still reaches this module.
-DbFactory = Callable[[], sqlite3.Connection]
+# The engine's shared connection, matching engine.api._db. Passed as a callable
+# rather than a Database so that redirecting the database after import — which
+# every test does — still reaches this module. Never closed here: it outlives
+# any one call, and closing it would break the next one.
+DbFactory = Callable[[], Database]
 Audit = Callable[[str, str, str, dict], None]
 
 DEFAULT_COMMENT = "Posted by Grader after teacher approval."
@@ -150,17 +152,14 @@ class ApprovalStore:
 
     def approve(self, grade_id: str, *, actor: str = "teacher") -> Approval:
         db = self._db()
-        try:
-            row = db.execute(
-                "SELECT approved_at FROM grade_records WHERE id = ?", (grade_id,)
-            ).fetchone()
-            if row is None:
-                raise GradeNotFound(grade_id)
-            if row["approved_at"]:
-                raise AlreadyApproved(grade_id)
-            approved_at = self._stamp_approved(db, grade_id)
-        finally:
-            db.close()
+        row = db.execute(
+            "SELECT approved_at FROM grade_records WHERE id = ?", (grade_id,)
+        ).fetchone()
+        if row is None:
+            raise GradeNotFound(grade_id)
+        if row["approved_at"]:
+            raise AlreadyApproved(grade_id)
+        approved_at = self._stamp_approved(db, grade_id)
 
         self._audit(grade_id, actor, "approve", {})
         return Approval(grade_id=grade_id, approved_at=approved_at)
@@ -186,13 +185,9 @@ class ApprovalStore:
         via `ExemplarStore.for_model(...)` — never the shared singleton, which
         in-flight grading threads are reading.
         """
-        db = self._db()
-        try:
-            exists = db.execute(
-                "SELECT 1 FROM grade_records WHERE id = ?", (grade_id,)
-            ).fetchone()
-        finally:
-            db.close()
+        exists = self._db().execute(
+            "SELECT 1 FROM grade_records WHERE id = ?", (grade_id,)
+        ).fetchone()
         if not exists:
             raise GradeNotFound(grade_id)
 
@@ -208,16 +203,12 @@ class ApprovalStore:
             rubric_version=rubric_version,
         )
 
-        db = self._db()
-        try:
-            approved_at = self._stamp_approved(
-                db,
-                grade_id,
-                teacher_scores=json.dumps(teacher_scores),
-                teacher_feedback=teacher_feedback,
-            )
-        finally:
-            db.close()
+        approved_at = self._stamp_approved(
+            self._db(),
+            grade_id,
+            teacher_scores=json.dumps(teacher_scores),
+            teacher_feedback=teacher_feedback,
+        )
 
         self._audit(
             grade_id, actor, "override",
@@ -231,31 +222,28 @@ class ApprovalStore:
         ready: list[PostableGrade] = []
         skipped: list[PostSkip] = []
         db = self._db()
-        try:
-            for gid in grade_ids:
-                row = db.execute(
-                    "SELECT gr.*, s.student_ref AS canvas_user_id FROM grade_records gr "
-                    "LEFT JOIN submissions s ON s.id = gr.submission_id WHERE gr.id = ?",
-                    (gid,),
-                ).fetchone()
-                skip = _why_not_postable(gid, row)
-                if skip is not None:
-                    skipped.append(skip)
-                    continue
-                teacher = json.loads(row["teacher_scores_json"] or "{}")
-                ai = json.loads(row["ai_scores_json"] or "{}")
-                scores = teacher or ai
-                ready.append(
-                    PostableGrade(
-                        grade_id=gid,
-                        canvas_user_id=str(row["canvas_user_id"]),
-                        posted_grade=sum(scores.values()) if scores else 0.0,
-                        text_comment=row["teacher_feedback"] or row["ai_feedback"]
-                        or DEFAULT_COMMENT,
-                    )
+        for gid in grade_ids:
+            row = db.execute(
+                "SELECT gr.*, s.student_ref AS canvas_user_id FROM grade_records gr "
+                "LEFT JOIN submissions s ON s.id = gr.submission_id WHERE gr.id = ?",
+                (gid,),
+            ).fetchone()
+            skip = _why_not_postable(gid, row)
+            if skip is not None:
+                skipped.append(skip)
+                continue
+            teacher = json.loads(row["teacher_scores_json"] or "{}")
+            ai = json.loads(row["ai_scores_json"] or "{}")
+            scores = teacher or ai
+            ready.append(
+                PostableGrade(
+                    grade_id=gid,
+                    canvas_user_id=str(row["canvas_user_id"]),
+                    posted_grade=sum(scores.values()) if scores else 0.0,
+                    text_comment=row["teacher_feedback"] or row["ai_feedback"]
+                    or DEFAULT_COMMENT,
                 )
-        finally:
-            db.close()
+            )
         return PostableBatch(ready=ready, skipped=skipped)
 
     def mark_posted(self, grade_ids: Sequence[str]) -> None:
@@ -269,20 +257,17 @@ class ApprovalStore:
             return
         posted_at = _now()
         db = self._db()
-        try:
-            db.executemany(
-                "UPDATE grade_records SET posted_at = ? WHERE id = ?",
-                [(posted_at, gid) for gid in grade_ids],
-            )
-            db.commit()
-        finally:
-            db.close()
+        db.executemany(
+            "UPDATE grade_records SET posted_at = ? WHERE id = ?",
+            [(posted_at, gid) for gid in grade_ids],
+        )
+        db.commit()
 
     # -- internals ------------------------------------------------------------
 
     def _stamp_approved(
         self,
-        db: sqlite3.Connection,
+        db: Database,
         grade_id: str,
         *,
         teacher_scores: str | None = None,
