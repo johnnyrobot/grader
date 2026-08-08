@@ -126,10 +126,10 @@ export function CalibrationScreen({ assignmentId, onClose }: { assignmentId: str
               <StatCard
                 label="Override rate"
                 value={`${Math.round(health.override_rate * 100)}%`}
-                // The rate's own denominator is the graded items the engine counts,
-                // which is not `n` — an approval you changed nothing on is measured
-                // but is not a correction.
-                detail={`${health.override_count} of ${health.exemplar_count} graded items were corrected`}
+                // Exemplars, not approvals: every override produces one, so this is
+                // the rate's own denominator. An approval you changed nothing on is
+                // measured above but is not a correction.
+                detail={`${health.override_count} of ${health.exemplar_count} exemplars came from an override`}
               />
               <StatCard
                 label="Exemplars kept"

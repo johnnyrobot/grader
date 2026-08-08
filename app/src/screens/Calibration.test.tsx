@@ -64,7 +64,7 @@ describe("CalibrationScreen", () => {
 
     // Override rate, Exemplar count and n.
     expect(screen.getByText("27%")).toBeInTheDocument();
-    expect(screen.getByText("8 of 30 graded items were corrected")).toBeInTheDocument();
+    expect(screen.getByText("8 of 30 exemplars came from an override")).toBeInTheDocument();
     expect(screen.getByRole("group", { name: "Exemplars kept" })).toHaveTextContent("30");
     expect(screen.getByRole("group", { name: "Approvals measured" })).toHaveTextContent("34");
 
