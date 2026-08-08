@@ -178,6 +178,35 @@ This is the fifth instance this week of the same shape: **code that exists, is t
 never called from where a user would reach it.** It is worth treating as the default suspicion
 when reviewing this repo — start from "who calls this?", not "is it implemented?".
 
+#### Closed, 2026-08-07: the loop now exists in the app
+
+`app/src/api.ts` gained the `/api/canvas/*` client functions, and the queue screen gained both
+ends of the round-trip, so **import → grade → approve → post** is now reachable in the product.
+
+Neither half needed a new engine route. `/api/canvas/import` already takes a course and
+assignment id, and the queue already had the teacher typing an assignment id, so the import
+control takes the two Canvas ids the same way. On success it sets the assignment field to
+`canvas_<course>_<assignment>` — the key the engine files submissions under — which makes the
+batch appear in the queue *and* makes `canvasTargetOf()` recognise it as postable. The two halves
+meet without retyping.
+
+What is still not in the UI, all of it with client functions already written:
+
+- **The offline post queue.** `fetchPostQueue` and `flushPostQueue` exist; no screen shows the
+  pending count or offers a flush. A teacher whose post queued (FR-3.5) is told so in the
+  receipt, but has no way to see or retry it later.
+- **Comment attachments.** `attachToGrade` / `listGradeAttachments` exist; nothing calls them,
+  so the annotated files written by `/api/writeback/*` still cannot be chosen for posting from
+  the app.
+- **Course and assignment picking.** PRD Flow 2 asks to "pick course/assignment", which needs
+  `/api/canvas/courses`. The engine has four Canvas routes and listing is not among them, so the
+  teacher must know the numeric ids.
+
+**`artifacts/release-evidence/frontend.json` is now stale.** It records 16 screens and 167
+controls captured 2026-07-21, before any of these controls existed. The required-screen list is
+unchanged so the gate still passes, but the recorded control count no longer describes the app —
+regenerate the visual sweep before quoting it.
+
 ### What the fence still owes the release matrix
 
 **The fairness row is the one gate still standing on pre-fence evidence.** `engine/gates/bias.py`
