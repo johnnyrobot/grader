@@ -46,20 +46,40 @@ class Attachment:
         return self.path.exists()
 
 
-class AttachmentStore:
-    """The teacher's choice of which files ride along with a posted grade."""
+class OutsideAttachmentRoot(ValueError):
+    """A path that would send a file the app does not own to Canvas."""
 
-    def __init__(self, db: Database) -> None:
+
+class AttachmentStore:
+    """The teacher's choice of which files ride along with a posted grade.
+
+    Scoped to `root`. Attaching is the one place where a path chosen by a client
+    decides which bytes leave this machine — `canvas_post` uploads whatever is
+    attached — so an unconstrained path here is an arbitrary-file-read wired to
+    an outbound request, and the first product invariant is that student data
+    stays on the device. Confining attachments to the app's own data directory
+    keeps the feature (writeback writes its annotated copies there) without
+    letting `~/.ssh/id_rsa` or the settings file holding the Canvas token be
+    named as feedback.
+    """
+
+    def __init__(self, db: Database, root: Path | str) -> None:
         self.db = db
+        self.root = Path(root).expanduser().resolve()
         self.db.executescript(SCHEMA)
 
     def attach(self, grade_id: str, path: Path | str) -> Attachment:
         """Record `path` as going out with `grade_id`.
 
         Refuses a file that is not there: the failure belongs at the moment the
-        teacher chooses it, not in the middle of posting a batch.
+        teacher chooses it, not in the middle of posting a batch. Refuses one
+        outside `root` for the reason in the class docstring.
         """
         resolved = Path(path).expanduser().resolve()
+        if not resolved.is_relative_to(self.root):
+            raise OutsideAttachmentRoot(
+                f"attachments must live under {self.root}, got {resolved}"
+            )
         if not resolved.is_file():
             raise FileNotFoundError(f"no such file to attach: {resolved}")
         now = datetime.now(timezone.utc).isoformat()

@@ -74,6 +74,7 @@ def triage(
     allow_vote: bool = True,
     low_confidence: float = LOW_CONFIDENCE,
     high_confidence: float = HIGH_CONFIDENCE,
+    scanned: bool = False,
 ) -> Triage:
     """Assign a review lane. Escalates to a consistency vote only when it's worth paying for."""
     if not 0 <= low_confidence < high_confidence <= 1:
@@ -138,6 +139,15 @@ def triage(
             reasons.append("open-ended criteria: style bias risk, not auto-cleared")
     else:
         lane = Lane.STANDARD
+
+    # Scanned work never auto-clears, however confident the grade looks. The
+    # model is scoring a transcription, and a word OCR misread is invisible to
+    # it — the confidence it reports is about the score, not about whether the
+    # page was read correctly. A floor, not a bypass: the reasons above still
+    # explain what the score itself looked like.
+    if scanned and lane != Lane.REVIEW_FIRST:
+        lane = Lane.REVIEW_FIRST
+        reasons.append("scanned: transcription needs a human read")
 
     if not reasons:
         reasons.append("confident, no flags")

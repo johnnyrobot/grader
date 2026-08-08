@@ -17,7 +17,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parents[1]))
 
-from grader.attachments import AttachmentStore  # noqa: E402
+from grader.attachments import AttachmentStore, OutsideAttachmentRoot  # noqa: E402
 from grader.canvas import OfflinePostQueue, upload_comment_attachment  # noqa: E402
 from grader.db import Database  # noqa: E402
 from grader.settings import SettingsPatch  # noqa: E402
@@ -27,8 +27,8 @@ from grader.settings import SettingsPatch  # noqa: E402
 
 
 @pytest.fixture
-def store():
-    return AttachmentStore(Database.memory())
+def store(tmp_path):
+    return AttachmentStore(Database.memory(), tmp_path)
 
 
 @pytest.fixture
@@ -163,7 +163,9 @@ def api_module():
 def _engine_with_approved_grade(api, tmp_path, monkeypatch):
     monkeypatch.setattr(api, "DB_PATH", tmp_path / "engine.db")
     monkeypatch.setattr(api, "SETTINGS_FILE", tmp_path / "settings.json")
-    monkeypatch.setattr(api, "_attachments", AttachmentStore(Database.memory()))
+    monkeypatch.setattr(
+        api, "_attachments", AttachmentStore(Database.memory(), tmp_path)
+    )
     monkeypatch.setattr(api, "_post_queue", OfflinePostQueue(Database.memory()))
     api._settings_store().update(
         SettingsPatch(
@@ -290,3 +292,42 @@ def test_ids_already_uploaded_survive_into_the_queue_when_the_post_fails(
 
     assert result["queued"] == 1
     assert json.loads(api._post_queue.pending()[0]["file_ids"]) == [4242]
+
+
+# -- What may be sent --------------------------------------------------------
+
+
+def test_a_file_outside_the_data_directory_cannot_be_attached(store, tmp_path):
+    """Attaching decides which bytes leave the machine.
+
+    Without this bound the route is an arbitrary local file read wired to an
+    outbound Canvas upload — `~/.ssh/id_rsa`, or the settings file holding the
+    teacher's Canvas token, named as "feedback".
+    """
+    outside = tmp_path.parent / "secrets.txt"
+    outside.write_text("ssh-rsa AAAA...")
+
+    with pytest.raises(OutsideAttachmentRoot):
+        store.attach("gr_1", outside)
+
+    assert store.for_grade("gr_1") == []
+
+
+def test_a_traversal_path_cannot_escape_the_data_directory(store, tmp_path):
+    outside = tmp_path.parent / "secrets.txt"
+    outside.write_text("ssh-rsa AAAA...")
+
+    with pytest.raises(OutsideAttachmentRoot):
+        store.attach("gr_1", tmp_path / ".." / "secrets.txt")
+
+
+def test_a_symlink_pointing_out_of_the_data_directory_cannot_be_attached(
+    store, tmp_path
+):
+    outside = tmp_path.parent / "secrets.txt"
+    outside.write_text("ssh-rsa AAAA...")
+    link = tmp_path / "feedback.docx"
+    link.symlink_to(outside)
+
+    with pytest.raises(OutsideAttachmentRoot):
+        store.attach("gr_1", link)

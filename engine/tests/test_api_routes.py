@@ -347,7 +347,9 @@ def _seed_grade(api):
 def test_attaching_a_file_to_a_grade_lists_it_back(client, auth, api, tmp_path, monkeypatch):
     from grader.attachments import AttachmentStore
 
-    monkeypatch.setattr(api, "_attachments", AttachmentStore(Database.memory()))
+    monkeypatch.setattr(
+        api, "_attachments", AttachmentStore(Database.memory(), tmp_path)
+    )
     _seed_grade(api)
     doc = tmp_path / "feedback.docx"
     doc.write_text("annotated")
@@ -367,7 +369,9 @@ def test_attaching_to_a_grade_that_does_not_exist_is_a_404(
 ):
     from grader.attachments import AttachmentStore
 
-    monkeypatch.setattr(api, "_attachments", AttachmentStore(Database.memory()))
+    monkeypatch.setattr(
+        api, "_attachments", AttachmentStore(Database.memory(), tmp_path)
+    )
     doc = tmp_path / "feedback.docx"
     doc.write_text("annotated")
 
@@ -380,10 +384,33 @@ def test_attaching_to_a_grade_that_does_not_exist_is_a_404(
 def test_attaching_a_missing_file_is_a_404(client, auth, api, tmp_path, monkeypatch):
     from grader.attachments import AttachmentStore
 
-    monkeypatch.setattr(api, "_attachments", AttachmentStore(Database.memory()))
+    monkeypatch.setattr(
+        api, "_attachments", AttachmentStore(Database.memory(), tmp_path)
+    )
     _seed_grade(api)
 
     response = client.post("/api/grades/gr_a/attachments", headers=auth,
                            json={"path": str(tmp_path / "gone.docx")})
 
     assert response.status_code == 404
+
+
+def test_attaching_a_file_outside_the_data_directory_is_refused(
+    client, auth, api, tmp_path, monkeypatch
+):
+    """400, not 404: the file exists, it is just not one this app may send."""
+    from grader.attachments import AttachmentStore
+
+    monkeypatch.setattr(
+        api, "_attachments", AttachmentStore(Database.memory(), tmp_path)
+    )
+    _seed_grade(api)
+    outside = tmp_path.parent / "id_rsa"
+    outside.write_text("ssh-rsa AAAA...")
+
+    response = client.post("/api/grades/gr_a/attachments", headers=auth,
+                           json={"path": str(outside)})
+
+    assert response.status_code == 400
+    assert client.get("/api/grades/gr_a/attachments",
+                      headers=auth).json()["attachments"] == []

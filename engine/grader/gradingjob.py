@@ -30,6 +30,9 @@ class SubmissionText:
     id: str
     assignment_id: str
     text: str
+    # True when this text came out of OCR rather than off a keyboard. The grade
+    # cannot see a misread word, so triage refuses to auto-clear it.
+    scanned: bool = False
 
 
 OutcomeState = Literal["drafted", "error", "not_found"]
@@ -198,6 +201,7 @@ class GradingJob:
             materials=self._materials,
             low_confidence=self._low,
             high_confidence=self._high,
+            scanned=submission.scanned,
         )
         return GradeOutcome(
             submission_id=submission.id, record_id=record_id, state="drafted",

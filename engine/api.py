@@ -32,7 +32,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, field_validator
 
 from grader.approvals import AlreadyApproved, ApprovalStore, GradeNotFound
-from grader.attachments import AttachmentStore
+from grader.attachments import AttachmentStore, OutsideAttachmentRoot
 from grader.calibration import cold_start_status, compute_health
 from grader.canvas import OfflinePostQueue
 from grader.db import Database
@@ -107,6 +107,12 @@ def current_settings() -> Settings:
 
 DB_PATH = DATA_DIR / "grader_engine.db"
 
+# submissions.source_kind values. OCR text is a transcription of an image, so it
+# carries a reading error the grade cannot see; handwriting.py has always said
+# scanned work defaults to REVIEW_FIRST, and this is what lets triage do it.
+SCANNED = "scanned"
+TYPED = "text"
+
 DB_SCHEMA = """
 CREATE TABLE IF NOT EXISTS submissions (
     id            TEXT PRIMARY KEY,
@@ -114,6 +120,9 @@ CREATE TABLE IF NOT EXISTS submissions (
     student_ref   TEXT,
     text          TEXT NOT NULL,
     state         TEXT NOT NULL DEFAULT 'imported',
+    -- How the text was obtained. 'scanned' means it came out of OCR, which is
+    -- the signal triage needs to insist a human reads it first.
+    source_kind   TEXT NOT NULL DEFAULT 'text',
     created_at    TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_sub_assignment ON submissions(assignment_id);
@@ -150,6 +159,20 @@ CREATE TABLE IF NOT EXISTS audit_events (
 );
 CREATE INDEX IF NOT EXISTS idx_audit_entity ON audit_events(entity_ref);
 """
+
+
+def _migrate_submissions(db: Database) -> None:
+    """Add source_kind to submissions made before OCR provenance was recorded.
+
+    Defaults to 'text': an existing row is one we cannot retroactively know was
+    scanned, and claiming otherwise would send every old submission to review.
+    """
+    columns = {r["name"] for r in db.execute("PRAGMA table_info(submissions)")}
+    if "source_kind" not in columns:
+        db.execute(
+            "ALTER TABLE submissions ADD COLUMN source_kind TEXT NOT NULL DEFAULT 'text'"
+        )
+        db.commit()
 
 
 def _migrate_grade_records(db: Database) -> None:
@@ -192,6 +215,7 @@ def _db() -> Database:
                 _engine_db.close()
             db = Database.at(DB_PATH)
             db.executescript(DB_SCHEMA)
+            _migrate_submissions(db)
             _migrate_grade_records(db)
             db.commit()
             _engine_db, _engine_db_path = db, DB_PATH
@@ -220,7 +244,7 @@ _exemplar_store = ExemplarStore(Database.at(DATA_DIR / "exemplars.db"))
 _override_store = OverrideStore(Database.at(DATA_DIR / "overrides.db"))
 _rubric_store = RubricStore(Database.at(DATA_DIR / "rubrics.db"))
 _post_queue = OfflinePostQueue(Database.at(DATA_DIR / "post_queue.db"))
-_attachments = AttachmentStore(Database.at(DATA_DIR / "attachments.db"))
+_attachments = AttachmentStore(Database.at(DATA_DIR / "attachments.db"), DATA_DIR)
 
 # Sole owner of grade_records.approved_at and posted_at. Takes _db itself rather
 # than a connection so that redirecting DB_PATH after import still reaches it.
@@ -259,7 +283,10 @@ class _SqliteGradeStore:
         if row is None:
             return None
         return SubmissionText(
-            id=row["id"], assignment_id=row["assignment_id"], text=row["text"]
+            id=row["id"],
+            assignment_id=row["assignment_id"],
+            text=row["text"],
+            scanned=row["source_kind"] == SCANNED,
         )
 
     def save(self, outcome: GradeOutcome, *, rubric_title: str) -> None:
@@ -814,6 +841,7 @@ def canvas_import(req: CanvasImportReq,
         body = sub.get("body", "").strip()
         texts: list[str] = [body] if body else []
 
+        scanned = False
         if req.download_attachments:
             downloads = download_submission_attachments(
                 sub,
@@ -833,6 +861,8 @@ def canvas_import(req: CanvasImportReq,
                     parsed = parse(p, vision_model=settings.model_vision)
                     if parsed.markdown.strip():
                         texts.append(parsed.markdown)
+                        if parsed.source_type == "image":
+                            scanned = True
                     else:
                         # A file that produced no text is a file the teacher has
                         # to look at themselves. Importing it silently leaves a
@@ -851,9 +881,10 @@ def canvas_import(req: CanvasImportReq,
         sub_id = f"sub_{secrets.token_hex(8)}"
         assignment_key = f"canvas_{req.course_id}_{req.assignment_id}"
         db.execute(
-            "INSERT INTO submissions (id, assignment_id, student_ref, text, state, created_at) "
-            "VALUES (?,?,?,?,?,?)",
-            (sub_id, assignment_key, str(user_id), submission_text, "imported", _now()),
+            "INSERT INTO submissions (id, assignment_id, student_ref, text, state, "
+            "source_kind, created_at) VALUES (?,?,?,?,?,?,?)",
+            (sub_id, assignment_key, str(user_id), submission_text, "imported",
+             SCANNED if scanned else TYPED, _now()),
         )
         imported += 1
         imported_submissions.append({"id": sub_id, "canvas_user_id": str(user_id)})
@@ -969,6 +1000,12 @@ def _upload_attachments_for(
 
     file_ids: list[int] = []
     for attachment in _attachments.for_grade(grade.grade_id):
+        # Re-checked here, not only at attach time: a path can be replaced with
+        # a symlink out of the data directory between choosing and posting.
+        if not attachment.path.resolve().is_relative_to(_attachments.root):
+            _audit(grade.grade_id, "canvas", "attachment_refused",
+                   {"path": str(attachment.path)})
+            continue
         if not attachment.exists:
             _audit(grade.grade_id, "canvas", "attachment_missing",
                    {"path": str(attachment.path)})
@@ -1003,6 +1040,9 @@ def attach_to_grade(grade_id: str, req: AttachmentReq) -> dict:
         raise HTTPException(404, f"no such grade: {grade_id}")
     try:
         attachment = _attachments.attach(grade_id, req.path)
+    except OutsideAttachmentRoot as e:
+        # Not 404: the file may well exist. It is not one this app may send.
+        raise HTTPException(400, str(e))
     except FileNotFoundError as e:
         raise HTTPException(404, str(e))
     _audit(grade_id, "teacher", "attach", {"path": str(attachment.path)})
