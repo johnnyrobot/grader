@@ -258,16 +258,32 @@ the failure to grade bought the exemption. This is `gates/result.py`'s own rule 
 evidence was load-bearing for a pass. Fixed; the widened set now correctly reports FAIL, and
 sources with missing items carry an `ungraded` count.
 
-**Four of 120 submissions never finished grading inside the builder, and the engine had no
-bound.** The same four failed at 420s and again at 1200s. Their text is unremarkable — 165–271
-characters against a median of 193.
+**Four of 120 submissions never finished grading, the engine had no bound, and the obvious bound
+does not work.** The same four failed at 420s and again at 1200s. Their text is unremarkable —
+165–271 characters against a median of 193.
 
-What makes them hang is **not settled**. `mohler_q05:E04.Q05.A07` graded in **36s** through
-`grade()` when called directly — the difference from the builder's call being the six anchor
-exemplars it injects. Anchors are the calibration mechanism and are always present in the product
-once a teacher has graded enough, so if anchored prompts are what stall, that matters far more
-than four awkward items. An isolation run was in flight when this was written; **finish it before
-concluding anything about the cause.** The timeout below is the right mitigation either way.
+They are not hanging. They are **generating without end**. Run directly,
+`mohler_q05:E04.Q05.A07` was still decoding at **6,975 tokens** when it was killed, against
+195–784 for a normal grade. This is the reasoning spiral this project already documented for
+Qwen3-VL, reappearing in the Qwen3 text model that replaced it — see
+[[qwen3-vl-unusable-reasoning-spiral]] in the project memory.
+
+**Anchors are implicated.** The same item graded in **36s** with no anchors and ran unbounded
+with the six the builder injects. Anchors are the calibration mechanism and are always present
+once a teacher has graded enough, so this is a product path, not a quirk of the evidence harness.
+What has *not* been established is whether anchors are necessary, sufficient, or merely
+correlated — one item, two conditions, is not a controlled result. Worth pinning down, because if
+anchored prompts spiral at some rate then every calibrated teacher meets it.
+
+**A timeout does not stop it, and the first attempt at this fix was wrong.** `ModelSettings`
+gained `timeout=300` and the call still ran past fifteen minutes. httpx's read timeout resets on
+every byte received, so a model that keeps emitting tokens is never late — it is slow forever. A
+read timeout bounds silence, not duration. `max_tokens` is what bounds a model that will not stop;
+the timeout stays for the case it does cover, a server that goes quiet mid-request.
+
+The omission was structural. Every other network call in the engine is bounded — citations 10–20s,
+Canvas 60–120s, embeddings and vision 120s. Grading is the one call where a *library* holds the
+HTTP client rather than the code holding it directly, and it is the one nobody bounded.
 
 `agent.run_sync()` carried no timeout and neither did the provider's HTTP client, so a hung
 generation blocks the background grading thread and the batch never completes: no draft, no
