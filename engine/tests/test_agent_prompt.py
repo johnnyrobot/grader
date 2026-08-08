@@ -182,6 +182,49 @@ def test_grading_carries_a_timeout_so_one_submission_cannot_stall_a_batch():
     assert GRADE_TIMEOUT_SECONDS > 0
 
 
+def test_a_repetition_penalty_keeps_greedy_decoding_out_of_a_fixed_point():
+    """The cap stops the batch stalling; it does not stop the model looping.
+
+    Reading the emission rather than timing it settled what this is. On
+    mohler_q05:E04.Q05.A07 the model produced 32,815 characters entirely in its
+    `reasoning` channel and not one tool-call token, and the text is an **exact
+    532-character cycle repeated 116 times** — a greedy-decoding fixed point,
+    not deliberation. Three of the four items that failed the 120-item build
+    show the same exact-cycle signature, across three different questions
+    (periods 467/532/421 chars).
+
+    What it cycles on is a contradiction the engine writes itself: SYSTEM_PROMPT
+    rule 1 says grade only against the rubric, the anchor header says match the
+    instructor's standard, and for this item the rubric read literally says 0
+    while anchor 1 shows the near-identical answer "one" scored 2.0 — which is
+    the true human score.
+
+    Resolving that by instruction does not work, which is why the fix is here
+    and not in the prompt. A precedence rule left it looping. A "decide once"
+    rule terminated the spirals but left an *ordinary* item ungraded that grades
+    fine without it — trading one hang for another.
+
+    presence_penalty is chosen over temperature to keep temperature at 0:
+    greedy decoding with deformed logits is still greedy, so the reproducibility
+    the project chose temp 0 for is not spent to buy termination.
+    """
+    from grader.agent import GRADE_PRESENCE_PENALTY, GRADING_SETTINGS
+
+    assert GRADING_SETTINGS.get("presence_penalty") == GRADE_PRESENCE_PENALTY
+    assert GRADE_PRESENCE_PENALTY > 0
+
+    # The whole point of choosing a penalty over a temperature bump.
+    assert GRADING_SETTINGS.get("temperature") == 0.0
+
+    # Unlike `max_tokens`, this spelling is the one the OpenAI-compatible layer
+    # reads, verified off the wire rather than assumed: a captured request body
+    # from the real grade() path carried presence_penalty 0.5 and temperature
+    # 0.0, and the item that had run past fifteen minutes returned in 22.5s.
+    # `seed` was the control — greedy decoding has no use for one, and setting
+    # it produced byte-identical output, which is what makes the sampling
+    # results meaningful rather than a list of things that happened to work.
+
+
 def test_a_timed_out_grade_is_a_result_rather_than_a_crash(monkeypatch):
     """The queue has to be able to show the teacher what happened."""
     import httpx

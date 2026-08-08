@@ -37,14 +37,62 @@ from grader.schema import GradeDraft, GradeRun, OutputMode, Rubric
 #
 # 2048 is ~2.6x the largest normal response observed. 300s is well beyond the
 # ~77s a 1500-word essay measures.
+# The cap stops the batch stalling. It does not stop the model looping — a
+# capped spiral is still a submission the teacher cannot get a grade for, and
+# ~3% of them was the honest expectation. Reading the tokens rather than timing
+# them showed why, and the why is fixable.
+#
+# The emission is entirely in the model's `reasoning` channel — 32,815 characters
+# of thinking and zero tool-call tokens — and it is an **exact 532-character
+# cycle repeated 116 times**. That is a greedy-decoding fixed point, the
+# classic degenerate-repetition failure, not a model working hard.
+#
+# What it cycles on is a contradiction this file writes. SYSTEM_PROMPT rule 1
+# says "Grade ONLY against the rubric criteria given"; the anchor header in
+# _user_prompt says "the instructor's own scoring — match this standard". For
+# mohler_q05:E04.Q05.A07 the rubric read literally says 0 while anchor 1 shows
+# the near-identical answer "one" scored 2.0 — and 2.0 is the true human score.
+# The anchor is right, the rubric is merely silent about partial credit, and
+# nothing tells the model which wins.
+#
+# **Resolving the contradiction by instruction does not work.** A precedence
+# rule ("the examples are the better evidence of the instructor's standard")
+# left it looping, and made the grade worse when combined with anything else.
+# The model is not missing a rule; it cannot commit. Every sampling
+# perturbation that actually applied escaped the loop on the first try, and
+# `seed` — which greedy decoding has no use for — provably did not apply,
+# which is what makes the rest of that result meaningful.
+#
+# presence_penalty is chosen over temperature because **it keeps temperature at
+# 0**: greedy decoding with deformed logits is still greedy, so the >95%
+# same-verdict reproducibility noted below is not spent to buy termination.
+# Measured over the four items that failed the 120-item build (three questions,
+# cycle periods 467/532/421 chars) plus 12 ordinary items:
+#
+#   variant           ordinary mean err   ordinary ungraded   spiral graded
+#   baseline               -0.75                 0                0/4
+#   presence_penalty=0.5   -0.67                 0                4/4
+#
+# A prompt rule that told the model to decide once also terminated the spirals,
+# and was rejected: it left an *ordinary* item ungraded that grades fine
+# without it. Trading one hang for another is not a fix.
+#
+# This is not a cure for the underlying disagreement. Freed to commit, the model
+# commits to the rubric-literal reading: the four recovered grades average -1.00
+# against the humans, and one is 0.0 against a human 2.0 at confidence 1.0.
+# Expect the reported QWK to FALL, because these are the hardest items in the
+# set and they were previously excluded from scoring altogether — the same trap
+# `c14ab97` fixed, where absent evidence was load-bearing for a pass.
 GRADE_TIMEOUT_SECONDS = 300.0
 GRADE_MAX_TOKENS = 2048
+GRADE_PRESENCE_PENALTY = 0.5
 
 # Grade at temperature 0. Same-verdict reproducibility is >95% at temp 0 and falls to ~70%
 # at temp 1 (arXiv 2603.28304); temperature mainly buys variance, not accuracy. Uncertainty
 # is measured separately, by sampling — not by making the grade itself noisy.
 GRADING_SETTINGS = ModelSettings(
     temperature=0.0,
+    presence_penalty=GRADE_PRESENCE_PENALTY,
     timeout=GRADE_TIMEOUT_SECONDS,
     max_tokens=GRADE_MAX_TOKENS,
     # `max_tokens` alone does not reach Ollama. Pydantic AI sends the modern
