@@ -129,6 +129,52 @@ Each tester fills this out weekly during the beta:
 | Style bias ≤ 1.0 | ✓ | | ✓ |
 | Any showstopper bug | | ✓ | |
 
+## Where the matrix actually stands (2026-08-08)
+
+`release_readiness.py` returns `supervised_public_beta`, 19/19, on fenced evidence. **That is the
+Private Beta *entry* gate above, not a ship signal.** Read against the Ship-v1.0 column:
+
+| Signal | Status |
+| --- | --- |
+| QWK ≥ 0.70 | ✅ 0.765 over 120 items, 6 questions |
+| Egress gate clean | ✅ |
+| No FERPA reports | ✅ |
+| Style bias ≤ 1.0 | ✅ all five perturbations; `nonnative` −0.14 is the weakest |
+| Testers approve ≥60% of drafts | ❌ **not measurable — no testers yet** |
+| Testers would use a full semester (≥3/5) | ❌ **not measurable — no testers yet** |
+| Any showstopper bug | ⚠️ see below |
+
+Three of the seven cannot be evaluated without the Private Beta. The gate passing is the signal to
+*start* that phase.
+
+### The risk this matrix does not have a row for
+
+The product's safety story is that the teacher approves every grade. Three measurements strain it
+(evidence in `HANDOFF.md` §1e–§1g):
+
+- **Systematic under-scoring** — −0.33 overall, and −0.68 on four of the six questions.
+- **4.8% of grades are confidently wrong** — |error| ≥ 2 at confidence ≥ 0.9, carrying no flag.
+- **Anchors, the core calibration bet, are a coin flip on at least one question shape.** On q05 they
+  move 9 of 20 scores: 4 closer to the human, 4 further. `E04.Q05.A00` scores 3.0 un-anchored
+  against a human 2.5, and **0.0 at confidence 0.95 once anchored**.
+
+A draft that is reliably *low* does not fail safely — it anchors the reviewer low. "The teacher
+decides" is a weaker mitigation against a biased draft than against a random one, because the
+failure mode is automation bias rather than an obvious error. These are real students' grades.
+
+**This is a reason to run the supervised Private Beta, not a reason to hold it** — measuring
+approval rate on real drafts is exactly how the question gets answered. It *is* a reason not to
+ship v1.0 on the strength of a passing gate.
+
+### Also outstanding
+
+- Citations remain experimental (69% fixture accuracy, 0 false positives) and must stay visibly
+  labelled.
+- FR-3.4 comment attachments have never run against live Canvas — MockTransport only.
+- The visual sweep predates the current UI controls, so frontend evidence overstates coverage.
+- Performance: a *short* answer measured 100.7s when a runaway retry fires, against a 90s budget
+  written for a 1500-word essay.
+
 ## Post-Launch
 
 1. Publish calibration write-up (real QWK vs human ceiling) — the credibility artifact
