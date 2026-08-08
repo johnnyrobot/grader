@@ -70,6 +70,7 @@ test.beforeEach(async ({ page }) => {
     if (url.pathname === "/api/rubrics" && request.method() === "GET") return json(instructorFixture.rubrics);
     if (url.pathname.startsWith("/api/rubrics/") && request.method() === "GET") return json(instructorFixture.rubricDetail);
     if (url.pathname === "/api/rubrics" && request.method() === "POST") return json({ id: 12 });
+    if (url.pathname.startsWith("/api/calibration/")) return json(instructorFixture.calibration);
     if (url.pathname === "/api/models") return json(instructorFixture.models);
     if (url.pathname === "/api/models/install") return json({ success: true });
     if (url.pathname === "/api/grade/batch") return json({ job_id: "job-1", total: 3 });
@@ -237,6 +238,48 @@ test("instructor exercises every core control surface", async ({ page }, testInf
   await expect(page.getByText("nomic-embed-text:latest downloaded.")).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath("models-all-controls.png"), fullPage: true });
   await page.getByRole("button", { name: /Back to queue/ }).click();
+
+  await page.getByRole("button", { name: "Calibration" }).click();
+  await expect(page.getByRole("heading", { name: "Calibration health" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Drafts run below your grading" })).toBeVisible();
+  await expect(page.getByText("−6.6%")).toBeVisible();
+  await expect(page.getByRole("row", { name: /Thesis/ })).toContainText("−13.6%");
+  await expect(page.getByRole("group", { name: "Override rate" })).toContainText("27%");
+  await expect(page.getByRole("group", { name: "Exemplars kept" })).toContainText("30");
+  await expect(page.getByRole("group", { name: "Approvals measured" })).toContainText("34");
+  await expect(page.getByText("QWK")).toHaveCount(0);
+  await page.getByRole("button", { name: "Refresh calibration" }).click();
+  await expect(page.getByRole("button", { name: "Refresh calibration" })).toBeEnabled();
+  await page.screenshot({ path: testInfo.outputPath("calibration-all-controls.png"), fullPage: true });
+  await page.getByRole("button", { name: /Back to queue/ }).click();
+  await expectNoSeriousAccessibilityViolations(page);
+});
+
+test("calibration reports counts and no direction below the evidence floor", async ({ page }) => {
+  await page.route("http://127.0.0.1:8756/api/calibration/**", route => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({
+      ...instructorFixture.calibration,
+      draft_bias: null, n: 12, discloses: false, demotes: false,
+      override_count: 3, override_rate: 0.25, exemplar_count: 12, per_criterion: {},
+    }),
+  }));
+  await page.goto("/");
+  await page.waitForLoadState("networkidle");
+  await page.getByRole("button", { name: "Continue" }).click();
+  await page.getByRole("button", { name: "Skip appearance choices" }).click();
+  await page.getByRole("button", { name: "Continue" }).click();
+  await page.getByRole("button", { name: "Start grading" }).click();
+  await page.getByRole("button", { name: "Calibration" }).click();
+
+  await expect(page.getByRole("heading", { name: "Direction not reported yet" })).toBeVisible();
+  await expect(page.getByText("12 of 20 approvals")).toBeVisible();
+  await expect(page.getByText("8 more approvals")).toBeVisible();
+  // Counts only: no direction, and nothing that reads as a failure.
+  await expect(page.getByText(/runs? (below|above) your grading/)).toHaveCount(0);
+  await expect(page.getByRole("alert")).toHaveCount(0);
+  await expect(page.getByRole("group", { name: "Override rate" })).toContainText("25%");
   await expectNoSeriousAccessibilityViolations(page);
 });
 
@@ -353,6 +396,14 @@ test("visual sweep records every core screen and visible control inventory", asy
   await page.getByRole("button", { name: "Install exemplar finder model" }).click();
   await expect(page.getByText("nomic-embed-text:latest downloaded.")).toBeVisible();
   await capture("14-model-manager");
+  await page.getByRole("button", { name: /Back to queue/ }).click();
+
+  await page.getByRole("button", { name: "Calibration" }).click();
+  await expect(page.getByRole("heading", { name: "Calibration health" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Drafts run below your grading" })).toBeVisible();
+  await page.getByRole("button", { name: "Refresh calibration" }).click();
+  await expect(page.getByRole("button", { name: "Refresh calibration" })).toBeEnabled();
+  await capture("15-calibration");
 
   await page.setViewportSize({ width: 720, height: 900 });
   await page.getByRole("button", { name: /Back to queue/ }).click();
@@ -360,13 +411,13 @@ test("visual sweep records every core screen and visible control inventory", asy
   await page.evaluate(() => { document.documentElement.style.fontSize = "200%"; });
   const pageOverflows = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1);
   expect(pageOverflows).toBe(false);
-  await capture("15-responsive-200-percent");
+  await capture("16-responsive-200-percent");
 
   await page.evaluate(() => { document.documentElement.style.fontSize = ""; });
   await page.route("http://127.0.0.1:8756/health", route => route.abort());
   await expect(page.getByRole("alert")).toContainText("Local engine needs attention", { timeout: 7000 });
   await expect(page.getByRole("button", { name: "Restart local engine" })).toBeVisible();
-  await capture("16-engine-recovery-alert");
+  await capture("17-engine-recovery-alert");
 
   const requiredScreens = [
     "01-onboarding-welcome",
@@ -383,8 +434,9 @@ test("visual sweep records every core screen and visible control inventory", asy
     "12-settings-model-defaults",
     "13-settings-rubrics",
     "14-model-manager",
-    "15-responsive-200-percent",
-    "16-engine-recovery-alert",
+    "15-calibration",
+    "16-responsive-200-percent",
+    "17-engine-recovery-alert",
   ];
   expect(screens.map(screen => screen.name)).toEqual(requiredScreens);
   expect(screens.every(screen => screen.visible_control_count > 0)).toBe(true);

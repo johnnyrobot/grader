@@ -71,6 +71,7 @@ function renderQueue(data: QueueData | null = queue) {
     onRecoverEngine: vi.fn(),
     onOpenModels: vi.fn(),
     onOpenSettings: vi.fn(),
+    onOpenCalibration: vi.fn(),
   };
   render(<QueueScreen {...props} />);
   return props;
@@ -92,6 +93,14 @@ describe("QueueScreen", () => {
     expect(all).toHaveAttribute("aria-pressed", "true");
     await user.click(screen.getByRole("button", { name: "Needs review" }));
     expect(props.setSelectedLane).toHaveBeenCalledWith("review_first");
+  });
+
+  it("reaches the calibration screen from the queue's own navigation", async () => {
+    const user = userEvent.setup();
+    const props = renderQueue();
+
+    await user.click(screen.getByRole("button", { name: "Calibration" }));
+    expect(props.onOpenCalibration).toHaveBeenCalled();
   });
 
   it("explains the first useful action when no submissions are available", () => {
@@ -185,6 +194,7 @@ describe("posting approved grades to Canvas", () => {
         onRefresh={onRefresh}
         onOpenModels={vi.fn()}
         onOpenSettings={vi.fn()}
+        onOpenCalibration={vi.fn()}
       />,
     );
   }
@@ -201,6 +211,7 @@ describe("posting approved grades to Canvas", () => {
         onRefresh={vi.fn()}
         onOpenModels={vi.fn()}
         onOpenSettings={vi.fn()}
+        onOpenCalibration={vi.fn()}
       />,
     );
 
@@ -297,6 +308,7 @@ describe("importing a batch from Canvas", () => {
         onRefresh={onRefresh}
         onOpenModels={vi.fn()}
         onOpenSettings={vi.fn()}
+        onOpenCalibration={vi.fn()}
       />,
     );
   }
@@ -403,6 +415,7 @@ describe("the offline post queue", () => {
         onRefresh={vi.fn()}
         onOpenModels={vi.fn()}
         onOpenSettings={vi.fn()}
+        onOpenCalibration={vi.fn()}
       />,
     );
   }

@@ -126,7 +126,24 @@ export async function gradeBatch(assignmentId: string, model?: string): Promise<
   return r.json();
 }
 
-export async function fetchCalibration(assignmentId: string): Promise<any> {
+export interface CalibrationHealth {
+  /** Signed, already scaled as a fraction of criterion max; negative means drafts
+   *  run below the teacher. Null below the evidence floor, where no consumer may
+   *  infer a direction. */
+  draft_bias: number | null;
+  n: number;
+  evidence_floor: number;
+  /** The thresholds' own verdicts — read these rather than re-deriving them. */
+  discloses: boolean;
+  demotes: boolean;
+  override_count: number;
+  override_rate: number;
+  exemplar_count: number;
+  per_criterion: Record<string, { bias: number; abs_bias: number; count: number }>;
+  cold_start: { unlocked: boolean; exemplar_count: number; remaining: number; message: string };
+}
+
+export async function fetchCalibration(assignmentId: string): Promise<CalibrationHealth> {
   const r = await fetch(`${base}/api/calibration/${assignmentId}`, { headers: headers() });
   if (!r.ok) throw new Error(`calibration: ${r.status}`);
   return r.json();

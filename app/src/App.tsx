@@ -5,8 +5,9 @@ import { SplitView } from "./screens/SplitView";
 import { FirstRunWizard } from "./screens/FirstRun";
 import { ModelManager } from "./screens/ModelManager";
 import { SettingsScreen } from "./screens/Settings";
+import { CalibrationScreen } from "./screens/Calibration";
 
-type Screen = "wizard" | "queue" | "split" | "models" | "settings";
+type Screen = "wizard" | "queue" | "split" | "models" | "settings" | "calibration";
 type EngineInfo = { token: string | null; port: string | null };
 
 function applyEngineInfo(info: Record<string, string>): EngineInfo {
@@ -160,6 +161,10 @@ export default function App() {
     return <SettingsScreen onClose={() => setScreen("queue")} />;
   }
 
+  if (screen === "calibration") {
+    return <CalibrationScreen assignmentId={assignmentId} onClose={() => setScreen("queue")} />;
+  }
+
   return (
     <QueueScreen
       data={queueData}
@@ -174,6 +179,7 @@ export default function App() {
       onRecoverEngine={recoverEngine}
       onOpenModels={() => setScreen("models")}
       onOpenSettings={() => setScreen("settings")}
+      onOpenCalibration={() => setScreen("calibration")}
     />
   );
 }

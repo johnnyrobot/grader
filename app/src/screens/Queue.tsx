@@ -16,6 +16,7 @@ interface Props {
   onRecoverEngine?: () => void;
   onOpenModels: () => void;
   onOpenSettings: () => void;
+  onOpenCalibration: () => void;
 }
 
 const LANE_META: Record<string, { summary: string; filter: string; description: string; className: string }> = {
@@ -48,7 +49,7 @@ function signalLabel(flag: string) {
   return titleCase(flag);
 }
 
-export function QueueScreen({ data, onSelectItem, assignmentId, setAssignmentId, selectedLane, setSelectedLane, onRefresh, engineIssue = "", recoveringEngine = false, onRecoverEngine, onOpenModels, onOpenSettings }: Props) {
+export function QueueScreen({ data, onSelectItem, assignmentId, setAssignmentId, selectedLane, setSelectedLane, onRefresh, engineIssue = "", recoveringEngine = false, onRecoverEngine, onOpenModels, onOpenSettings, onOpenCalibration }: Props) {
   const [grading, setGrading] = useState(false);
   const [gradeMsg, setGradeMsg] = useState("");
   const [updateVersion, setUpdateVersion] = useState("");
@@ -292,6 +293,7 @@ export function QueueScreen({ data, onSelectItem, assignmentId, setAssignmentId,
         <>
           <button className="button-quiet" onClick={onOpenSettings}>Settings</button>
           <button className="button-quiet" onClick={onOpenModels}>Local models</button>
+          <button className="button-quiet" onClick={onOpenCalibration}>Calibration</button>
           <button className="button-secondary" onClick={onRefresh}>Refresh queue</button>
           <button className="button-primary" onClick={handleGrade} disabled={grading || !assignmentId.trim()}>
             {grading ? "Starting…" : "Grade submissions"}
