@@ -32,6 +32,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, field_validator
 
 from grader.approvals import AlreadyApproved, ApprovalStore, GradeNotFound
+from grader.attachments import AttachmentStore
 from grader.calibration import cold_start_status, compute_health
 from grader.canvas import OfflinePostQueue
 from grader.db import Database
@@ -219,6 +220,7 @@ _exemplar_store = ExemplarStore(Database.at(DATA_DIR / "exemplars.db"))
 _override_store = OverrideStore(Database.at(DATA_DIR / "overrides.db"))
 _rubric_store = RubricStore(Database.at(DATA_DIR / "rubrics.db"))
 _post_queue = OfflinePostQueue(Database.at(DATA_DIR / "post_queue.db"))
+_attachments = AttachmentStore(Database.at(DATA_DIR / "attachments.db"))
 
 # Sole owner of grade_records.approved_at and posted_at. Takes _db itself rather
 # than a connection so that redirecting DB_PATH after import still reaches it.
@@ -882,7 +884,20 @@ def canvas_post(req: CanvasPostReq, settings: Settings = Depends(current_setting
         raise HTTPException(400, f"no approved grades to post. Skipped: {batch.skip_details}")
 
     grade_data = batch.grade_data()
+
+    # Attachments upload before the grades, and inside the try: an outage during
+    # the upload is the same outage FR-3.5 already covers. Ids that did land are
+    # kept so a queued post carries them and the file is not uploaded twice.
+    uploaded: dict[str, list[int]] = {}
     try:
+        for grade in batch.ready:
+            file_ids = _upload_attachments_for(
+                grade, req.course_id, req.assignment_id, settings
+            )
+            if file_ids:
+                uploaded[grade.canvas_user_id] = file_ids
+                grade_data[grade.canvas_user_id]["file_ids"] = file_ids
+
         result = post_grades_batch(
             req.course_id,
             req.assignment_id,
@@ -899,12 +914,14 @@ def canvas_post(req: CanvasPostReq, settings: Settings = Depends(current_setting
         # batch.ready, which is postable()'s output. mark_posted stays uncalled,
         # because queued is not posted.
         for grade in batch.ready:
+            ids = uploaded.get(grade.canvas_user_id)
             _post_queue.enqueue(
                 str(req.course_id),
                 str(req.assignment_id),
                 grade.canvas_user_id,
                 str(grade.posted_grade),
                 comment=grade.text_comment,
+                file_ids=json.dumps(ids) if ids else None,
                 approved_at=grade.approved_at,
             )
         _audit(f"canvas_{req.course_id}_{req.assignment_id}", "canvas", "post_queued",
@@ -937,6 +954,81 @@ def canvas_post(req: CanvasPostReq, settings: Settings = Depends(current_setting
         "progress_state": result.get("workflow_state", "completed"),
         "completion": result.get("completion", 100),
     }
+
+
+def _upload_attachments_for(
+    grade, course_id: int | str, assignment_id: int | str, settings: Settings
+) -> list[int]:
+    """Upload this grade's attachments, newest last. Returns their Canvas ids.
+
+    A file the teacher attached and then moved or deleted is skipped rather than
+    failing the post: the grade is the thing that must reach the student, and a
+    missing feedback copy is recorded in the audit log for them to see.
+    """
+    from grader.canvas import upload_comment_attachment
+
+    file_ids: list[int] = []
+    for attachment in _attachments.for_grade(grade.grade_id):
+        if not attachment.exists:
+            _audit(grade.grade_id, "canvas", "attachment_missing",
+                   {"path": str(attachment.path)})
+            continue
+        file_ids.append(
+            upload_comment_attachment(
+                course_id,
+                assignment_id,
+                grade.canvas_user_id,
+                attachment.path,
+                **settings.canvas.as_kwargs(),
+            )
+        )
+    return file_ids
+
+
+class AttachmentReq(BaseModel):
+    path: str
+
+
+@app.post("/api/grades/{grade_id}/attachments", dependencies=[Depends(_auth)])
+def attach_to_grade(grade_id: str, req: AttachmentReq) -> dict:
+    """Mark a local file to go out as a comment attachment with this grade.
+
+    Nothing uploads here. The teacher can attach, look, and detach; only
+    /api/canvas/post sends anything, and only for a grade postable() cleared.
+    """
+    row = _db().execute(
+        "SELECT id FROM grade_records WHERE id = ?", (grade_id,)
+    ).fetchone()
+    if row is None:
+        raise HTTPException(404, f"no such grade: {grade_id}")
+    try:
+        attachment = _attachments.attach(grade_id, req.path)
+    except FileNotFoundError as e:
+        raise HTTPException(404, str(e))
+    _audit(grade_id, "teacher", "attach", {"path": str(attachment.path)})
+    return {"grade_id": grade_id, "path": str(attachment.path)}
+
+
+@app.get("/api/grades/{grade_id}/attachments", dependencies=[Depends(_auth)])
+def list_grade_attachments(grade_id: str) -> dict:
+    """What would be posted with this grade — the preview PRD line 131 asks for."""
+    items = _attachments.for_grade(grade_id)
+    return {
+        "grade_id": grade_id,
+        "attachments": [
+            {"path": str(a.path), "exists": a.exists, "created_at": a.created_at}
+            for a in items
+        ],
+    }
+
+
+@app.delete("/api/grades/{grade_id}/attachments", dependencies=[Depends(_auth)])
+def detach_from_grade(grade_id: str, req: AttachmentReq) -> dict:
+    removed = _attachments.detach(grade_id, req.path)
+    if not removed:
+        raise HTTPException(404, "not attached to this grade")
+    _audit(grade_id, "teacher", "detach", {"path": req.path})
+    return {"grade_id": grade_id, "detached": req.path}
 
 
 @app.get("/api/canvas/post-queue", dependencies=[Depends(_auth)])

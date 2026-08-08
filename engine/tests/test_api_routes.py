@@ -324,3 +324,66 @@ def test_posting_with_canvas_unreachable_queues_over_the_wire(
     assert response.status_code == 200
     assert response.json()["queued"] == 1
     assert client.get("/api/canvas/post-queue", headers=auth).json()["pending"] == 1
+
+
+def _seed_grade(api):
+    import json as _json
+    db = api._db()
+    db.execute(
+        "INSERT INTO submissions (id, assignment_id, student_ref, text, state, created_at) "
+        "VALUES (?,?,?,?,?,?)",
+        ("sub_a", "canvas_10_20", "98765", "text", "graded", api._now()),
+    )
+    db.execute(
+        "INSERT INTO grade_records (id, submission_id, assignment_id, ai_scores_json, "
+        "ai_feedback, ai_confidence, ai_flags_json, lane, created_at) "
+        "VALUES (?,?,?,?,?,?,?,?,?)",
+        ("gr_a", "sub_a", "canvas_10_20", _json.dumps({"T": 4}), "fb", 0.8,
+         "[]", "standard", api._now()),
+    )
+    db.commit()
+
+
+def test_attaching_a_file_to_a_grade_lists_it_back(client, auth, api, tmp_path, monkeypatch):
+    from grader.attachments import AttachmentStore
+
+    monkeypatch.setattr(api, "_attachments", AttachmentStore(Database.memory()))
+    _seed_grade(api)
+    doc = tmp_path / "feedback.docx"
+    doc.write_text("annotated")
+
+    posted = client.post("/api/grades/gr_a/attachments", headers=auth,
+                         json={"path": str(doc)})
+    assert posted.status_code == 200
+
+    listed = client.get("/api/grades/gr_a/attachments", headers=auth)
+    assert listed.status_code == 200
+    assert [a["path"] for a in listed.json()["attachments"]] == [str(doc.resolve())]
+    assert listed.json()["attachments"][0]["exists"] is True
+
+
+def test_attaching_to_a_grade_that_does_not_exist_is_a_404(
+    client, auth, api, tmp_path, monkeypatch
+):
+    from grader.attachments import AttachmentStore
+
+    monkeypatch.setattr(api, "_attachments", AttachmentStore(Database.memory()))
+    doc = tmp_path / "feedback.docx"
+    doc.write_text("annotated")
+
+    response = client.post("/api/grades/gr_nothing/attachments", headers=auth,
+                           json={"path": str(doc)})
+
+    assert response.status_code == 404
+
+
+def test_attaching_a_missing_file_is_a_404(client, auth, api, tmp_path, monkeypatch):
+    from grader.attachments import AttachmentStore
+
+    monkeypatch.setattr(api, "_attachments", AttachmentStore(Database.memory()))
+    _seed_grade(api)
+
+    response = client.post("/api/grades/gr_a/attachments", headers=auth,
+                           json={"path": str(tmp_path / "gone.docx")})
+
+    assert response.status_code == 404

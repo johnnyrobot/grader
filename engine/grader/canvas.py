@@ -395,19 +395,31 @@ def _poll_progress(
 # File upload: 3-step flow for annotated feedback files
 # ---------------------------------------------------------------------------
 
-def upload_file(
+def upload_comment_attachment(
     course_id: int | str,
+    assignment_id: int | str,
+    user_id: int | str,
     file_path: Path,
     *,
-    as_user_id: int | str | None = None,
     base_url: str | None = None,
     token: str | None = None,
 ) -> int:
-    """Upload a file to Canvas via the 3-step flow. Returns Canvas file ID.
+    """Upload one file as a submission-comment attachment. Returns its Canvas file id.
 
-    Step 1: notify Canvas of the upload intent.
-    Step 2: PUT the file bytes to the returned URL.
-    Step 3: confirm with Canvas, get the file ID.
+    Targets the submission's own comment-files endpoint:
+
+        POST /courses/:c/assignments/:a/submissions/:u/comments/files
+
+    **Not** `/courses/:c/files`. That is course files — shared course content — and
+    an annotated submission uploaded there is one student's work placed where
+    other students can reach it. This function carries a student's graded work,
+    so the destination is the part of Canvas scoped to that student's submission.
+
+    Canvas's 3-step flow:
+      1. Tell Canvas the name and size; it answers with a one-shot upload URL.
+      2. POST the bytes there. Canvas answers 201 with the file, or 3xx to a
+         location that returns it.
+      3. Read the id out of whichever of those came back.
     """
     tok = token or resolve_canvas_token()
     if not tok:
@@ -416,40 +428,41 @@ def upload_file(
     canvas_base = base_url or resolve_canvas_base_url()
     base = canvas_base.rstrip("/") if canvas_base else "https://canvas.instructure.com"
     headers = {"Authorization": f"Bearer {tok}", "Accept": "application/json"}
-    file_size = file_path.stat().st_size
     params: dict[str, Any] = {
         "name": file_path.name,
-        "size": file_size,
+        "size": file_path.stat().st_size,
         "content_type": "application/octet-stream",
-        "parent_folder_path": "graded_feedback",
     }
-    if as_user_id is not None:
-        params["as_user_id"] = as_user_id
 
-    with httpx.Client(timeout=60, follow_redirects=True) as client:
-        # Step 1: notify
-        url = f"{base}/api/v1/courses/{course_id}/files"
+    # Step 2 must not carry the Authorization header: the upload URL is
+    # pre-signed, and some Canvas file backends reject a request that presents
+    # both. follow_redirects stays off so step 3 is explicit about what it read.
+    with httpx.Client(timeout=120, follow_redirects=False) as client:
+        url = (
+            f"{base}/api/v1/courses/{course_id}/assignments/{assignment_id}"
+            f"/submissions/{user_id}/comments/files"
+        )
         r = client.post(url, headers=headers, data=params)
         r.raise_for_status()
         upload_info = r.json()
-        upload_url = upload_info["upload_url"]
-        upload_params = upload_info["upload_params"]
 
-        # Step 2: PUT file bytes
-        with open(file_path, "rb") as f:
-            files = {"file": (file_path.name, f, "application/octet-stream")}
-            r = client.put(upload_url, data=upload_params, files=files)
-            r.raise_for_status()
+        with open(file_path, "rb") as handle:
+            r = client.post(
+                upload_info["upload_url"],
+                data=upload_info.get("upload_params") or {},
+                files={"file": (file_path.name, handle, "application/octet-stream")},
+            )
+        if r.status_code in (301, 302, 303, 307, 308):
+            location = r.headers.get("location")
+            if not location:
+                raise RuntimeError("Canvas redirected the upload without a location")
+            r = client.get(location, headers=headers)
+        r.raise_for_status()
 
-        # Step 3: confirm
-        r = client.get(upload_info.get("redirect_url", ""), headers=headers)
-        if r.status_code != 200:
-            r = client.post(url, headers=headers, data={"name": file_path.name, "size": file_size})
-            r.raise_for_status()
         file_id = r.json().get("id")
         if file_id is None:
-            raise RuntimeError(f"Canvas file upload did not return id: {r.json()}")
-        return file_id
+            raise RuntimeError(f"Canvas file upload did not return id: {r.text[:200]}")
+        return int(file_id)
 
 
 # ---------------------------------------------------------------------------
