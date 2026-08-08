@@ -157,8 +157,20 @@ def test_grading_carries_a_timeout_so_one_submission_cannot_stall_a_batch():
     grade() already turns a failure into a GradeRun the queue can surface, so a
     timeout only has to become an exception for the existing path to handle it.
     """
-    from grader.agent import GRADING_SETTINGS, GRADE_TIMEOUT_SECONDS
+    from grader.agent import (
+        GRADE_MAX_TOKENS,
+        GRADE_TIMEOUT_SECONDS,
+        GRADING_SETTINGS,
+    )
 
+    # max_tokens is the one that matters. A read timeout resets on every byte,
+    # so a model that keeps emitting tokens is never late — the first attempt at
+    # this fix set only a timeout and the call still ran past 15 minutes,
+    # decoding 6,975 tokens before it was killed.
+    assert GRADING_SETTINGS.get("max_tokens") == GRADE_MAX_TOKENS
+    assert 0 < GRADE_MAX_TOKENS < 6975
+
+    # The timeout still covers a server that goes silent mid-request.
     assert GRADING_SETTINGS.get("timeout") == GRADE_TIMEOUT_SECONDS
     assert GRADE_TIMEOUT_SECONDS > 0
 

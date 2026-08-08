@@ -17,25 +17,37 @@ from pydantic_ai.settings import ModelSettings
 
 from grader.schema import GradeDraft, GradeRun, OutputMode, Rubric
 
-# How long one grade may take before it is abandoned.
+# Two bounds on one grade, because they stop different things.
 #
-# Some submissions never finish. Building the six-question public proxy, four of
-# 120 ordinary short answers — 165-271 characters against a median of 193 —
-# failed to return at 420s and again at 1200s. Nothing about their text is
-# unusual; the model just does not stop. That is roughly 3% of a batch, so a
-# teacher grading thirty submissions should expect to meet one.
+# Some submissions send this model into a generation that does not end. Building
+# the six-question public proxy, four of 120 ordinary short answers — 165-271
+# characters against a median of 193 — failed at 420s and again at 1200s. Run
+# directly, one of them was still decoding at 6,975 tokens when it was killed,
+# against 195-784 for a normal grade. It is the reasoning spiral this project
+# already documented for Qwen3-VL, in the Qwen3 text model that replaced it.
 #
-# Without a bound, `run_sync` blocks the background grading thread and the batch
-# never completes: no draft, no error, no end. `scripts/build_public_proxy.py`
-# has defended against exactly this from the start by grading in a killable
-# child process; the engine never did. 300s is well beyond the ~77s a 1500-word
-# essay measures and well short of a stall a person would wait through.
+# **A timeout alone does not stop it.** httpx's read timeout resets on every
+# byte, so a model that keeps emitting tokens is never late — it is just slow
+# forever. The timeout still earns its place for a server that goes silent
+# mid-request; it is `max_tokens` that bounds a model which will not shut up.
+#
+# Truncation is a clean failure here: the JSON comes back incomplete, output
+# validation rejects it, and grade() returns a GradeRun the queue can show. An
+# error in the queue is a far better outcome than a batch that never finishes.
+#
+# 2048 is ~2.6x the largest normal response observed. 300s is well beyond the
+# ~77s a 1500-word essay measures.
 GRADE_TIMEOUT_SECONDS = 300.0
+GRADE_MAX_TOKENS = 2048
 
 # Grade at temperature 0. Same-verdict reproducibility is >95% at temp 0 and falls to ~70%
 # at temp 1 (arXiv 2603.28304); temperature mainly buys variance, not accuracy. Uncertainty
 # is measured separately, by sampling — not by making the grade itself noisy.
-GRADING_SETTINGS = ModelSettings(temperature=0.0, timeout=GRADE_TIMEOUT_SECONDS)
+GRADING_SETTINGS = ModelSettings(
+    temperature=0.0,
+    timeout=GRADE_TIMEOUT_SECONDS,
+    max_tokens=GRADE_MAX_TOKENS,
+)
 
 SYSTEM_PROMPT = """\
 You are an experienced instructor grading student work. You are drafting a grade for a \
