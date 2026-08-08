@@ -63,36 +63,39 @@ from grader.schema import GradeDraft, GradeRun, OutputMode, Rubric
 # `seed` — which greedy decoding has no use for — provably did not apply,
 # which is what makes the rest of that result meaningful.
 #
-# presence_penalty is chosen over temperature because **it keeps temperature at
-# 0**: greedy decoding with deformed logits is still greedy, so the >95%
-# same-verdict reproducibility noted below is not spent to buy termination.
-# Measured over the four items that failed the 120-item build (three questions,
-# cycle periods 467/532/421 chars) plus 12 ordinary items:
-#
-#   variant           ordinary mean err   ordinary ungraded   spiral graded
-#   baseline               -0.75                 0                0/4
-#   presence_penalty=0.5   -0.67                 0                4/4
-#
 # A prompt rule that told the model to decide once also terminated the spirals,
-# and was rejected: it left an *ordinary* item ungraded that grades fine
-# without it. Trading one hang for another is not a fix.
+# and was rejected: it left an *ordinary* item ungraded that grades fine without
+# it. Trading one hang for another is not a fix.
 #
-# This is not a cure for the underlying disagreement. Freed to commit, the model
-# commits to the rubric-literal reading: the four recovered grades average -1.00
-# against the humans, and one is 0.0 against a human 2.0 at confidence 1.0.
-# Expect the reported QWK to FALL, because these are the hardest items in the
-# set and they were previously excluded from scoring altogether — the same trap
-# `c14ab97` fixed, where absent evidence was load-bearing for a pass.
+# Which is also why the escape is a *retry* and not a default setting. Shipping
+# presence_penalty=0.5 on every grade was measured and reverted: it cured the
+# four and broke two others that were fine, and on the two-question gate set it
+# cost QWK 0.885 -> 0.863 by changing scores on items that never had a problem.
+# See GRADE_ESCAPE_SETTINGS.
+#
+# None of this cures the underlying disagreement. Freed to commit, the model
+# commits to the rubric-literal reading: the recovered grades run about a point
+# below the humans, and one is 0.0 against a human 2.0 at confidence 1.0 — the
+# one combination that cannot be routed to a human. Grading these items at all
+# is still the right call: they were previously excluded from scoring
+# altogether, which is the trap `c14ab97` fixed, where absent evidence was
+# load-bearing for a pass.
 GRADE_TIMEOUT_SECONDS = 300.0
 GRADE_MAX_TOKENS = 2048
-GRADE_PRESENCE_PENALTY = 0.5
 
 # Grade at temperature 0. Same-verdict reproducibility is >95% at temp 0 and falls to ~70%
 # at temp 1 (arXiv 2603.28304); temperature mainly buys variance, not accuracy. Uncertainty
 # is measured separately, by sampling — not by making the grade itself noisy.
+# Note what is NOT here: a presence_penalty. Setting one by default was measured
+# and reverted. It cured the four items that spiralled and broke two others that
+# were fine, and on the two-question gate set it cost quality outright — QWK
+# 0.885 -> 0.863 — by changing scores on items that never had a problem. A
+# default penalty does not reduce the failure rate; it only moves which items
+# fail, and charges every other grade for the privilege. The penalty belongs in
+# GRADE_ESCAPE_SETTINGS below, where it is paid for only by the grades that
+# actually need it.
 GRADING_SETTINGS = ModelSettings(
     temperature=0.0,
-    presence_penalty=GRADE_PRESENCE_PENALTY,
     timeout=GRADE_TIMEOUT_SECONDS,
     max_tokens=GRADE_MAX_TOKENS,
     # `max_tokens` alone does not reach Ollama. Pydantic AI sends the modern
@@ -109,13 +112,18 @@ GRADING_SETTINGS = ModelSettings(
     extra_body={"max_tokens": GRADE_MAX_TOKENS},
 )
 
-# One setting is not enough, and the 120-item rebuild is what proved it.
+# No setting is enough, and the 120-item rebuild is what proved it.
 #
-# presence_penalty=0.5 cured all four items that had never graded — and broke two
-# others, in q02, that graded fine before. Net 118/120 against 116/120: an
-# improvement, and nowhere near a cure. A spiral is a fixed point of ONE EXACT
-# CONFIGURATION, and every configuration appears to have some. Searching for the
-# setting that has none is the wrong search.
+# presence_penalty=0.5 as a *default* cured all four items that had never graded
+# — and broke two others, in q02, that graded fine before. Net 118/120 against
+# 116/120: an improvement, and nowhere near a cure. A spiral is a fixed point of
+# ONE EXACT CONFIGURATION, and every configuration appears to have some.
+# Searching for the setting that has none is the wrong search.
+#
+# Worse, a default penalty charges every grade for a problem 3% of them have. On
+# the two-question gate set it cost QWK 0.885 -> 0.863 outright, by moving scores
+# on items that never spiralled. So the default is left alone and the penalty
+# lives here, where only the grades that actually stall ever see it.
 #
 # What does hold, across every item tried, is that ANY sufficiently different
 # configuration escapes a *given* fixed point on the first attempt — six of six

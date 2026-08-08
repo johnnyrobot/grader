@@ -450,17 +450,42 @@ dead server, malformed rubric, read timeout — still fails on the first attempt
 broken connection is just a slower error. All six items this failure has ever touched now grade
 through the real path, 6/6.
 
+**And then the default penalty was reverted, which made the trade-off vanish.** Comparing against
+the *narrow* gate set exposed what the six-question numbers hid: a default penalty cost QWK
+**0.885 → 0.863** there, by moving scores on items that never spiralled. It does not lower the
+failure rate — it relocates it — and bills every other grade for a problem 3% of them have. So
+`GRADING_SETTINGS` carries **no** penalty and the escape owns it:
+
+| | graded | QWK | mean error |
+| --- | --- | --- | --- |
+| pre-fix | 116/120 | 0.763 | −0.32 |
+| presence_penalty as default | 118/120 | 0.759 | −0.37 |
+| **retry only (shipped)** | **120/120** | **0.765** | **−0.33** |
+
+**120/120 for the first time, and QWK slightly up rather than down.** The 116 that always graded
+keep their original scores untouched — the retry fires only on a runaway — so the only change is
+four items moving from excluded to scored. §1e predicted the QWK would fall; with a default penalty
+it did, and with the retry it does not. Note that `artifacts/` datasets are unaffected by all of
+this and still hold pre-fence scores.
+
 **The retry costs latency on exactly the items that need it.** A recovered item pays a full
-cap-hit before its escape attempt: the two q02 items measure **51.3s and 100.7s**. That second
-number is above the 90s performance budget, on a *short answer* — the budget is written for a
-1500-word essay, so it is not a gate failure, but it is worth knowing before the perf row is
-re-measured.
+cap-hit before its escape attempt: measured at **51.3s and 100.7s** on the two q02 items when the
+penalty was still the default. That second number is above the 90s performance budget, on a *short
+answer* — the budget is written for a 1500-word essay, so it is not a gate failure, but it is worth
+knowing before the perf row is re-measured.
 
 **Why this could not be solved by waiting.** The failure is deterministic — the same two items
 failed in two independent runs. Resuming a build re-runs the identical prompt and reproduces the
-identical spiral, which is why the fairness gate came back FAIL with three items carrying
-incomplete `perturbed_scores` rather than merely unfinished ones. `--grade-perturbations` needs
-re-running now that a runaway is retried rather than recorded as a gap.
+identical spiral, which is why the fairness gate first came back FAIL with three items carrying
+incomplete `perturbed_scores` rather than merely unfinished ones.
+
+**Fairness under the fenced prompt now completes — but the passing run describes the wrong
+settings.** With the retry in place the perturbations no longer stall, and the gate returned
+`PASS` on 40/40 items across all five perturbations (`nonnative` mean delta −0.03, the row that
+matters most for this product). That run was built while the penalty was still a default, so it
+does not describe shipped behaviour and **must not be quoted**. Re-running it needs the 200
+perturbation gradings (~3h); seed it from a dataset whose 40 originals were graded at the shipped
+defaults and pass `--grade-perturbations` so only the perturbations are computed.
 
 **The open question is now a quality question, not a hang.** The widened set under-scores the four
 new questions by ~0.68, and "model resolves rubric-literal against teacher-standard and lands on

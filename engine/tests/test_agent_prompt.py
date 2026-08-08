@@ -188,7 +188,7 @@ def test_grading_carries_a_timeout_so_one_submission_cannot_stall_a_batch():
     assert GRADE_TIMEOUT_SECONDS > 0
 
 
-def test_a_repetition_penalty_keeps_greedy_decoding_out_of_a_fixed_point():
+def test_the_default_configuration_carries_no_repetition_penalty():
     """The cap stops the batch stalling; it does not stop the model looping.
 
     Reading the emission rather than timing it settled what this is. On
@@ -205,30 +205,29 @@ def test_a_repetition_penalty_keeps_greedy_decoding_out_of_a_fixed_point():
     while anchor 1 shows the near-identical answer "one" scored 2.0 — which is
     the true human score.
 
-    Resolving that by instruction does not work, which is why the fix is here
-    and not in the prompt. A precedence rule left it looping. A "decide once"
-    rule terminated the spirals but left an *ordinary* item ungraded that grades
-    fine without it — trading one hang for another.
+    Resolving that by instruction does not work. A precedence rule left it
+    looping. A "decide once" rule terminated the spirals but left an *ordinary*
+    item ungraded that grades fine without it — trading one hang for another.
 
-    presence_penalty is chosen over temperature to keep temperature at 0:
-    greedy decoding with deformed logits is still greedy, so the reproducibility
-    the project chose temp 0 for is not spent to buy termination.
+    **And neither does a default repetition penalty, which is what this test
+    pins.** Shipping presence_penalty=0.5 on every grade was measured and
+    reverted: it cured the four items that had never graded and broke two others
+    in q02 that were fine, and on the two-question gate set it cost QWK
+    0.885 -> 0.863 by moving scores on items that never spiralled. A default
+    penalty does not lower the failure rate, it relocates it, and bills every
+    other grade. The penalty belongs in GRADE_ESCAPE_SETTINGS, paid for only by
+    the grades that stall.
     """
-    from grader.agent import GRADE_PRESENCE_PENALTY, GRADING_SETTINGS
+    from grader.agent import GRADING_SETTINGS
 
-    assert GRADING_SETTINGS.get("presence_penalty") == GRADE_PRESENCE_PENALTY
-    assert GRADE_PRESENCE_PENALTY > 0
+    assert GRADING_SETTINGS.get("presence_penalty") is None
+    assert GRADING_SETTINGS.get("frequency_penalty") is None
 
-    # The whole point of choosing a penalty over a temperature bump.
+    # Greedy, and staying that way: reproducibility is not spent to buy
+    # termination. `seed` was the control that proves the sampling results mean
+    # something — greedy decoding has no use for one, and setting it produced
+    # byte-identical output where every penalty changed it.
     assert GRADING_SETTINGS.get("temperature") == 0.0
-
-    # Unlike `max_tokens`, this spelling is the one the OpenAI-compatible layer
-    # reads, verified off the wire rather than assumed: a captured request body
-    # from the real grade() path carried presence_penalty 0.5 and temperature
-    # 0.0, and the item that had run past fifteen minutes returned in 22.5s.
-    # `seed` was the control — greedy decoding has no use for one, and setting
-    # it produced byte-identical output, which is what makes the sampling
-    # results meaningful rather than a list of things that happened to work.
 
 
 def _recording_build_agent(outcomes):
