@@ -3,6 +3,7 @@ import {
   attachToGrade,
   canvasImport,
   canvasPost,
+  canvasTargetOf,
   fetchPostQueue,
   flushPostQueue,
   gradeBatch,
@@ -139,5 +140,25 @@ describe("the Canvas round-trip client", () => {
     stubJson({ detail: "attachments must live under ..." }, false);
 
     await expect(attachToGrade("gr_1", "/Users/x/.ssh/id_rsa")).rejects.toThrow(/attach/);
+  });
+});
+
+describe("canvasTargetOf", () => {
+  it("reads the course and assignment out of an imported batch's key", () => {
+    expect(canvasTargetOf("canvas_106_2841")).toEqual({
+      courseId: 106,
+      assignmentId: 2841,
+    });
+  });
+
+  it("returns null for a locally pasted batch, which cannot be posted", () => {
+    expect(canvasTargetOf("essay-1")).toBeNull();
+  });
+
+  it("does not mistake a partial or malformed key for a Canvas one", () => {
+    expect(canvasTargetOf("canvas_106")).toBeNull();
+    expect(canvasTargetOf("canvas_106_2841_extra")).toBeNull();
+    expect(canvasTargetOf("canvas_abc_def")).toBeNull();
+    expect(canvasTargetOf("")).toBeNull();
   });
 });

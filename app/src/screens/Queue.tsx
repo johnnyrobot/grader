@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { QueueData, GradeItem, gradeBatch, checkUpdates } from "../api";
+import { QueueData, GradeItem, gradeBatch, checkUpdates, canvasPost, canvasTargetOf } from "../api";
 import { AppShell } from "../components/AppShell";
 import { checkDesktopUpdate, installPendingUpdate } from "../updater";
 
@@ -54,8 +54,50 @@ export function QueueScreen({ data, onSelectItem, assignmentId, setAssignmentId,
   const [updateVersion, setUpdateVersion] = useState("");
   const [updateStatus, setUpdateStatus] = useState("");
   const [installingUpdate, setInstallingUpdate] = useState(false);
+  const [posting, setPosting] = useState(false);
+  const [postReceipt, setPostReceipt] = useState<string[]>([]);
   const stats = data?.stats;
   const items = data?.items || [];
+
+  // Post is offered only for a batch imported from Canvas, and only once the
+  // teacher has approved something. Approval remains the engine's to judge —
+  // this just avoids offering an action that postable() would refuse outright.
+  const canvasTarget = canvasTargetOf(assignmentId);
+  const approvedIds = items.filter(item => item.approved).map(item => item.id);
+
+  async function handlePost() {
+    if (!canvasTarget || approvedIds.length === 0) return;
+    setPosting(true);
+    setPostReceipt([]);
+    try {
+      const result = await canvasPost(
+        canvasTarget.courseId, canvasTarget.assignmentId, approvedIds,
+      );
+      const lines: string[] = [];
+      if (result.posted > 0) {
+        lines.push(`Posted ${result.posted} grade${result.posted === 1 ? "" : "s"} to Canvas.`);
+        for (const [student, score] of Object.entries(result.posted_scores || {})) {
+          lines.push(`Student ${student}: ${score}`);
+        }
+      }
+      // Queued is not a failure. Canvas was unreachable; the approvals are kept
+      // and will go out on the next flush.
+      if (result.queued > 0) {
+        lines.push(
+          `Canvas was unreachable, so ${result.queued} approved grade` +
+          `${result.queued === 1 ? " is" : "s are"} queued and will post when it is back.`,
+        );
+      }
+      for (const skipped of result.skipped || []) lines.push(`Skipped: ${skipped}`);
+      if (lines.length === 0) lines.push("Nothing to post.");
+      setPostReceipt(lines);
+      onRefresh();
+    } catch (error) {
+      setPostReceipt([`Could not post: ${(error as Error).message}`]);
+    } finally {
+      setPosting(false);
+    }
+  }
 
   useEffect(() => {
     checkDesktopUpdate().then(update => {
@@ -155,12 +197,32 @@ export function QueueScreen({ data, onSelectItem, assignmentId, setAssignmentId,
           <button className="button-primary" onClick={handleGrade} disabled={grading || !assignmentId.trim()}>
             {grading ? "Starting…" : "Grade submissions"}
           </button>
+          {canvasTarget && (
+            <button
+              className="button-primary"
+              onClick={handlePost}
+              disabled={posting || approvedIds.length === 0}
+              title={approvedIds.length === 0 ? "Approve a grade first" : undefined}
+            >
+              {posting ? "Posting…" : `Post ${approvedIds.length} approved to Canvas`}
+            </button>
+          )}
         </>
       )}
       footer={(
         <p><strong>Keyboard ready:</strong> open a submission, then use <kbd>A</kbd> to approve, <kbd>E</kbd> to edit feedback, or <kbd>Esc</kbd> to return.</p>
       )}
     >
+      {postReceipt.length > 0 && (
+        <div className="notice-row" role="status" aria-live="polite">
+          <div>
+            <h2>Canvas post receipt</h2>
+            <ul>
+              {postReceipt.map(line => <li key={line}>{line}</li>)}
+            </ul>
+          </div>
+        </div>
+      )}
       {(gradeMsg || updateVersion) && (
         <div className="notice-row" role="status" aria-live="polite">
           {gradeMsg && <p>{gradeMsg}</p>}

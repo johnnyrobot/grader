@@ -301,3 +301,18 @@ export async function attachToGrade(gradeId: string, path: string): Promise<{ pa
   if (!r.ok) throw new Error(`attach: ${r.status}`);
   return r.json();
 }
+
+/** Course and assignment ids out of an engine assignment key.
+ *
+ * `/api/canvas/import` stores submissions under `canvas_<course>_<assignment>`,
+ * so a queue row already knows which Canvas assignment it came from. Anything
+ * else — a locally pasted batch — is not postable and returns null, which is
+ * how a caller tells "post is unavailable here" from "post failed".
+ */
+export function canvasTargetOf(
+  assignmentId: string,
+): { courseId: number; assignmentId: number } | null {
+  const match = /^canvas_(\d+)_(\d+)$/.exec(assignmentId.trim());
+  if (!match) return null;
+  return { courseId: Number(match[1]), assignmentId: Number(match[2]) };
+}
