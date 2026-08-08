@@ -5,7 +5,7 @@ import { SettingsScreen } from "./Settings";
 import { ThemeProvider } from "../theme";
 
 vi.mock("../api", () => ({
-  getSettings: vi.fn().mockResolvedValue({ auto_approve_threshold: 0.95, review_first_threshold: 0.7 }),
+  getSettings: vi.fn().mockResolvedValue({ high_confidence_threshold: 0.95, review_first_threshold: 0.7 }),
   updateSettings: vi.fn().mockResolvedValue({ success: true }),
   listRubrics: vi.fn().mockResolvedValue([]),
   getRubric: vi.fn(),
@@ -44,7 +44,7 @@ describe("SettingsScreen", () => {
       canvas_url: "https://canvas.example.test",
       canvas_token_masked: "1234...cdef",
       data_dir: "/tmp/grader-canvas",
-      auto_approve_threshold: 0.95,
+      high_confidence_threshold: 0.95,
       review_first_threshold: 0.7,
     });
     const user = userEvent.setup();
@@ -61,7 +61,7 @@ describe("SettingsScreen", () => {
     expect(api.updateSettings).toHaveBeenCalledWith(expect.objectContaining({
       canvas_url: "https://canvas.example.test",
       data_dir: "/tmp/grader-canvas",
-      auto_approve_threshold: 0.9,
+      high_confidence_threshold: 0.9,
       review_first_threshold: 0.7,
     }));
   });

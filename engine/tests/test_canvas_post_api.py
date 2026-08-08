@@ -216,7 +216,7 @@ def test_saved_settings_drive_canvas_grade_batch_and_attachment_directory(
         model_vision="grader-vision:test",
         model_embed="nomic-embed-text:test",
         review_first_threshold=0.6,
-        auto_approve_threshold=0.9,
+        high_confidence_threshold=0.9,
     )
 
     canvas_calls = {}
@@ -319,7 +319,7 @@ def test_settings_are_validated_masked_and_written_owner_only(tmp_path, monkeypa
         canvas_token="1234567890abcdef",
         data_dir=str(tmp_path / "attachments"),
         review_first_threshold=0.65,
-        auto_approve_threshold=0.9,
+        high_confidence_threshold=0.9,
     ))
 
     assert result["settings"]["canvas_url"] == "https://canvas.example.test"
@@ -331,7 +331,7 @@ def test_settings_are_validated_masked_and_written_owner_only(tmp_path, monkeypa
     # A rejected patch is the teacher's input being wrong, not the engine failing.
     with pytest.raises(HTTPException) as excinfo:
         api.update_settings(SettingsPatch(
-            review_first_threshold=0.95, auto_approve_threshold=0.9,
+            review_first_threshold=0.95, high_confidence_threshold=0.9,
         ))
     assert excinfo.value.status_code == 400
     assert "needs-review threshold" in str(excinfo.value.detail)

@@ -165,9 +165,41 @@ def test_settings_round_trip_never_returns_the_raw_token(client, auth, tmp_path)
     assert fetched.json()["canvas_url"] == "https://canvas.example.test"
 
 
+def test_the_high_confidence_threshold_round_trips(client, auth, tmp_path):
+    saved = client.put("/api/settings", headers=auth, json={
+        "high_confidence_threshold": 0.88,
+        "data_dir": str(tmp_path / "attachments"),
+    })
+
+    assert saved.status_code == 200
+    assert saved.json()["settings"]["high_confidence_threshold"] == 0.88
+
+    fetched = client.get("/api/settings", headers=auth).json()
+
+    assert fetched["high_confidence_threshold"] == 0.88
+    assert "auto_approve_threshold" not in fetched
+
+
+def test_an_install_sending_the_old_key_keeps_its_configuration(client, auth, tmp_path):
+    """Nothing auto-approves, so the setting was renamed — but a packaged app one
+    version behind still sends `auto_approve_threshold`, and must not silently
+    fall back to the default."""
+    saved = client.put("/api/settings", headers=auth, json={
+        "auto_approve_threshold": 0.88,
+        "data_dir": str(tmp_path / "attachments"),
+    })
+
+    assert saved.status_code == 200
+    assert saved.json()["settings"]["high_confidence_threshold"] == 0.88
+
+    fetched = client.get("/api/settings", headers=auth).json()
+
+    assert fetched["high_confidence_threshold"] == 0.88
+
+
 def test_settings_the_teacher_typed_wrong_come_back_as_400(client, auth):
     response = client.put("/api/settings", headers=auth, json={
-        "review_first_threshold": 0.95, "auto_approve_threshold": 0.9,
+        "review_first_threshold": 0.95, "high_confidence_threshold": 0.9,
     })
 
     assert response.status_code == 400

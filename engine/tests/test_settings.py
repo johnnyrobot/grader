@@ -79,7 +79,7 @@ def test_one_invalid_setting_does_not_discard_the_others(tmp_path, caplog):
     path = tmp_path / "settings.json"
     path.write_text(json.dumps({
         "canvas_url": "http://canvas.example.edu",   # newly invalid: remote + plaintext
-        "auto_approve_threshold": 0.88,
+        "high_confidence_threshold": 0.88,
         "review_first_threshold": 0.42,
         "model_text": "grader-text:8b",
     }))
@@ -88,17 +88,40 @@ def test_one_invalid_setting_does_not_discard_the_others(tmp_path, caplog):
         result = SettingsStore(path).current()
 
     assert result.canvas_url == ""                 # dropped back to default
-    assert result.auto_approve_threshold == 0.88   # preserved
+    assert result.high_confidence_threshold == 0.88   # preserved
     assert result.review_first_threshold == 0.42   # preserved
     assert any("canvas_url" in r.message for r in caplog.records)
+
+
+def test_a_saved_file_using_the_old_key_keeps_its_value(tmp_path):
+    """An install saved before the rename holds `auto_approve_threshold` on disk.
+
+    Ignoring an unknown key would silently reset the teacher's lane boundary.
+    """
+    path = tmp_path / "settings.json"
+    path.write_text(json.dumps({"auto_approve_threshold": 0.88}))
+
+    assert SettingsStore(path).current().high_confidence_threshold == 0.88
+
+
+def test_the_next_write_migrates_the_old_key(tmp_path):
+    path = tmp_path / "settings.json"
+    path.write_text(json.dumps({"auto_approve_threshold": 0.88}))
+    store = SettingsStore(path)
+
+    store.update(SettingsPatch(data_dir=str(tmp_path / "d")))
+    saved = json.loads(path.read_text())
+
+    assert saved["high_confidence_threshold"] == 0.88
+    assert "auto_approve_threshold" not in saved
 
 
 def test_unattributable_validation_error_falls_back_to_defaults(tmp_path, caplog):
     """Cross-field errors name no single field, so the whole file is untrustworthy."""
     path = tmp_path / "settings.json"
     path.write_text(json.dumps({
-        "auto_approve_threshold": 0.60,
-        "review_first_threshold": 0.90,  # must be lower than auto-approve
+        "high_confidence_threshold": 0.60,
+        "review_first_threshold": 0.90,  # must be lower than high-confidence
     }))
 
     with caplog.at_level("WARNING"):
@@ -141,7 +164,7 @@ def test_blank_token_means_leave_it_alone(tmp_path):
 def test_a_rejected_patch_leaves_the_file_untouched(tmp_path):
     path = tmp_path / "settings.json"
     store = SettingsStore(path)
-    store.update(SettingsPatch(auto_approve_threshold=0.9,
+    store.update(SettingsPatch(high_confidence_threshold=0.9,
                                review_first_threshold=0.4,
                                data_dir=str(tmp_path / "d")))
     before = path.read_text()

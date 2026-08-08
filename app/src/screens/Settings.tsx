@@ -147,12 +147,12 @@ function GeneralPanel({ settings, onSave }: { settings: Record<string, string | 
   const [canvasToken, setCanvasToken] = useState("");
   const [canvasUrl, setCanvasUrl] = useState("");
   const [dataDir, setDataDir] = useState("");
-  const [autoThreshold, setAutoThreshold] = useState(0.95);
+  const [highConfidence, setHighConfidence] = useState(0.95);
   const [reviewThreshold, setReviewThreshold] = useState(0.7);
   useEffect(() => {
     setCanvasUrl(String(settings.canvas_url || ""));
     setDataDir(String(settings.data_dir || ""));
-    setAutoThreshold(Number(settings.auto_approve_threshold ?? 0.95));
+    setHighConfidence(Number(settings.high_confidence_threshold ?? 0.95));
     setReviewThreshold(Number(settings.review_first_threshold ?? 0.7));
   }, [settings]);
   return (
@@ -169,11 +169,11 @@ function GeneralPanel({ settings, onSave }: { settings: Record<string, string | 
       <section className="settings-section" aria-labelledby="threshold-heading">
         <h3 id="threshold-heading">Review-lane thresholds</h3>
         <div className="settings-form-grid">
-          <label><span className="field-label">High-confidence threshold</span><input type="number" min="0.5" max="1" step="0.05" className="field-control" value={autoThreshold} onChange={event => setAutoThreshold(Number(event.target.value))} /><small>Drafts at or above this value enter the confident lane and still require your approval.</small></label>
+          <label><span className="field-label">High-confidence threshold</span><input type="number" min="0.5" max="1" step="0.05" className="field-control" value={highConfidence} onChange={event => setHighConfidence(Number(event.target.value))} /><small>Drafts at or above this value enter the confident lane and still require your approval.</small></label>
           <label><span className="field-label">Needs-review threshold</span><input type="number" min="0" max="1" step="0.05" className="field-control" value={reviewThreshold} onChange={event => setReviewThreshold(Number(event.target.value))} /><small>Below this value, drafts move to review first.</small></label>
         </div>
       </section>
-      <div className="settings-actions"><span /><button className="button-primary" onClick={() => onSave({ canvas_url: canvasUrl, canvas_token: canvasToken, data_dir: dataDir, auto_approve_threshold: autoThreshold, review_first_threshold: reviewThreshold })}>Save general settings</button></div>
+      <div className="settings-actions"><span /><button className="button-primary" onClick={() => onSave({ canvas_url: canvasUrl, canvas_token: canvasToken, data_dir: dataDir, high_confidence_threshold: highConfidence, review_first_threshold: reviewThreshold })}>Save general settings</button></div>
     </div>
   );
 }

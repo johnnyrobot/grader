@@ -20,7 +20,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from pydantic import BaseModel, Field, ValidationError, field_validator, model_validator
+from pydantic import (
+    AliasChoices,
+    BaseModel,
+    Field,
+    ValidationError,
+    field_validator,
+    model_validator,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +38,14 @@ LOOPBACK_HOSTS = {"localhost", "127.0.0.1", "::1"}
 # reads the same variable for its own data directory; the default belongs here because
 # `data_dir` is a setting, and a setting's default is this module's to know.
 DEFAULT_DATA_DIR = str(Path(os.environ.get("GRADER_DATA_DIR", "fixtures")))
+
+# `auto_approve_threshold` is the name the high-confidence lane boundary shipped
+# under. Nothing in Grader auto-approves — a lane is a reading order, never an
+# approval — so the name is gone, but a saved file or an older packaged app still
+# sends it, and dropping an unknown key would silently reset a teacher's boundary.
+# Read under either name, written back under the new one. Named once so the
+# incoming payload and the saved file cannot drift apart on which names they take.
+HIGH_CONFIDENCE_ALIASES = AliasChoices("high_confidence_threshold", "auto_approve_threshold")
 
 
 @dataclass(frozen=True)
@@ -56,7 +71,7 @@ class Thresholds:
     """Where the triage lanes fall."""
 
     review_first: float
-    auto_approve: float
+    high_confidence: float
 
 
 class Settings(BaseModel):
@@ -76,7 +91,9 @@ class Settings(BaseModel):
     model_vision: str = "grader-vision:1.3b"
     model_embed: str = "nomic-embed-text:latest"
     data_dir: str = DEFAULT_DATA_DIR
-    auto_approve_threshold: float = Field(default=0.95, ge=0.5, le=1.0)
+    high_confidence_threshold: float = Field(
+        default=0.95, ge=0.5, le=1.0, validation_alias=HIGH_CONFIDENCE_ALIASES,
+    )
     review_first_threshold: float = Field(default=0.70, ge=0.0, le=1.0)
 
     @field_validator("canvas_url")
@@ -129,7 +146,7 @@ class Settings(BaseModel):
 
     @model_validator(mode="after")
     def validate_threshold_order(self) -> Settings:
-        if self.review_first_threshold >= self.auto_approve_threshold:
+        if self.review_first_threshold >= self.high_confidence_threshold:
             raise ValueError("needs-review threshold must be lower than high-confidence threshold")
         return self
 
@@ -146,7 +163,7 @@ class Settings(BaseModel):
     def thresholds(self) -> Thresholds:
         return Thresholds(
             review_first=self.review_first_threshold,
-            auto_approve=self.auto_approve_threshold,
+            high_confidence=self.high_confidence_threshold,
         )
 
     def attachment_root(self, *, ensure: bool = True) -> Path:
@@ -179,7 +196,9 @@ class SettingsPatch(BaseModel):
     model_vision: str | None = None
     model_embed: str | None = None
     data_dir: str | None = None
-    auto_approve_threshold: float | None = None
+    high_confidence_threshold: float | None = Field(
+        default=None, validation_alias=HIGH_CONFIDENCE_ALIASES,
+    )
     review_first_threshold: float | None = None
 
 

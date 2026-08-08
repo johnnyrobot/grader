@@ -596,7 +596,7 @@ def grade_batch(req: GradeBatch, settings: Settings = Depends(current_settings))
 
     model = req.model or settings.model_text
     low_confidence = settings.thresholds.review_first
-    high_confidence = settings.thresholds.auto_approve
+    high_confidence = settings.thresholds.high_confidence
     embedding_model = settings.model_embed
 
     job_id = f"job_{secrets.token_hex(8)}"
