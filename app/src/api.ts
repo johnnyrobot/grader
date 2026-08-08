@@ -191,3 +191,113 @@ export async function saveRubric(rubricData: any): Promise<{ id: number }> {
   if (!r.ok) throw new Error(`save rubric: ${r.status}`);
   return r.json();
 }
+
+// ---------------------------------------------------------------------------
+// Canvas round-trip.
+//
+// The engine has implemented import, post, the offline queue and comment
+// attachments for some time; this file had no way to reach any of it, so no
+// screen could either. These are the client functions a Canvas UI needs. They
+// commit to no particular screen layout.
+// ---------------------------------------------------------------------------
+
+export interface CanvasImportResult {
+  imported: number;
+  submissions: { id: string; canvas_user_id: string }[];
+  failures: { user_id: string; error: string }[];
+}
+
+export interface CanvasPostResult {
+  posted: number;
+  /** Non-zero when Canvas was unreachable and the posts were queued (FR-3.5). */
+  queued: number;
+  queued_reason?: string;
+  skipped: string[];
+  posted_scores: Record<string, number>;
+  progress_state: string;
+  completion: number;
+}
+
+export interface PostQueueStatus {
+  pending: number;
+  items: Record<string, unknown>[];
+}
+
+export interface FlushResult {
+  posted: number;
+  failed: number;
+  /** Entries that burned their retries and stopped being attempted. */
+  abandoned: number;
+  remaining: number;
+}
+
+export async function canvasImport(
+  courseId: number,
+  assignmentId: number,
+  downloadAttachments = true,
+): Promise<CanvasImportResult> {
+  const r = await fetch(`${base}/api/canvas/import`, {
+    method: "POST",
+    headers: { ...headers(), "Content-Type": "application/json" },
+    body: JSON.stringify({
+      course_id: courseId,
+      assignment_id: assignmentId,
+      download_attachments: downloadAttachments,
+    }),
+  });
+  if (!r.ok) throw new Error(`canvas import: ${r.status}`);
+  return r.json();
+}
+
+export async function canvasPost(
+  courseId: number,
+  assignmentId: number,
+  gradeIds: string[],
+): Promise<CanvasPostResult> {
+  const r = await fetch(`${base}/api/canvas/post`, {
+    method: "POST",
+    headers: { ...headers(), "Content-Type": "application/json" },
+    body: JSON.stringify({
+      course_id: courseId,
+      assignment_id: assignmentId,
+      grade_ids: gradeIds,
+    }),
+  });
+  if (!r.ok) throw new Error(`canvas post: ${r.status}`);
+  return r.json();
+}
+
+export async function fetchPostQueue(): Promise<PostQueueStatus> {
+  const r = await fetch(`${base}/api/canvas/post-queue`, { headers: headers() });
+  if (!r.ok) throw new Error(`post queue: ${r.status}`);
+  return r.json();
+}
+
+export async function flushPostQueue(): Promise<FlushResult> {
+  const r = await fetch(`${base}/api/canvas/flush`, {
+    method: "POST",
+    headers: headers(),
+  });
+  if (!r.ok) throw new Error(`flush queue: ${r.status}`);
+  return r.json();
+}
+
+export async function listGradeAttachments(
+  gradeId: string,
+): Promise<{ grade_id: string; attachments: { path: string; exists: boolean }[] }> {
+  const r = await fetch(`${base}/api/grades/${gradeId}/attachments`, {
+    headers: headers(),
+  });
+  if (!r.ok) throw new Error(`attachments: ${r.status}`);
+  return r.json();
+}
+
+export async function attachToGrade(gradeId: string, path: string): Promise<{ path: string }> {
+  const r = await fetch(`${base}/api/grades/${gradeId}/attachments`, {
+    method: "POST",
+    headers: { ...headers(), "Content-Type": "application/json" },
+    body: JSON.stringify({ path }),
+  });
+  if (!r.ok) throw new Error(`attach: ${r.status}`);
+  return r.json();
+}
