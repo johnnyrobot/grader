@@ -120,9 +120,25 @@ Both remaining promises were then implemented, and a fourth defect surfaced on t
   bytes `canvas_post` uploads. Now bounded to the app's data directory, traversal and symlinks
   refused, re-checked at upload. Caught by the background security review, which was right.
 
-**The fence changes the prompt for every grade, so the frozen public-proxy scores no longer
-describe the shipping prompt.** The 40-item regrade that reproduced 2026-07-13 exactly was the
-*pre-fence* prompt. Rebuild and re-run the quality gate before quoting QWK 0.845 again.
+**The fence changes the prompt for every grade, so it was re-measured before anything was
+claimed.** A full 40-item rebuild under the fenced prompt, same seed and same anchors:
+
+| | pre-fence | fenced (HEAD) |
+| --- | --- | --- |
+| QWK | 0.845 | **0.885** |
+| exact | 50% | 55% |
+| adjacent | 90% | 98% |
+| mean error | +0.10 | +0.07 |
+| mohler_q01 / q02 | 0.811 / 0.866 | 0.857 / 0.904 |
+
+Read this as **no degradation**, not as evidence the fence improves grading. n=40 on one corpus
+and two questions; a +0.04 QWK move at that size is well inside noise. The claim it supports is
+the one that mattered: fencing the submission did not cost accuracy, so the security fix ships
+without a quality trade.
+
+`QWK 0.885` is the number that now describes the shipping prompt. The public-proxy dataset under
+`artifacts/` still holds pre-fence scores — rebuild it with `--grade` before the release gate
+quotes a figure, or it will report the old prompt's numbers.
 
 **Performance has much less headroom than recorded.** The gate passes, but a 1500-word essay now
 measures 67–77s against a 90s budget where 2026-07-12 recorded 33.5s, and it read 123s (a FAIL)
