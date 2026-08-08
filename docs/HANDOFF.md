@@ -268,18 +268,39 @@ They are not hanging. They are **generating without end**. Run directly,
 Qwen3-VL, reappearing in the Qwen3 text model that replaced it — see
 [[qwen3-vl-unusable-reasoning-spiral]] in the project memory.
 
-**Anchors are implicated.** The same item graded in **36s** with no anchors and ran unbounded
-with the six the builder injects. Anchors are the calibration mechanism and are always present
-once a teacher has graded enough, so this is a product path, not a quirk of the evidence harness.
-What has *not* been established is whether anchors are necessary, sufficient, or merely
-correlated — one item, two conditions, is not a controlled result. Worth pinning down, because if
-anchored prompts spiral at some rate then every calibrated teacher meets it.
+**Anchors trigger it, reproduced rather than inferred.** The same item grades cleanly with no
+anchors and spirals with the six the builder injects:
 
-**A timeout does not stop it, and the first attempt at this fix was wrong.** `ModelSettings`
-gained `timeout=300` and the call still ran past fifteen minutes. httpx's read timeout resets on
-every byte received, so a model that keeps emitting tokens is never late — it is slow forever. A
-read timeout bounds silence, not duration. `max_tokens` is what bounds a model that will not stop;
-the timeout stays for the case it does cover, a server that goes quiet mid-request.
+| | before the bound | after |
+| --- | --- | --- |
+| without anchors | 53.7s, ok | 53.7s, ok |
+| with anchors | >15 min, 6,975 tokens, killed | 57.9s, `ok=False`, "token limit (2048) exceeded" |
+
+The anchor block is **636 characters**. This is not context length — it is the anchor content
+itself. Anchors are the calibration mechanism and are present for every teacher past cold start,
+so **~3% of submissions failing to grade is the honest expectation**, and the bound turns "the
+batch never finishes" into "these items show an error". That is a far better failure, not a cure.
+Whether it generalises past this one item is untested and worth settling.
+
+**Two wrong fixes preceded the right one, both because the setting looked applied and was not.**
+
+1. `timeout=300` — the call still ran past fifteen minutes. httpx's read timeout resets on every
+   byte, so a model that keeps emitting tokens is never late; it is slow forever. A read timeout
+   bounds *silence*, not duration.
+2. `max_tokens=2048` — still unbounded. Pydantic AI sends the modern OpenAI spelling
+   `max_completion_tokens`, and Ollama's `/v1` layer **ignores it rather than rejecting it**:
+
+   | parameter | result on an identical prompt |
+   | --- | --- |
+   | `max_tokens=40` | 40 tokens, `finish_reason: length` |
+   | `max_completion_tokens=40` | 2339 tokens, `finish_reason: stop` |
+   | `options.num_predict=40` | 2339 tokens (native `/api` param, not `/v1`) |
+
+What works is `extra_body={"max_tokens": N}`, which puts the spelling Ollama reads into the
+request alongside the one Pydantic AI chose. The timeout stays for the case it does cover.
+
+When a grade appears to hang here, read `n_decoded` in `~/.ollama/logs/server.log` before
+assuming a stall — climbing means runaway generation, not a hung connection.
 
 The omission was structural. Every other network call in the engine is bounded — citations 10–20s,
 Canvas 60–120s, embeddings and vision 120s. Grading is the one call where a *library* holds the
