@@ -55,11 +55,17 @@ rubber-stamping low drafts generates fewer overrides, so the panel reads *better
 bias gets worse. The population was the whole substance of the term, which is why `Calibration
 health` in `CONTEXT.md` now names it.
 
-The cost is that `approvals.py` must widen. It was deliberately narrow — its docstring says
-folding in draft reconstruction "would turn an invariant into a `grade_records` repository" —
-and recording a zero-delta data point means `approve()` grows most of `override()`'s signature.
-We accept that; a metric whose denominator is "times the teacher disagreed" cannot detect a
-teacher who has stopped disagreeing.
+**The zero-delta data point already exists.** `grade_records` carries `ai_scores_json`,
+`ai_confidence` and `ai_flags_json`, written when the grade is drafted, alongside
+`teacher_scores_json` and `approved_at`. An approval with no override is already a complete,
+recorded comparison — nothing new needs capturing at approval time, and `approve()` does not
+widen. The narrowness its docstring defends is preserved.
+
+The cost relocates rather than disappearing: `compute_health` must read approved grade records
+instead of the override store, which means a read seam onto that table, and it must resolve
+each record's Rubric — by `rubric_title` and `rubric_version` — to scale bias against criterion
+max. That is the same resolution `override_grade` already performs, including its fallback for
+records written before `rubric_title` existed.
 
 ## Approvals are evidence *about* the model, not *for* it
 
@@ -85,6 +91,9 @@ store.
 - **Asymmetric thresholds** (harsh trips earlier than lenient). A lenient AI that gets
   rubber-stamped inflates grades, which fails the student in the other direction and is harder
   to defend to a department.
+- **Recording zero-delta approvals as rows in the `overrides` table.** It has exactly the right
+  columns and would be the shortest path, but an `Override` is *a teacher's correction* — filling
+  the table with non-corrections would corrupt `override_rate` and break the term.
 - **Keeping QWK in the panel.** It rounds both score vectors to integers, and §1g measured 39
   of 120 human scores as half-points — so it discards teacher precision before computing. It
   would also invite comparison against the release gate's differently-populated QWK.
