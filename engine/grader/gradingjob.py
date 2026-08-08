@@ -79,6 +79,13 @@ class GradeStore(Protocol):
 
 OnProgress = Callable[[int, int, GradeOutcome], None]
 
+# The Assignment's measured Draft bias: signed, already scaled as a fraction of
+# criterion max, and None when there is not enough evidence to name a direction.
+# A job asks once per run, at the top of the batch — the figure is a property of
+# the Assignment, not of a submission, and re-reading it mid-batch would let two
+# drafts in the same queue be labelled by different rules.
+DraftBiasLookup = Callable[[str], float | None]
+
 
 @dataclass(frozen=True)
 class _BoundExemplars:
@@ -118,10 +125,15 @@ class GradingJob:
         report progress. Persistence always precedes the announcement.
       - `on_progress` is called once per submission, after that submission is
         saved, with the running count and its outcome.
+      - `Draft bias` is resolved once per `run()`, before the first grade, and
+        the same figure routes every draft in the batch. Triage is handed it;
+        triage never looks it up.
 
     Error modes: `__init__` raises ValueError for thresholds that cannot route.
     `run()` does not catch failures from the store — losing a write is not
-    something to continue through.
+    something to continue through, and nor is a Draft bias that cannot be read:
+    a batch that could not ask whether this Assignment is biased would label
+    every draft in it high-confidence on the strength of not knowing.
     """
 
     def __init__(
@@ -134,6 +146,7 @@ class GradingJob:
         low_confidence: float,
         high_confidence: float,
         materials: str = "",
+        draft_bias: DraftBiasLookup | None = None,
     ) -> None:
         # Checked here rather than on first use: triage validates the same thing,
         # but only once a submission reaches it — after a model call has already
@@ -150,6 +163,7 @@ class GradingJob:
         self._low = low_confidence
         self._high = high_confidence
         self._materials = materials
+        self._draft_bias = draft_bias
 
     def run(
         self,
@@ -161,13 +175,17 @@ class GradingJob:
         total = len(submission_ids)
         outcomes: list[GradeOutcome] = []
 
+        # Asked once, before the first grade: one Assignment, one figure, and every
+        # draft in this batch routed against it.
+        draft_bias = self._draft_bias(assignment_id) if self._draft_bias else None
+
         for index, submission_id in enumerate(submission_ids, start=1):
             submission = self._store.fetch_submission(submission_id)
             if submission is None:
                 outcome = self._not_found(submission_id, assignment_id)
                 self._store.audit(outcome.record_id, "engine", "grade_skipped", outcome.record)
             else:
-                outcome = self._grade_one(submission)
+                outcome = self._grade_one(submission, draft_bias=draft_bias)
                 self._store.save(outcome, rubric_title=self._rubric.title)
                 self._store.audit(outcome.record_id, "engine", "graded", outcome.record)
 
@@ -179,7 +197,9 @@ class GradingJob:
 
     # -- internals ------------------------------------------------------------
 
-    def _grade_one(self, submission: SubmissionText) -> GradeOutcome:
+    def _grade_one(
+        self, submission: SubmissionText, *, draft_bias: float | None
+    ) -> GradeOutcome:
         record_id = f"gr_{submission.id}"
         anchors = self._anchors_for(submission)
 
@@ -202,6 +222,7 @@ class GradingJob:
             low_confidence=self._low,
             high_confidence=self._high,
             scanned=submission.scanned,
+            draft_bias=draft_bias,
         )
         return GradeOutcome(
             submission_id=submission.id, record_id=record_id, state="drafted",

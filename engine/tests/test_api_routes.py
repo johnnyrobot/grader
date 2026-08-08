@@ -480,6 +480,89 @@ def test_calibration_is_scoped_to_one_assignment(client, auth, api):
     assert client.get("/api/calibration/a1", headers=auth).json()["n"] == 20
 
 
+class _ConfidentJudge:
+    """Grades everything at 0.95 — the confidence that auto-clears."""
+
+    def grade(self, rubric, submission, *, anchors="", materials=""):
+        from grader.schema import CriterionScore, GradeDraft, GradeRun
+
+        draft = GradeDraft(
+            criterion_scores=[CriterionScore(criterion_id="c1", score=3.0,
+                                             rationale="mostly right")],
+            feedback="Nearly.", confidence=0.95, flags=[],
+        )
+        return GradeRun(draft, "tool", "fake", 0.1, 0)
+
+
+def _grade_one_batch(api, assignment_id="a1", job_id="job_bias"):
+    """Run a real batch on an imported submission, and return its record."""
+    db = api._db()
+    db.execute(
+        "INSERT INTO submissions (id, assignment_id, student_ref, text, state, created_at) "
+        "VALUES (?,?,?,?,?,?)",
+        ("sub_next", assignment_id, "s99", "a fresh essay", "imported", api._now()),
+    )
+    db.commit()
+
+    api._jobs[job_id] = {"status": "queued", "total": 1, "done": 0,
+                         "assignment_id": assignment_id}
+    api._run_grading_job(
+        job_id, assignment_id, ["sub_next"],
+        rubric=api._rubric_store.get("Essay"),
+        model="grader-text:8b", materials="",
+        low_confidence=0.6, high_confidence=0.9,
+        embedding_model="nomic-embed-text:v1.5",
+        judge=_ConfidentJudge(),
+    )
+    return api._jobs[job_id]["results"][0]
+
+
+def test_a_measured_bias_reaches_the_lane_the_teacher_reads(
+    client, auth, api, no_network_embeddings
+):
+    """The whole point, at the seam where it shows: twenty approvals a point above
+    the draft on a 5-point criterion is a Draft bias of -0.20, past the demote
+    threshold, so the next batch stops being labelled high-confidence."""
+    _save_rubric(api)
+    for grade_id in _seed_drafted(api, 20, ai={"c1": 3.0}):
+        client.post(f"/api/grades/{grade_id}/override", headers=auth,
+                    json={"teacher_scores": {"c1": 4.0}, "teacher_feedback": "raised"})
+    assert client.get("/api/calibration/a1", headers=auth).json()["demotes"] is True
+
+    record = _grade_one_batch(api)
+
+    assert record["lane"] == "standard"
+    assert record["ai_scores"] == {"c1": 3.0}   # the score itself is untouched
+    assert record["confidence"] == 0.95
+
+
+def test_an_assignment_with_nothing_measured_still_labels_high_confidence(api):
+    """The control: nothing measured, nothing withdrawn."""
+    _save_rubric(api)
+
+    record = _grade_one_batch(api)
+
+    assert record["lane"] == "high_confidence"
+
+
+def test_an_apparent_bias_below_the_evidence_floor_changes_no_lane(
+    client, auth, api, no_network_embeddings
+):
+    """Nineteen approvals two points below the teacher look emphatically biased and
+    demote nothing: below the floor there is no direction to act on, and the floor
+    reaches the queue as the absence of a figure rather than as a rule triage knows."""
+    _save_rubric(api)
+    for grade_id in _seed_drafted(api, 19, ai={"c1": 3.0}):
+        client.post(f"/api/grades/{grade_id}/override", headers=auth,
+                    json={"teacher_scores": {"c1": 5.0}, "teacher_feedback": "raised"})
+    payload = client.get("/api/calibration/a1", headers=auth).json()
+    assert payload["n"] == 19 and payload["draft_bias"] is None
+
+    record = _grade_one_batch(api)
+
+    assert record["lane"] == "high_confidence"
+
+
 def test_the_queue_of_an_assignment_with_no_grades_is_empty(client, auth):
     response = client.get("/api/queue?assignment_id=a1", headers=auth)
 

@@ -42,7 +42,7 @@ from grader.calibration import (
 from grader.canvas import OfflinePostQueue
 from grader.db import Database
 from grader.exemplars import ExemplarStore
-from grader.gradingjob import GradeOutcome, GradingJob, SubmissionText
+from grader.gradingjob import DraftBiasLookup, GradeOutcome, GradingJob, SubmissionText
 from grader.overrides import OverrideStore, detect_patterns
 from grader.ports import Judge
 from grader.rubrics import RubricStore, parse_pasted_rubric
@@ -400,6 +400,27 @@ class _SqliteApprovedComparisons:
 _approved_comparisons = _SqliteApprovedComparisons()
 
 
+def _draft_bias_lookup(embedding_model: str) -> DraftBiasLookup:
+    """How a running batch asks what this Assignment's Draft bias is.
+
+    The same calibration the panel reports, so the lane a teacher sees and the
+    figure on the screen can never tell them different stories. `draft_bias` is
+    None below the evidence floor — that is how the floor gates the demotion,
+    without this layer knowing what the floor is.
+    """
+
+    def resolve(assignment_id: str) -> float | None:
+        health = compute_health(
+            _approved_comparisons,
+            _override_store,
+            _exemplar_store.for_model(embedding_model),
+            assignment_id,
+        )
+        return health.draft_bias
+
+    return resolve
+
+
 def _run_grading_job(
     job_id: str,
     assignment_id: str,
@@ -434,6 +455,8 @@ def _run_grading_job(
         low_confidence=low_confidence,
         high_confidence=high_confidence,
         materials=materials,
+        # Resolved once inside run(), for the Assignment the batch is grading.
+        draft_bias=_draft_bias_lookup(embedding_model),
     )
 
     total = len(submission_ids)

@@ -19,6 +19,11 @@ the expensive one only on the items that need it.
 Criterion type also drives routing: open-ended prose carries documented style bias that
 survives explicit instructions to ignore it (arXiv 2603.18765), so essays get less benefit
 of the doubt than math.
+
+Direction is the fourth input. A draft that is reliably a little low does not look like an
+error, it looks like a grade — so on an Assignment measured as biased, the high-confidence
+label is withdrawn (ADR-0001). The measurement arrives as an argument: this stays a pure
+function of its inputs, with no store and no lookup of its own.
 """
 
 from __future__ import annotations
@@ -27,6 +32,10 @@ import statistics
 from dataclasses import dataclass, field
 from enum import Enum
 
+# What counts as biased is one rule shared with the calibration panel, and it lives in a
+# leaf module for exactly this reason: routing must not import the store layer that reads
+# approvals. The ADR already records what happens when the same number is defaulted twice.
+from grader.draftbias import demotes_high_confidence
 from grader.ports import Judge
 from grader.schema import GradeRun
 from grader.schema import CriterionType, Flag, GradeDraft, Rubric
@@ -75,8 +84,15 @@ def triage(
     low_confidence: float = LOW_CONFIDENCE,
     high_confidence: float = HIGH_CONFIDENCE,
     scanned: bool = False,
+    draft_bias: float | None = None,
 ) -> Triage:
-    """Assign a review lane. Escalates to a consistency vote only when it's worth paying for."""
+    """Assign a review lane. Escalates to a consistency vote only when it's worth paying for.
+
+    `draft_bias` is the Assignment's measured Draft bias: signed, already scaled as a
+    fraction of criterion max, and None when there is not enough evidence to name a
+    direction. It is resolved once per Assignment by the caller — this function never
+    looks it up, and the same value routes every draft in a batch.
+    """
     if not 0 <= low_confidence < high_confidence <= 1:
         raise ValueError("triage thresholds must satisfy 0 <= low < high <= 1")
 
@@ -140,6 +156,26 @@ def triage(
     else:
         lane = Lane.STANDARD
 
+    # What the score itself looked like, said before either floor speaks. Both floors
+    # append a reason of their own, so a fallback left until the end would be crowded
+    # out by them — and a demoted draft would arrive explaining the demotion and
+    # nothing about the grade.
+    if not reasons:
+        reasons.append("confident, no flags")
+
+    # An Assignment measured as biased stops having its drafts called high-confidence.
+    # A confident under-score reads as a grade rather than an error, so the green label
+    # vouches for exactly the drafts most likely to mislead. A floor like the scanned
+    # one: the label is withdrawn, the score is untouched, and the reasons above still
+    # explain what the score itself looked like. It never promotes, and never reaches
+    # REVIEW_FIRST — a measured bias must not flood the must-read pile. The size of the
+    # gap belongs on the calibration surfaces, not on a per-draft reason that would
+    # imply a precision this figure does not have.
+    if demotes_high_confidence(draft_bias) and lane == Lane.HIGH_CONFIDENCE:
+        lane = Lane.STANDARD
+        direction = "below" if draft_bias < 0 else "above"
+        reasons.append(f"drafts on this assignment run {direction} you: not auto-cleared")
+
     # Scanned work never auto-clears, however confident the grade looks. The
     # model is scoring a transcription, and a word OCR misread is invisible to
     # it — the confidence it reports is about the score, not about whether the
@@ -149,8 +185,6 @@ def triage(
         lane = Lane.REVIEW_FIRST
         reasons.append("scanned: transcription needs a human read")
 
-    if not reasons:
-        reasons.append("confident, no flags")
     return Triage(lane, conf, consistency, reasons, votes)
 
 

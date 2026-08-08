@@ -179,3 +179,95 @@ def test_the_job_cannot_rebind_the_exemplar_model_midway():
     """for_model() is unreachable from inside a running job, not merely unused."""
     job = _job()
     assert not hasattr(job._exemplars, "for_model")
+
+
+# -- Draft bias: a biased Assignment loses its HIGH_CONFIDENCE lane -----------
+#
+# The lane the teacher actually sees, decided by the loop that assembles it. The
+# job resolves Draft bias once for the Assignment and hands the same figure to
+# every triage call; triage looks nothing up (ADR-0001).
+
+
+class FakeDraftBias:
+    """The Assignment's measured Draft bias, signed and already scaled.
+
+    None is the below-the-floor answer: not "no bias", but "no direction is
+    knowable yet".
+    """
+
+    def __init__(self, value=None):
+        self.value = value
+        self.calls = []
+
+    def __call__(self, assignment_id):
+        self.calls.append(assignment_id)
+        return self.value
+
+
+def _batch(bias_value, *, submissions=("sub_1",), **kw):
+    """Grade a batch through the real triage, at a confidence that auto-clears."""
+    store = FakeStore([SubmissionText(s, "a1", f"essay {s}") for s in submissions])
+    bias = FakeDraftBias(bias_value)
+    outcomes = _job(store=store, draft_bias=bias, **kw).run("a1", list(submissions))
+    return outcomes, bias
+
+
+def test_an_unmeasured_assignment_still_produces_a_high_confidence_lane():
+    """The control: this batch auto-clears when nothing has been measured."""
+    outcomes, _ = _batch(None)
+
+    assert outcomes[0].record["lane"] == "high_confidence"
+
+
+def test_a_biased_assignment_stops_calling_its_drafts_high_confidence():
+    outcomes, _ = _batch(-0.15)
+
+    assert outcomes[0].record["lane"] == "standard"
+
+
+def test_a_lenient_assignment_demotes_exactly_as_a_harsh_one_does():
+    outcomes, _ = _batch(0.15)
+
+    assert outcomes[0].record["lane"] == "standard"
+
+
+def test_an_assignment_short_of_the_demote_threshold_is_unaffected():
+    outcomes, _ = _batch(-0.066)
+
+    assert outcomes[0].record["lane"] == "high_confidence"
+
+
+def test_demotion_never_produces_review_first():
+    """A measured bias moves the draft to STANDARD, not into the must-read pile."""
+    outcomes, _ = _batch(-0.9)
+
+    assert outcomes[0].record["lane"] == "standard"
+
+
+def test_a_demoted_draft_keeps_its_scores_confidence_and_flags():
+    """Nothing is adjusted to compensate — the record is the draft the model made."""
+    demoted, _ = _batch(-0.15)
+    untouched, _ = _batch(None)
+
+    record = demoted[0].record
+    assert record["ai_scores"] == untouched[0].record["ai_scores"] == {"thesis": 4.0}
+    assert record["confidence"] == 0.9
+    assert record["flags"] == []
+
+
+def test_draft_bias_is_resolved_once_per_run_not_once_per_submission():
+    """It is a property of the Assignment, and every draft in the batch is routed
+    against the same figure."""
+    outcomes, bias = _batch(-0.15, submissions=("sub_1", "sub_2", "sub_3"))
+
+    assert bias.calls == ["a1"]
+    assert [o.record["lane"] for o in outcomes] == ["standard"] * 3
+
+
+def test_a_job_given_no_bias_source_grades_as_before():
+    """The input is optional: nothing about a caller that has not measured changes."""
+    store = FakeStore([SubmissionText("sub_1", "a1", "an essay")])
+
+    outcomes = _job(store=store).run("a1", ["sub_1"])
+
+    assert outcomes[0].record["lane"] == "high_confidence"

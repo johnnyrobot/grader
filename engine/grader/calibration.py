@@ -26,9 +26,31 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Protocol
 
+from grader.draftbias import (
+    DEMOTE_THRESHOLD,
+    DISCLOSE_THRESHOLD,
+    EVIDENCE_FLOOR,
+    demotes_high_confidence,
+    discloses_to_teacher,
+)
 from grader.exemplars import ExemplarStore
 from grader.overrides import OverrideStore
 from grader.schema import Rubric
+
+# Re-exported: the thresholds and the floor are read from here by everything that
+# already knows about calibration. Only triage, which must import no stores, goes
+# to grader.draftbias directly.
+__all__ = [
+    "DEMOTE_THRESHOLD",
+    "DISCLOSE_THRESHOLD",
+    "EVIDENCE_FLOOR",
+    "ApprovedComparison",
+    "ApprovedComparisons",
+    "CalibrationHealth",
+    "can_draft",
+    "cold_start_status",
+    "compute_health",
+]
 
 
 # ---------------------------------------------------------------------------
@@ -64,18 +86,8 @@ def cold_start_status(exemplar_store: ExemplarStore, assignment_id: str) -> dict
 
 
 # ---------------------------------------------------------------------------
-# Draft bias: the thresholds and the evidence floor (ADR-0001)
+# Draft bias: measured here, judged by grader.draftbias (ADR-0001)
 # ---------------------------------------------------------------------------
-
-# Fractions of criterion max, symmetric in both directions. Disclose is set below
-# demote on purpose: Grader tells the teacher about a gap before it restructures
-# their queue over it.
-DISCLOSE_THRESHOLD = 0.03
-DEMOTE_THRESHOLD = 0.10
-
-# Approvals needed before the panel names a direction at all. Below it there are
-# counts and nothing else — three data points do not make a confident story.
-EVIDENCE_FLOOR = 20
 
 # The most recent approvals the figure is measured over, so that a teacher who
 # recalibrates mid-assignment is not held to grading they have moved on from.
@@ -228,8 +240,8 @@ def compute_health(
         return health
 
     health.draft_bias = sum(per_approval) / len(per_approval)
-    health.discloses = abs(health.draft_bias) >= DISCLOSE_THRESHOLD
-    health.demotes = abs(health.draft_bias) >= DEMOTE_THRESHOLD
+    health.discloses = discloses_to_teacher(health.draft_bias)
+    health.demotes = demotes_high_confidence(health.draft_bias)
     health.per_criterion = {
         cid: {
             "bias": sum(deltas) / len(deltas),
