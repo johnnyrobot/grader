@@ -479,13 +479,32 @@ failed in two independent runs. Resuming a build re-runs the identical prompt an
 identical spiral, which is why the fairness gate first came back FAIL with three items carrying
 incomplete `perturbed_scores` rather than merely unfinished ones.
 
-**Fairness under the fenced prompt now completes — but the passing run describes the wrong
-settings.** With the retry in place the perturbations no longer stall, and the gate returned
-`PASS` on 40/40 items across all five perturbations (`nonnative` mean delta −0.03, the row that
-matters most for this product). That run was built while the penalty was still a default, so it
-does not describe shipped behaviour and **must not be quoted**. Re-running it needs the 200
-perturbation gradings (~3h); seed it from a dataset whose 40 originals were graded at the shipped
-defaults and pass `--grade-perturbations` so only the perturbations are computed.
+**Fairness under the fenced prompt is closed.** `scratchpad/pp-final-fairness`, seeded from
+`pp-fence` so the 40 originals are the shipped defaults' own scores, with the 200 perturbation
+gradings run on top. **Zero stalls**, where the first attempt left three perturbations incomplete:
+
+```
+quality  PASS   QWK 0.885 (= pp-fence exactly), mean error +0.07
+fairness PASS   40/40 items, all five perturbations
+  concise     +0.00   max_abs 0.00   within_one 100%
+  formalize   +0.03   max_abs 1.00   within_one 100%
+  informalize −0.05   max_abs 1.50   within_one  98%
+  nonnative   −0.14   max_abs 2.50   within_one  95%
+  verbose     −0.01   max_abs 1.00   within_one 100%
+```
+
+QWK returning to **0.885 exactly** is the proof that reverting the default penalty restored the
+original grading behaviour precisely, not approximately.
+
+**Watch the `nonnative` row.** It is the weakest of the five and the one this product most cares
+about — SYSTEM_PROMPT rule 2 exists to stop non-native phrasing costing content marks. −0.14 mean
+with a 2.5-point worst case and 95% within one band passes the threshold, but it is the row to
+re-read when the sample grows. (The reverted penalty-default run happened to score it −0.03; on
+n=40 with one perturbation per item that difference is not worth attributing to the setting.)
+
+**§2's "fairness stands on pre-fence evidence" is now false** — but the release gate still reads
+`artifacts/`, which holds pre-fence datasets. Promoting `pp-final` and `pp-final-fairness` into
+`artifacts/public_proxy/` is what would make the gate quote any of this.
 
 **The open question is now a quality question, not a hang.** The widened set under-scores the four
 new questions by ~0.68, and "model resolves rubric-literal against teacher-standard and lands on
