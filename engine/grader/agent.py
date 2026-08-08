@@ -109,6 +109,51 @@ GRADING_SETTINGS = ModelSettings(
     extra_body={"max_tokens": GRADE_MAX_TOKENS},
 )
 
+# One setting is not enough, and the 120-item rebuild is what proved it.
+#
+# presence_penalty=0.5 cured all four items that had never graded — and broke two
+# others, in q02, that graded fine before. Net 118/120 against 116/120: an
+# improvement, and nowhere near a cure. A spiral is a fixed point of ONE EXACT
+# CONFIGURATION, and every configuration appears to have some. Searching for the
+# setting that has none is the wrong search.
+#
+# What does hold, across every item tried, is that ANY sufficiently different
+# configuration escapes a *given* fixed point on the first attempt — six of six
+# perturbations from the old baseline, and both new q02 failures from this one
+# (one of them an exact 639-character cycle, escaping in 11.2s).
+#
+# So the escape is a reaction rather than a setting: notice the truncation,
+# change the configuration, try once more. That keeps the default at the value
+# whose grading quality was actually measured, and does not require any single
+# setting to be universally safe.
+#
+# It also unblocks something a setting could not. The failure is *deterministic*,
+# so resuming a build re-runs the identical prompt and reproduces the identical
+# spiral — the same two items failed in two independent runs. That is why the
+# fairness gate could not be closed by resuming: three perturbations spiral, and
+# waiting does not change a fixed point.
+GRADE_ESCAPE_PRESENCE_PENALTY = 1.5
+
+GRADE_ESCAPE_SETTINGS = ModelSettings(
+    temperature=0.0,  # still greedy; still reproducible
+    presence_penalty=GRADE_ESCAPE_PRESENCE_PENALTY,
+    timeout=GRADE_TIMEOUT_SECONDS,
+    max_tokens=GRADE_MAX_TOKENS,
+    extra_body={"max_tokens": GRADE_MAX_TOKENS},
+)
+
+
+def _is_runaway(exc: Exception) -> bool:
+    """Did this fail by generating without end, rather than by anything else?
+
+    Matched on the message rather than the exception class because the class is
+    Pydantic AI's to change, while the cap is ours: exceeding it is the one
+    failure a different sampling configuration is known to fix. Everything else
+    — a dead server, a malformed rubric, a read timeout — must fail on the first
+    attempt and not pay for a second.
+    """
+    return "token limit" in str(exc).lower()
+
 SYSTEM_PROMPT = """\
 You are an experienced instructor grading student work. You are drafting a grade for a \
 human instructor to review — they are the final authority, and your job is to save them \
@@ -142,7 +187,13 @@ def build_model(model_name: str, base_url: str = "http://localhost:11434/v1") ->
     )
 
 
-def build_agent(model_name: str, mode: OutputMode = "tool", *, base_url: str | None = None) -> Agent:
+def build_agent(
+    model_name: str,
+    mode: OutputMode = "tool",
+    *,
+    base_url: str | None = None,
+    settings: ModelSettings | None = None,
+) -> Agent:
     """Construct the grading agent in one of Pydantic AI's three structured-output modes.
 
     The mode matters: 'tool' (the default) presents the schema as an output tool's
@@ -166,7 +217,7 @@ def build_agent(model_name: str, mode: OutputMode = "tool", *, base_url: str | N
         model,
         output_type=output_spec,
         system_prompt=SYSTEM_PROMPT,
-        model_settings=GRADING_SETTINGS,
+        model_settings=settings or GRADING_SETTINGS,
         retries=3,  # schema failures re-prompt; see the rubric-level check below
     )
 
@@ -225,30 +276,46 @@ def grade(
     materials: str = "",
     base_url: str | None = None,
 ) -> GradeRun:
-    """Grade one submission. Never raises — a failure is a result the queue must surface."""
-    agent = build_agent(model_name, mode, base_url=base_url)
-    retries = 0
+    """Grade one submission. Never raises — a failure is a result the queue must surface.
 
-    @agent.output_validator
-    def _check(draft: GradeDraft) -> GradeDraft:
-        # Constraints that need the rubric (unknown ids, out-of-range scores, missing
-        # criteria) can't live in the schema, so enforce them here. ModelRetry hands the
-        # problems back to the model to repair rather than accepting a broken grade.
-        nonlocal retries
-        problems = draft.validate_against(rubric)
-        if problems:
-            retries += 1
-            raise ModelRetry("Fix these problems and return the corrected grade:\n- " + "\n- ".join(problems))
-        return draft
-
+    Two attempts, and only for one specific failure. A runaway generation is a
+    fixed point of the exact sampling configuration that produced it, so the
+    second attempt changes the configuration rather than repeating the first.
+    Every other failure returns immediately: retrying a dead server is just a
+    slower error.
+    """
     prompt = _user_prompt(rubric, submission, anchors=anchors, materials=materials)
-
+    retries = 0
     t0 = time.perf_counter()
-    try:
-        result = agent.run_sync(prompt)
-        return GradeRun(result.output, mode, model_name, time.perf_counter() - t0, retries)
-    except Exception as exc:  # noqa: BLE001 - a failed grade is data, not a crash
-        return GradeRun(None, mode, model_name, time.perf_counter() - t0, retries, error=f"{type(exc).__name__}: {exc}")
+    failure: GradeRun | None = None
+
+    for settings in (GRADING_SETTINGS, GRADE_ESCAPE_SETTINGS):
+        agent = build_agent(model_name, mode, base_url=base_url, settings=settings)
+
+        @agent.output_validator
+        def _check(draft: GradeDraft) -> GradeDraft:
+            # Constraints that need the rubric (unknown ids, out-of-range scores, missing
+            # criteria) can't live in the schema, so enforce them here. ModelRetry hands the
+            # problems back to the model to repair rather than accepting a broken grade.
+            nonlocal retries
+            problems = draft.validate_against(rubric)
+            if problems:
+                retries += 1
+                raise ModelRetry("Fix these problems and return the corrected grade:\n- " + "\n- ".join(problems))
+            return draft
+
+        try:
+            result = agent.run_sync(prompt)
+            return GradeRun(result.output, mode, model_name, time.perf_counter() - t0, retries)
+        except Exception as exc:  # noqa: BLE001 - a failed grade is data, not a crash
+            failure = GradeRun(
+                None, mode, model_name, time.perf_counter() - t0, retries,
+                error=f"{type(exc).__name__}: {exc}",
+            )
+            if not _is_runaway(exc):
+                return failure
+
+    return failure  # type: ignore[return-value]  # the loop body always sets it
 
 
 @dataclass(frozen=True)

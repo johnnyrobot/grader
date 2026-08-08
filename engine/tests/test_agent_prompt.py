@@ -24,7 +24,13 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parents[1]))
 
 from grader.agent import SUBMISSION_FENCE, _user_prompt  # noqa: E402
-from grader.schema import CriterionType, Rubric, RubricCriterion  # noqa: E402
+from grader.schema import (  # noqa: E402
+    CriterionScore,
+    CriterionType,
+    GradeDraft,
+    Rubric,
+    RubricCriterion,
+)
 
 
 def _rubric() -> Rubric:
@@ -223,6 +229,106 @@ def test_a_repetition_penalty_keeps_greedy_decoding_out_of_a_fixed_point():
     # `seed` was the control — greedy decoding has no use for one, and setting
     # it produced byte-identical output, which is what makes the sampling
     # results meaningful rather than a list of things that happened to work.
+
+
+def _recording_build_agent(outcomes):
+    """A build_agent that hands back canned outcomes and records the settings used.
+
+    `outcomes` is one entry per attempt: an exception to raise, or a draft to
+    return.
+    """
+    seen_settings = []
+
+    class Canned:
+        def __init__(self, outcome):
+            self._outcome = outcome
+
+        def run_sync(self, prompt):
+            if isinstance(self._outcome, Exception):
+                raise self._outcome
+
+            class Result:
+                output = self._outcome
+
+            return Result()
+
+        def output_validator(self, fn):
+            return fn
+
+    def build(*args, settings=None, **kwargs):
+        seen_settings.append(settings)
+        return Canned(outcomes[len(seen_settings) - 1])
+
+    return build, seen_settings
+
+
+def test_a_runaway_generation_is_retried_with_a_different_configuration(monkeypatch):
+    """A spiral is a fixed point of one configuration, so repeating it is useless.
+
+    The 120-item rebuild is what forced this. presence_penalty=0.5 cured all four
+    items that had never graded and broke two others that graded fine before —
+    118/120 against 116/120, an improvement and not a cure. Every configuration
+    seems to have some fixed point, so the escape cannot be a better setting.
+
+    What holds is that any sufficiently different configuration escapes a *given*
+    fixed point on the first try: six of six perturbations from the old baseline,
+    and both new q02 failures from the current one.
+    """
+    from pydantic_ai import UnexpectedModelBehavior
+
+    from grader import agent as agent_module
+    from grader.agent import GRADE_ESCAPE_SETTINGS, GRADING_SETTINGS
+
+    draft = GradeDraft(
+        criterion_scores=[CriterionScore(criterion_id="q", score=3, rationale="fine")],
+        feedback="ok",
+        confidence=0.8,
+    )
+    runaway = UnexpectedModelBehavior("Model token limit (2048) exceeded before any response")
+    build, seen = _recording_build_agent([runaway, draft])
+    monkeypatch.setattr(agent_module, "build_agent", build)
+
+    run = agent_module.grade(_rubric(), "a submission the model will not stop grading")
+
+    assert run.ok, "the second attempt's grade should be returned"
+    assert seen == [GRADING_SETTINGS, GRADE_ESCAPE_SETTINGS], (
+        "the retry must change the sampling configuration, not repeat it"
+    )
+
+
+def test_only_a_runaway_is_retried_so_a_dead_server_fails_fast(monkeypatch):
+    """Retrying a broken connection is just a slower error."""
+    import httpx
+
+    from grader import agent as agent_module
+
+    build, seen = _recording_build_agent([httpx.ConnectError("connection refused")])
+    monkeypatch.setattr(agent_module, "build_agent", build)
+
+    run = agent_module.grade(_rubric(), "a submission")
+
+    assert not run.ok
+    assert len(seen) == 1, "a non-runaway failure must not pay for a second attempt"
+    assert "ConnectError" in (run.error or "")
+
+
+def test_the_escape_configuration_still_grades_at_temperature_zero():
+    """The escape must not quietly buy termination with reproducibility."""
+    from grader.agent import (
+        GRADE_ESCAPE_PRESENCE_PENALTY,
+        GRADE_ESCAPE_SETTINGS,
+        GRADE_MAX_TOKENS,
+        GRADING_SETTINGS,
+    )
+
+    assert GRADE_ESCAPE_SETTINGS.get("temperature") == 0.0
+
+    # It has to actually differ from the default, or it is not an escape.
+    assert GRADE_ESCAPE_SETTINGS.get("presence_penalty") == GRADE_ESCAPE_PRESENCE_PENALTY
+    assert GRADE_ESCAPE_SETTINGS.get("presence_penalty") != GRADING_SETTINGS.get("presence_penalty")
+
+    # And it stays bounded, so a spiral on the second attempt still ends.
+    assert GRADE_ESCAPE_SETTINGS.get("extra_body") == {"max_tokens": GRADE_MAX_TOKENS}
 
 
 def test_a_timed_out_grade_is_a_result_rather_than_a_crash(monkeypatch):

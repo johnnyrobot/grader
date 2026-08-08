@@ -433,6 +433,35 @@ trap `c14ab97` fixed — absent evidence load-bearing for a pass. The honest nex
 120-item rebuild (~1.7h) reporting 120/120 graded; a 40-item run cannot test this, because all
 four failures are in q03/q05/q06 and the narrow gate set is q01/q02.
 
+**The rebuild then showed one setting is not enough, and that changed the fix.** 118/120 graded
+against 116/120: the four items that had never graded all returned, **and two others in q02 —
+`E03.Q03.A03` and `E03.Q03.A22` — stopped grading, having been fine before.** QWK 0.759 vs 0.763
+and mean error −0.37 vs −0.32, so the headline numbers barely moved; the composition did.
+
+A spiral is a fixed point of **one exact configuration**, and every configuration appears to have
+some. Searching for the setting that has none is the wrong search. What holds across every item
+tried is that **any sufficiently different configuration escapes a *given* fixed point on the
+first attempt** — six of six perturbations from the old baseline, and both new q02 failures from
+the current one (`presence_penalty=1.5`, one of them an exact 639-char cycle, escaping in 11.2s).
+
+So `grade()` now **retries once with a different sampling configuration, and only on a runaway**
+(`GRADE_ESCAPE_SETTINGS`, matched via `_is_runaway` on the token-limit message). Everything else —
+dead server, malformed rubric, read timeout — still fails on the first attempt, because retrying a
+broken connection is just a slower error. All six items this failure has ever touched now grade
+through the real path, 6/6.
+
+**The retry costs latency on exactly the items that need it.** A recovered item pays a full
+cap-hit before its escape attempt: the two q02 items measure **51.3s and 100.7s**. That second
+number is above the 90s performance budget, on a *short answer* — the budget is written for a
+1500-word essay, so it is not a gate failure, but it is worth knowing before the perf row is
+re-measured.
+
+**Why this could not be solved by waiting.** The failure is deterministic — the same two items
+failed in two independent runs. Resuming a build re-runs the identical prompt and reproduces the
+identical spiral, which is why the fairness gate came back FAIL with three items carrying
+incomplete `perturbed_scores` rather than merely unfinished ones. `--grade-perturbations` needs
+re-running now that a runaway is retried rather than recorded as a gap.
+
 **The open question is now a quality question, not a hang.** The widened set under-scores the four
 new questions by ~0.68, and "model resolves rubric-literal against teacher-standard and lands on
 the rubric" is precisely a mechanism that produces systematic under-scoring — the spiral being the
