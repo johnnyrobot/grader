@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { QueueData, GradeItem, gradeBatch, checkUpdates, canvasImport, canvasPost, canvasTargetOf } from "../api";
+import { useCallback, useEffect, useState } from "react";
+import { QueueData, GradeItem, gradeBatch, checkUpdates, canvasImport, canvasPost, canvasTargetOf, fetchPostQueue, flushPostQueue } from "../api";
 import { AppShell } from "../components/AppShell";
 import { checkDesktopUpdate, installPendingUpdate } from "../updater";
 
@@ -59,6 +59,8 @@ export function QueueScreen({ data, onSelectItem, assignmentId, setAssignmentId,
   const [importCourse, setImportCourse] = useState("");
   const [importAssignment, setImportAssignment] = useState("");
   const [importing, setImporting] = useState(false);
+  const [pendingPosts, setPendingPosts] = useState(0);
+  const [flushing, setFlushing] = useState(false);
   const stats = data?.stats;
   const items = data?.items || [];
 
@@ -67,6 +69,41 @@ export function QueueScreen({ data, onSelectItem, assignmentId, setAssignmentId,
   // this just avoids offering an action that postable() would refuse outright.
   const canvasTarget = canvasTargetOf(assignmentId);
   const approvedIds = items.filter(item => item.approved).map(item => item.id);
+
+  const refreshPostQueue = useCallback(async () => {
+    try {
+      setPendingPosts((await fetchPostQueue()).pending);
+    } catch {
+      // The engine being unreachable is already surfaced elsewhere; a failed
+      // count must not replace the screen with an error.
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshPostQueue();
+  }, [refreshPostQueue, postReceipt]);
+
+  async function handleFlush() {
+    setFlushing(true);
+    try {
+      const result = await flushPostQueue();
+      const lines = [`Retried the queue: ${result.posted} posted, ${result.remaining} still waiting.`];
+      // An entry that burned its retries has stopped being attempted. Saying so
+      // is the whole point of the bound — otherwise it just sits there.
+      if (result.abandoned > 0) {
+        lines.push(
+          `${result.abandoned} gave up after repeated failures and need your attention.`,
+        );
+      }
+      setPostReceipt(lines);
+      onRefresh();
+    } catch (error) {
+      setPostReceipt([`Could not flush the queue: ${(error as Error).message}`]);
+    } finally {
+      setFlushing(false);
+      refreshPostQueue();
+    }
+  }
 
   async function handleImport() {
     const course = Number(importCourse.trim());
@@ -259,6 +296,15 @@ export function QueueScreen({ data, onSelectItem, assignmentId, setAssignmentId,
           <button className="button-primary" onClick={handleGrade} disabled={grading || !assignmentId.trim()}>
             {grading ? "Starting…" : "Grade submissions"}
           </button>
+          {pendingPosts > 0 && (
+            <button
+              className="button-secondary"
+              onClick={handleFlush}
+              disabled={flushing}
+            >
+              {flushing ? "Retrying…" : `Retry ${pendingPosts} queued post${pendingPosts === 1 ? "" : "s"}`}
+            </button>
+          )}
           {canvasTarget && (
             <button
               className="button-primary"

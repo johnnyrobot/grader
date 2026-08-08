@@ -138,6 +138,15 @@ describe("QueueScreen", () => {
   });
 });
 
+
+/** The request to exactly this path — "/api/canvas/post" must not match
+ *  "/api/canvas/post-queue", which is a GET and carries no body. */
+function callTo(fetchMock: { mock: { calls: unknown[][] } }, path: string) {
+  const call = fetchMock.mock.calls.find(c => String(c[0]).endsWith(path));
+  if (!call) throw new Error(`no request to ${path}`);
+  return call[1] as { body: string };
+}
+
 describe("posting approved grades to Canvas", () => {
   const postable = {
     submission_id: "Student 98765",
@@ -211,8 +220,10 @@ describe("posting approved grades to Canvas", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /Post 1 approved to Canvas/ }));
 
-    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
-    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    await waitFor(() =>
+      expect(fetchMock.mock.calls.some(c => String(c[0]).endsWith("/api/canvas/post"))).toBe(true),
+    );
+    const body = JSON.parse(callTo(fetchMock, "/api/canvas/post").body);
     expect(body.grade_ids).toEqual(["gr_1"]);
     expect(body.course_id).toBe(106);
     expect(body.assignment_id).toBe(2841);
@@ -306,8 +317,10 @@ describe("importing a batch from Canvas", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Import from Canvas" }));
 
-    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
-    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    await waitFor(() =>
+      expect(fetchMock.mock.calls.some(c => String(c[0]).endsWith("/api/canvas/import"))).toBe(true),
+    );
+    const body = JSON.parse(callTo(fetchMock, "/api/canvas/import").body);
     expect(body).toEqual({ course_id: 106, assignment_id: 2841, download_attachments: true });
   });
 
@@ -353,6 +366,82 @@ describe("importing a batch from Canvas", () => {
     fireEvent.click(screen.getByRole("button", { name: "Import from Canvas" }));
 
     expect(await screen.findByText(/numeric Canvas course and assignment ids/)).toBeInTheDocument();
-    expect(fetchMock).not.toHaveBeenCalled();
+    // The post-queue count is polled on mount; what must not happen is an import.
+    expect(fetchMock.mock.calls.some(c => String(c[0]).endsWith("/api/canvas/import"))).toBe(false);
+  });
+});
+
+describe("the offline post queue", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  function stubQueue(pending: number, flushResult?: unknown) {
+    const fetchMock = vi.fn().mockImplementation((url: string, init?: { method?: string }) => {
+      if (String(url).includes("/api/canvas/flush") && init?.method === "POST") {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve(flushResult) });
+      }
+      if (String(url).includes("/api/canvas/post-queue")) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ pending, items: [] }) });
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    return fetchMock;
+  }
+
+  function renderQueue() {
+    render(
+      <QueueScreen
+        data={queue}
+        onSelectItem={vi.fn()}
+        assignmentId=""
+        setAssignmentId={vi.fn()}
+        selectedLane={undefined}
+        setSelectedLane={vi.fn()}
+        onRefresh={vi.fn()}
+        onOpenModels={vi.fn()}
+        onOpenSettings={vi.fn()}
+      />,
+    );
+  }
+
+  it("stays out of the way when nothing is queued", async () => {
+    stubQueue(0);
+    renderQueue();
+
+    await waitFor(() => {
+      expect(screen.queryByRole("button", { name: /Retry .* queued/ })).toBeNull();
+    });
+  });
+
+  it("offers a retry when approvals are waiting", async () => {
+    stubQueue(2);
+    renderQueue();
+
+    expect(
+      await screen.findByRole("button", { name: "Retry 2 queued posts" }),
+    ).toBeInTheDocument();
+  });
+
+  it("reports what the retry achieved", async () => {
+    stubQueue(1, { posted: 1, failed: 0, abandoned: 0, remaining: 0 });
+    renderQueue();
+
+    fireEvent.click(await screen.findByRole("button", { name: /Retry 1 queued post/ }));
+
+    expect(await screen.findByText(/1 posted, 0 still waiting/)).toBeInTheDocument();
+  });
+
+  it("says when an entry has given up, rather than leaving it sitting silently", async () => {
+    stubQueue(1, { posted: 0, failed: 0, abandoned: 1, remaining: 1 });
+    renderQueue();
+
+    fireEvent.click(await screen.findByRole("button", { name: /Retry 1 queued post/ }));
+
+    expect(
+      await screen.findByText(/1 gave up after repeated failures/),
+    ).toBeInTheDocument();
   });
 });
