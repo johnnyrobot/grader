@@ -221,6 +221,62 @@ It does not exercise anything added this session. The gate passing is therefore 
 that the round-trip UI works — regenerating the sweep needs the app driven under Playwright or
 Computer Use, which has not been done since these controls landed.
 
+### 1d. Widening the evidence to six questions
+
+The release gate has always measured two Mohler questions, 40 items. Rebuilt at six questions,
+120 items, under the fenced prompt:
+
+| | 2 questions | 6 questions |
+| --- | --- | --- |
+| QWK | 0.885 | **0.763** |
+| exact | 55% | 49% |
+| adjacent | 98% | 87% |
+| mean error | +0.07 | **−0.32** |
+| human ceiling | 0.656 | 0.577 |
+
+Per source: q01 **0.857**, q02 **0.904**, q03 0.828, q04 0.695, q05 0.599, q06 0.795.
+
+**The two questions the gate has always used are the best two of the six.** That is what a narrow
+sample does; it is not a regression. The mean error is the more interesting half — the model
+slightly *over*-scores the original two (+0.12, +0.03) and *under*-scores the four new ones by
+around two-thirds of a point (−0.68, −0.68, −0.61). A systematic bias the narrow set could not
+show.
+
+QWK 0.763 still sits above the human ceiling of 0.577: on this data the model agrees with the
+consensus human score more than the two human raters agree with each other. Note the floor moves
+with the data — `floor = ceiling * 0.95` whenever a ceiling can be computed, *replacing* the 0.70
+constant, so a set where humans disagree lowers the bar the model must clear.
+
+**Two defects fell out of reading that per-source table.**
+
+**A failed grade used to exempt its source from the per-source floor.** `mohler_q05` reported
+`PASS` at QWK 0.599 against a 0.60 floor. The floor is waived below `SOURCE_FLOOR_MIN_ITEMS` so a
+source that is small by design is not judged on a handful of rows — but it counted the rows that
+*scored*, and `evaluate_public_proxy_quality` filtered the unscored ones out before
+`_source_breakdown` ever saw them. One item had hit the grading timeout, dropping q05 to 19, and
+the failure to grade bought the exemption. This is `gates/result.py`'s own rule inverted: absent
+evidence was load-bearing for a pass. Fixed; the widened set now correctly reports FAIL, and
+sources with missing items carry an `ungraded` count.
+
+**Four of 120 submissions never finished grading inside the builder, and the engine had no
+bound.** The same four failed at 420s and again at 1200s. Their text is unremarkable — 165–271
+characters against a median of 193.
+
+What makes them hang is **not settled**. `mohler_q05:E04.Q05.A07` graded in **36s** through
+`grade()` when called directly — the difference from the builder's call being the six anchor
+exemplars it injects. Anchors are the calibration mechanism and are always present in the product
+once a teacher has graded enough, so if anchored prompts are what stall, that matters far more
+than four awkward items. An isolation run was in flight when this was written; **finish it before
+concluding anything about the cause.** The timeout below is the right mitigation either way.
+
+`agent.run_sync()` carried no timeout and neither did the provider's HTTP client, so a hung
+generation blocks the background grading thread and the batch never completes: no draft, no
+error, no end. `scripts/build_public_proxy.py` has always graded in a killable child process for
+exactly this reason. **The release tooling knew about the failure mode and the product did not —
+which is why it went unseen, since every measurement of grading was taken through the harness
+that protects itself.** `GRADING_SETTINGS` now carries a 300s timeout, and grade() already turns
+an exception into a GradeRun the queue can show.
+
 ### What the fence still owes the release matrix
 
 **The fairness row is the one gate still standing on pre-fence evidence.** `engine/gates/bias.py`
