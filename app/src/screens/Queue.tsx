@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { QueueData, GradeItem, gradeBatch, checkUpdates, canvasPost, canvasTargetOf } from "../api";
+import { QueueData, GradeItem, gradeBatch, checkUpdates, canvasImport, canvasPost, canvasTargetOf } from "../api";
 import { AppShell } from "../components/AppShell";
 import { checkDesktopUpdate, installPendingUpdate } from "../updater";
 
@@ -56,6 +56,9 @@ export function QueueScreen({ data, onSelectItem, assignmentId, setAssignmentId,
   const [installingUpdate, setInstallingUpdate] = useState(false);
   const [posting, setPosting] = useState(false);
   const [postReceipt, setPostReceipt] = useState<string[]>([]);
+  const [importCourse, setImportCourse] = useState("");
+  const [importAssignment, setImportAssignment] = useState("");
+  const [importing, setImporting] = useState(false);
   const stats = data?.stats;
   const items = data?.items || [];
 
@@ -64,6 +67,35 @@ export function QueueScreen({ data, onSelectItem, assignmentId, setAssignmentId,
   // this just avoids offering an action that postable() would refuse outright.
   const canvasTarget = canvasTargetOf(assignmentId);
   const approvedIds = items.filter(item => item.approved).map(item => item.id);
+
+  async function handleImport() {
+    const course = Number(importCourse.trim());
+    const assignment = Number(importAssignment.trim());
+    if (!Number.isInteger(course) || !Number.isInteger(assignment) || !course || !assignment) {
+      setPostReceipt(["Enter the numeric Canvas course and assignment ids."]);
+      return;
+    }
+    setImporting(true);
+    setPostReceipt([]);
+    try {
+      const result = await canvasImport(course, assignment);
+      const lines = [
+        `Imported ${result.imported} submission${result.imported === 1 ? "" : "s"}.`,
+      ];
+      // A file that produced no readable text is reported per student rather
+      // than quietly graded as empty.
+      for (const failure of result.failures || []) {
+        lines.push(`Student ${failure.user_id}: ${failure.error}`);
+      }
+      setPostReceipt(lines);
+      setAssignmentId(`canvas_${course}_${assignment}`);
+      onRefresh();
+    } catch (error) {
+      setPostReceipt([`Could not import: ${(error as Error).message}`]);
+    } finally {
+      setImporting(false);
+    }
+  }
 
   async function handlePost() {
     if (!canvasTarget || approvedIds.length === 0) return;
@@ -159,6 +191,36 @@ export function QueueScreen({ data, onSelectItem, assignmentId, setAssignmentId,
           className="field-control"
         />
       </label>
+      <div className="filter-group" role="group" aria-label="Import a batch from Canvas">
+        <label className="assignment-field">
+          <span>Canvas course</span>
+          <input
+            value={importCourse}
+            onChange={event => setImportCourse(event.target.value)}
+            placeholder="106"
+            inputMode="numeric"
+            className="field-control"
+          />
+        </label>
+        <label className="assignment-field">
+          <span>Canvas assignment</span>
+          <input
+            value={importAssignment}
+            onChange={event => setImportAssignment(event.target.value)}
+            placeholder="2841"
+            inputMode="numeric"
+            className="field-control"
+          />
+        </label>
+        <button
+          type="button"
+          className="button-secondary"
+          onClick={handleImport}
+          disabled={importing}
+        >
+          {importing ? "Importing…" : "Import from Canvas"}
+        </button>
+      </div>
       <div className="filter-group" role="group" aria-label="Filter submissions by review lane">
         <button
           type="button"

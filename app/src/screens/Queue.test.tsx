@@ -267,3 +267,92 @@ describe("posting approved grades to Canvas", () => {
     expect(await screen.findByText(/Skipped: gr_9: not approved/)).toBeInTheDocument();
   });
 });
+
+describe("importing a batch from Canvas", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  function renderQueue(setAssignmentId = vi.fn(), onRefresh = vi.fn()) {
+    render(
+      <QueueScreen
+        data={queue}
+        onSelectItem={vi.fn()}
+        assignmentId=""
+        setAssignmentId={setAssignmentId}
+        selectedLane={undefined}
+        setSelectedLane={vi.fn()}
+        onRefresh={onRefresh}
+        onOpenModels={vi.fn()}
+        onOpenSettings={vi.fn()}
+      />,
+    );
+  }
+
+  function typeIds() {
+    fireEvent.change(screen.getByLabelText("Canvas course"), { target: { value: "106" } });
+    fireEvent.change(screen.getByLabelText("Canvas assignment"), { target: { value: "2841" } });
+  }
+
+  it("asks the engine for that course and assignment", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue({ imported: 3, submissions: [], failures: [] }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    renderQueue();
+    typeIds();
+
+    fireEvent.click(screen.getByRole("button", { name: "Import from Canvas" }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(body).toEqual({ course_id: 106, assignment_id: 2841, download_attachments: true });
+  });
+
+  it("points the queue at what it just imported", async () => {
+    const setAssignmentId = vi.fn();
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue({ imported: 3, submissions: [], failures: [] }),
+    }));
+    renderQueue(setAssignmentId);
+    typeIds();
+
+    fireEvent.click(screen.getByRole("button", { name: "Import from Canvas" }));
+
+    await waitFor(() => expect(setAssignmentId).toHaveBeenCalledWith("canvas_106_2841"));
+  });
+
+  it("names the students whose files could not be read", async () => {
+    // The engine reports these per student now; burying them would leave a
+    // teacher believing a submission was graded when nothing was extracted.
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue({
+        imported: 2,
+        submissions: [],
+        failures: [{ user_id: "1042", error: "no readable text extracted from essay.pdf" }],
+      }),
+    }));
+    renderQueue();
+    typeIds();
+
+    fireEvent.click(screen.getByRole("button", { name: "Import from Canvas" }));
+
+    expect(await screen.findByText(/Student 1042: no readable text/)).toBeInTheDocument();
+  });
+
+  it("refuses to call the engine without numeric ids", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    renderQueue();
+    fireEvent.change(screen.getByLabelText("Canvas course"), { target: { value: "not a course" } });
+
+    fireEvent.click(screen.getByRole("button", { name: "Import from Canvas" }));
+
+    expect(await screen.findByText(/numeric Canvas course and assignment ids/)).toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
