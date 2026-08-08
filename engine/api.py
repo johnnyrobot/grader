@@ -33,7 +33,12 @@ from pydantic import BaseModel, Field, field_validator
 
 from grader.approvals import AlreadyApproved, ApprovalStore, GradeNotFound
 from grader.attachments import AttachmentStore, OutsideAttachmentRoot
-from grader.calibration import cold_start_status, compute_health
+from grader.calibration import (
+    EVIDENCE_FLOOR,
+    ApprovedComparison,
+    cold_start_status,
+    compute_health,
+)
 from grader.canvas import OfflinePostQueue
 from grader.db import Database
 from grader.exemplars import ExemplarStore
@@ -322,6 +327,77 @@ class _SqliteGradeStore:
 
 
 _grade_store = _SqliteGradeStore()
+
+
+def _rubric_of_record(rubric_title: str | None) -> Rubric | None:
+    """The Rubric a grade was produced against — not whichever is saved now.
+
+    By title, and deliberately not by `grade_records.rubric_version`: the writer
+    above stamps that column with a literal 1 on every record, while grading
+    resolves the Rubric by title and gets the *latest* version. Honouring the
+    recorded version would therefore scale a grade drafted against version 2 by
+    version 1's criterion maxima — a wrong number rather than a missing one.
+    Resolve by it once the writer records the version it actually graded against.
+
+    The fallback is for records written before rubric_title existed: inferring is
+    only safe when there is exactly one Rubric to infer from, since the wrong
+    criterion max silently misscales everything measured against it.
+    """
+    if rubric_title:
+        rubric = _rubric_store.get(str(rubric_title))
+        if rubric is not None:
+            return rubric
+    saved = _rubric_store.list()
+    if len(saved) == 1:
+        return _rubric_store.get(str(saved[0]["title"]))
+    return None
+
+
+class _SqliteApprovedComparisons:
+    """Approved grade records for one Assignment, as AI-vs-teacher comparisons.
+
+    The read seam ADR-0001 asks for. grader.calibration receives comparisons whose
+    Rubric is already resolved and never learns that they were rows, or that a
+    title has a fallback. Every approval is here, including the ones the teacher
+    changed nothing on — that is the whole point of the population.
+
+    A record with no AI scores, or whose Rubric cannot be resolved, is left out:
+    there is no gap to measure in the first case and nothing to scale it by in
+    the second.
+    """
+
+    def list(self, assignment_id: str, *, limit: int = 200) -> list[ApprovedComparison]:
+        rows = _db().execute(
+            "SELECT ai_scores_json, teacher_scores_json, rubric_title "
+            "FROM grade_records WHERE assignment_id = ? AND approved_at IS NOT NULL "
+            "AND approved_at != '' ORDER BY approved_at DESC LIMIT ?",
+            (assignment_id, limit),
+        ).fetchall()
+
+        resolved: dict[str | None, Rubric | None] = {}
+        comparisons: list[ApprovedComparison] = []
+        for row in rows:
+            ai_scores = json.loads(row["ai_scores_json"] or "{}")
+            if not ai_scores:
+                continue
+            title = row["rubric_title"]
+            if title not in resolved:
+                resolved[title] = _rubric_of_record(title)
+            rubric = resolved[title]
+            if rubric is None:
+                continue
+            teacher_scores = json.loads(row["teacher_scores_json"] or "null")
+            comparisons.append(
+                ApprovedComparison(
+                    ai_scores=ai_scores,
+                    teacher_scores=teacher_scores or None,
+                    rubric=rubric,
+                )
+            )
+        return comparisons
+
+
+_approved_comparisons = _SqliteApprovedComparisons()
 
 
 def _run_grading_job(
@@ -635,15 +711,9 @@ def override_grade(grade_id: str, req: OverrideRequest,
     )
 
     # The Override is scaled against the Rubric this grade was actually produced
-    # against — not whichever one happens to be saved now.
-    graded_against = row["rubric_title"]
-    rubric = _rubric_store.get(str(graded_against)) if graded_against else None
-    if rubric is None:
-        # Graded before rubric_title was recorded: inferring is only safe when
-        # there is exactly one Rubric to infer from.
-        saved = _rubric_store.list()
-        if len(saved) == 1:
-            rubric = _rubric_store.get(str(saved[0]["title"]))
+    # against — not whichever one happens to be saved now. Same resolution the
+    # calibration reader uses, so both scale one grade by the same criterion max.
+    rubric = _rubric_of_record(row["rubric_title"])
     if rubric is None:
         raise HTTPException(
             400,
@@ -683,14 +753,24 @@ def override_grade(grade_id: str, req: OverrideRequest,
 def calibration_health(assignment_id: str,
                         settings: Settings = Depends(current_settings)) -> dict:
     exemplars = _exemplar_store.for_model(settings.model_embed)
-    health = compute_health(_override_store, exemplars, assignment_id)
+    health = compute_health(
+        _approved_comparisons, _override_store, exemplars, assignment_id
+    )
     cold = cold_start_status(exemplars, assignment_id)
     return {
-        "qwk": health.qwk, "exact": health.exact, "adjacent": health.adjacent,
-        "mean_error": health.mean_error, "override_count": health.override_count,
-        "override_rate": health.override_rate, "exemplar_count": health.exemplar_count,
+        # Signed and already scaled as a fraction of criterion max; null below the
+        # evidence floor, where `n` is all there is to report. `discloses` and
+        # `demotes` are the thresholds' verdicts — a consumer reads them rather
+        # than re-deriving 0.03 and 0.10 for itself.
+        "draft_bias": health.draft_bias,
+        "n": health.n,
+        "evidence_floor": EVIDENCE_FLOOR,
+        "discloses": health.discloses,
+        "demotes": health.demotes,
+        "override_count": health.override_count,
+        "override_rate": health.override_rate,
+        "exemplar_count": health.exemplar_count,
         "per_criterion": health.per_criterion,
-        "qwk_trend": health.qwk_trend,
         "cold_start": cold,
     }
 

@@ -249,6 +249,205 @@ def test_calibration_reports_cold_start_for_an_untouched_assignment(client, auth
     assert response.json()["cold_start"]["unlocked"] is False
 
 
+# ---------------------------------------------------------------------------
+# Calibration: Draft bias, measured over every approval
+# ---------------------------------------------------------------------------
+
+def _save_rubric(api, *, title="Essay", **maxes):
+    from grader.schema import Rubric, RubricCriterion
+
+    api._rubric_store.save(Rubric(
+        title=title,
+        criteria=[RubricCriterion(id=cid, title=cid.title(), max_points=m)
+                  for cid, m in (maxes or {"c1": 5.0}).items()],
+    ))
+
+
+def _seed_drafted(api, n, *, ai, assignment_id="a1", rubric_title="Essay", prefix="d"):
+    """n drafted-but-unapproved grades, as a grading run leaves them."""
+    import json as _json
+
+    db = api._db()
+    grade_ids = []
+    for i in range(n):
+        sub_id, grade_id = f"sub_{prefix}{i}", f"gr_{prefix}{i}"
+        db.execute(
+            "INSERT INTO submissions (id, assignment_id, student_ref, text, state, "
+            "created_at) VALUES (?,?,?,?,?,?)",
+            (sub_id, assignment_id, f"student{i}", f"submission {i}", "graded",
+             api._now()),
+        )
+        db.execute(
+            "INSERT INTO grade_records (id, submission_id, assignment_id, rubric_version, "
+            "rubric_title, ai_scores_json, ai_feedback, ai_confidence, ai_flags_json, "
+            "lane, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            (grade_id, sub_id, assignment_id, 1, rubric_title, _json.dumps(ai),
+             "draft feedback", 0.9, "[]", "high_confidence", api._now()),
+        )
+        grade_ids.append(grade_id)
+    db.commit()
+    return grade_ids
+
+
+@pytest.fixture
+def no_network_embeddings(monkeypatch):
+    """Overriding anchors the correction, which would otherwise reach Ollama."""
+    monkeypatch.setattr("grader.exemplars.embed",
+                        lambda texts, **kw: [[0.1, 0.2]] * len(texts))
+
+
+def test_an_approval_with_no_override_moves_the_calibration_figures(
+    client, auth, api, no_network_embeddings
+):
+    """The defect the ticket fixes, at the seam a teacher's app actually uses.
+
+    Ten corrections alone sit below the evidence floor. Ten drafts accepted
+    unchanged carry the assignment over it and halve the measured bias — which
+    they cannot do if only the overrides are a data point.
+    """
+    _save_rubric(api)
+    grade_ids = _seed_drafted(api, 20, ai={"c1": 4.0})
+
+    for grade_id in grade_ids[:10]:
+        corrected = client.post(f"/api/grades/{grade_id}/override", headers=auth,
+                                json={"teacher_scores": {"c1": 5.0},
+                                      "teacher_feedback": "raised"})
+        assert corrected.status_code == 200
+
+    on_overrides_alone = client.get("/api/calibration/a1", headers=auth).json()
+    assert on_overrides_alone["n"] == 10
+    assert on_overrides_alone["draft_bias"] is None
+
+    for grade_id in grade_ids[10:]:
+        assert client.post(f"/api/grades/{grade_id}/approve",
+                           headers=auth).status_code == 200
+
+    with_the_unchanged = client.get("/api/calibration/a1", headers=auth).json()
+    assert with_the_unchanged["n"] == 20
+    assert with_the_unchanged["draft_bias"] == pytest.approx(-0.1)
+
+
+def test_the_calibration_payload_names_draft_bias_and_no_longer_reports_qwk(
+    client, auth, api
+):
+    _save_rubric(api)
+    for grade_id in _seed_drafted(api, 20, ai={"c1": 4.0}):
+        client.post(f"/api/grades/{grade_id}/approve", headers=auth)
+
+    payload = client.get("/api/calibration/a1", headers=auth).json()
+
+    assert payload["draft_bias"] == 0.0     # every draft approved unchanged
+    assert payload["n"] == 20
+    assert payload["discloses"] is False
+    assert payload["demotes"] is False
+    assert "qwk" not in payload
+    assert "qwk_trend" not in payload
+
+
+def test_calibration_below_the_floor_reports_counts_and_no_direction(
+    client, auth, api
+):
+    _save_rubric(api)
+    for grade_id in _seed_drafted(api, 3, ai={"c1": 1.0}):
+        client.post(f"/api/grades/{grade_id}/approve", headers=auth)
+
+    payload = client.get("/api/calibration/a1", headers=auth).json()
+
+    assert payload["n"] == 3
+    assert payload["evidence_floor"] == 20
+    assert payload["draft_bias"] is None
+    assert payload["per_criterion"] == {}
+    assert payload["discloses"] is False
+    assert payload["demotes"] is False
+
+
+def test_a_wide_gap_reports_that_it_clears_the_demote_threshold(
+    client, auth, api, no_network_embeddings
+):
+    """A consumer reads the flags rather than re-deriving 0.03 and 0.10."""
+    _save_rubric(api)
+    for grade_id in _seed_drafted(api, 20, ai={"c1": 3.0}):
+        client.post(f"/api/grades/{grade_id}/override", headers=auth,
+                    json={"teacher_scores": {"c1": 5.0}, "teacher_feedback": "raised"})
+
+    payload = client.get("/api/calibration/a1", headers=auth).json()
+
+    assert payload["draft_bias"] == pytest.approx(-0.4)
+    assert payload["discloses"] is True
+    assert payload["demotes"] is True
+    assert payload["per_criterion"]["c1"]["bias"] == pytest.approx(-0.4)
+
+
+def test_a_grade_recorded_before_rubric_titles_were_kept_still_counts(
+    client, auth, api
+):
+    """The fallback override already uses: one saved Rubric is safe to infer."""
+    _save_rubric(api)
+    for grade_id in _seed_drafted(api, 20, ai={"c1": 4.0}, rubric_title=None):
+        assert client.post(f"/api/grades/{grade_id}/approve",
+                           headers=auth).status_code == 200
+
+    payload = client.get("/api/calibration/a1", headers=auth).json()
+
+    assert payload["n"] == 20
+    assert payload["draft_bias"] == 0.0
+
+
+def test_a_grade_whose_rubric_cannot_be_resolved_is_not_a_data_point(
+    client, auth, api
+):
+    """Two rubrics saved and no title recorded: nothing says which max to scale by."""
+    _save_rubric(api, title="Essay")
+    _save_rubric(api, title="Lab report")
+    for grade_id in _seed_drafted(api, 20, ai={"c1": 4.0}, rubric_title=None):
+        client.post(f"/api/grades/{grade_id}/approve", headers=auth)
+
+    payload = client.get("/api/calibration/a1", headers=auth).json()
+
+    assert payload["n"] == 0
+    assert payload["draft_bias"] is None
+
+
+def test_approving_a_draft_measures_it_without_anchoring_on_it(client, auth, api):
+    """An Approval is evidence *about* the model, never evidence *for* it.
+
+    Anchoring on AI-authored scores would encode the very bias being reported,
+    so the approvals that move `n` add nothing to the exemplar store.
+    """
+    _save_rubric(api)
+    for grade_id in _seed_drafted(api, 20, ai={"c1": 4.0}):
+        client.post(f"/api/grades/{grade_id}/approve", headers=auth)
+
+    payload = client.get("/api/calibration/a1", headers=auth).json()
+
+    assert payload["n"] == 20
+    assert payload["exemplar_count"] == 0
+    assert payload["cold_start"]["unlocked"] is False
+
+
+def test_calibration_counts_only_approved_grades(client, auth, api):
+    """A drafted grade nobody has looked at says nothing about the teacher."""
+    _save_rubric(api)
+    grade_ids = _seed_drafted(api, 20, ai={"c1": 4.0})
+    for grade_id in grade_ids[:5]:
+        client.post(f"/api/grades/{grade_id}/approve", headers=auth)
+
+    payload = client.get("/api/calibration/a1", headers=auth).json()
+
+    assert payload["n"] == 5
+
+
+def test_calibration_is_scoped_to_one_assignment(client, auth, api):
+    _save_rubric(api)
+    for grade_id in _seed_drafted(api, 20, ai={"c1": 4.0}, assignment_id="a1"):
+        client.post(f"/api/grades/{grade_id}/approve", headers=auth)
+    for grade_id in _seed_drafted(api, 20, ai={"c1": 4.0}, assignment_id="a2",
+                                  prefix="e"):
+        client.post(f"/api/grades/{grade_id}/approve", headers=auth)
+
+    assert client.get("/api/calibration/a1", headers=auth).json()["n"] == 20
+
+
 def test_the_queue_of_an_assignment_with_no_grades_is_empty(client, auth):
     response = client.get("/api/queue?assignment_id=a1", headers=auth)
 
