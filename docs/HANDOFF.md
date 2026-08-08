@@ -350,6 +350,98 @@ recorded number as stable.
 
 ---
 
+### 1e. The anchor spiral, diagnosed — and why the obvious fix is the wrong one
+
+§1d left three questions open: why anchors trigger the runaway, whether it generalises past one
+item, and whether prompt or sampling changes reduce the rate. All three are answered. The scripts
+are one-file experiments; each prints its own control.
+
+**It is not a reasoning spiral. It is a greedy-decoding fixed point.** Every previous measurement
+of this failure was of its *duration*. Reading the tokens changes the diagnosis: the emission is
+**entirely in the model's `reasoning` channel** — 32,815 characters of thinking, **zero tool-call
+tokens** — and the text is an **exact 532-character cycle repeated 116 times**:
+
+> ...So the student's answer is wrong. Therefore, 0. But the examples show that "one" got 2.0.
+> Wait, maybe the student's answer is incorrect but on-topic. So the score is 0. But according to
+> the rubric, 0 is for wrong, empty...
+
+**What it cycles on is a contradiction this codebase writes itself.**
+
+| where | instruction |
+| --- | --- |
+| `agent.py` SYSTEM_PROMPT rule 1 | "Grade ONLY against the rubric criteria given." |
+| `_user_prompt` anchor header | "the instructor's own scoring — match this standard" |
+
+For `mohler_q05:E04.Q05.A07` those point opposite ways. The rubric read literally says the answer
+is wrong, so 0. Anchor 1 shows the near-identical answer "one" scored **2.0/5** — and 2.0 is this
+submission's true human score. **The anchor is right and the rubric is merely silent about partial
+credit.** Nothing tells the model which wins.
+
+**Resolving the contradiction by instruction does not work — this is the important negative
+result.** A precedence rule ("the examples are the better evidence of the instructor's real
+standard, follow them") left it looping, and combined with the rule that did work produced a 0
+with duplicate `correctness` entries where that rule alone produced the human's 2.0. The model is
+not missing a rule; it cannot commit.
+
+**The mechanism is decoding-level.** Nine variants against one captured request body. temperature
+0 run twice is byte-identical, so the baseline is a sound control, and any variant byte-identical
+to it **did not apply** — reported as IGNORED, never as "no effect", because this project has
+twice shipped a setting that looked applied and was not.
+
+| variant | result |
+| --- | --- |
+| temp=0 (×2) | identical — control is sound |
+| **seed=7** | **IGNORED** — greedy decoding has no use for a seed |
+| temperature 0.3 / 0.7 | escaped, graded |
+| frequency_penalty 0.3 / 1.0 | escaped, graded |
+| presence_penalty 0.5 / 1.5 | escaped, graded |
+
+Every perturbation that applied escaped. **The `seed` row is what makes the rest meaningful**
+rather than a list of things that happened to work.
+
+**It generalises.** All four items that failed the 120-item build, across three questions — cycle
+periods 467 / 532 / 421 chars (the fourth has no exact cycle under 1500 chars but still runs to
+the cap). All four grade with the penalty, in 21–36s.
+
+**The fix, and why not the other one.** 4 spiral items + 12 ordinary items stratified across all
+six questions; the ordinary baseline is free because `pp-wide` already holds those scores:
+
+| variant | ordinary mean err | ordinary ungraded | spiral graded |
+| --- | --- | --- | --- |
+| baseline | −0.75 | 0 | **0/4** |
+| **presence_penalty=0.5** | **−0.67** | **0** | **4/4** |
+| "decide once" prompt rule | −0.68 | **1** | 3/4 |
+| both | −0.88 | 0 | 4/4 |
+
+`GRADING_SETTINGS` now carries `presence_penalty=0.5`. **The prompt rule was rejected: it left an
+*ordinary* item ungraded that grades fine without it** — trading one hang for another. Combining
+both is worse than the penalty alone on both sets. presence_penalty is chosen over temperature
+because **it keeps temperature at 0** — greedy decoding with deformed logits is still greedy — so
+the >95% same-verdict reproducibility the project chose temp 0 for is not spent to buy
+termination. Verified off the wire through the real `grade()` path, not from `ModelSettings`
+accepting the argument: `presence_penalty: 0.5`, `temperature: 0.0`, and the item that had run
+past fifteen minutes returned in **22.5s**.
+
+**This is termination, not agreement, and the difference matters.** Freed to commit, the model
+commits to the rubric-literal reading. The four recovered grades average **−1.00** against the
+humans, all negative, and `E04.Q05.A07` returns **0.0 against a human 2.0 at confidence 1.0** —
+the one combination the product cannot route to a human.
+
+**Expect the reported QWK to FALL, and do not read that as a regression.** These four are the
+hardest items in the set and were previously excluded from scoring altogether. That is exactly the
+trap `c14ab97` fixed — absent evidence load-bearing for a pass. The honest next measurement is a
+120-item rebuild (~1.7h) reporting 120/120 graded; a 40-item run cannot test this, because all
+four failures are in q03/q05/q06 and the narrow gate set is q01/q02.
+
+**The open question is now a quality question, not a hang.** The widened set under-scores the four
+new questions by ~0.68, and "model resolves rubric-literal against teacher-standard and lands on
+the rubric" is precisely a mechanism that produces systematic under-scoring — the spiral being the
+rare case where it deadlocks instead of resolving quietly. Whether closing that gap is a rubric
+authoring problem, an anchor rendering problem, or a prompt problem is unsettled; the one prompt
+lever tried here made it worse.
+
+---
+
 ## 2. The repo
 
 ```
