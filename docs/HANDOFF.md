@@ -582,6 +582,61 @@ a prompt edit.
 
 ---
 
+### 1g. Half-points, and the one question where anchors are a coin flip
+
+**Confidence and flags are now recorded** (`ai_confidence`, `ai_flags`). `_grade_text` returns a
+`GradedText` NamedTuple of plain primitives, because the value crosses the builder's
+killable-child queue. `ai_scores` and `perturbed_scores` keep their shapes deliberately — the
+quality and fairness gates read both as criterion → score. Datasets built earlier have scores and
+no confidence, and **resuming will not backfill them**, because resuming skips anything scored.
+
+An existing test caught the change: its fake returned a bare dict, the `.scores` access raised, and
+`populate_model_scores` **swallowed it as a `grade_error`**. Worth remembering — a caller bug in
+that block is indistinguishable from a model failure in the logs.
+
+**§1f's rubric experiment bundled two changes; split, the descriptors were the harmful half.**
+
+| variant | mean err | mean \|err\| | exact | within 1 | ungraded |
+| --- | --- | --- | --- | --- | --- |
+| baseline | −0.61 | 0.87 | 33% | **81%** | 0 |
+| half-points only | **−0.37** | 0.85 | 31% | 71% | 0 |
+| sharpened descriptors + half-points | −0.81 | 1.01 | 25% | 70% | **2** |
+
+Half-points alone cause no spirals and nearly halve the bias. **Still rejected:** they trade bias
+for variance, dropping within-one-band agreement from 81% to 71% with swings like 3.0 → 5.0 against
+a human 3.5. For a teacher, being in the right band beats a better mean. And the tell — of 15 items
+whose human score *is* a half-point, it matched exactly **one**. It used halves eight times, mostly
+not where humans did. It did not learn the scale, it got noisier.
+
+**Anchors are not ignored on q05 — they are a coin flip there.** The hypothesis was that q05, which
+owns both confidently-wrong items and the original spiral, was a question where the calibration
+mechanism silently failed. Wrong: anchors change 9 of 20 q05 scores.
+
+| | mean err | mean \|err\| | exact |
+| --- | --- | --- | --- |
+| bare | −0.97 | 1.07 | 40% |
+| anchored | −0.65 | 1.00 | 45% |
+
+**Closer to the human on 4 items, further on 4, unchanged on 12.** A small aggregate gain with no
+per-item direction, against the +0.127/+0.135 QWK anchors are worth on the pilot set (P1).
+
+The mechanism is visible in the bare column: without anchors the model returns **0.0 on seven of
+twenty** — anything not matching the reference is simply wrong — while getting every human-5.0 item
+exactly right. q05 asks for a short factual phrase, which invites a binary reading, and the model
+is bimodal on it. Anchors soften that on some items (`A17` 0 → 3.5, `A27` 0 → 2.5, `A07` 0 → 2.0)
+and not others (`A01`, `A18`, `A14` stay at 0).
+
+**`E04.Q05.A00` is the case to remember: the anchors caused the error.** Bare it scores 3.0 against
+a human 2.5 — nearly right. Anchored it scores **0.0 at confidence 0.95**. The calibration
+mechanism made a good grade into a confidently wrong one.
+
+**Five interventions have now been rejected on measurement** — the anchor precedence rule, the
+decide-once rule, sharpened descriptors, half-points, and (as a q05 remedy) anchors themselves.
+Everything that has worked on this model has been mechanical: a cap, a retry, a sampling change.
+The next session should weigh that before reaching for another prompt or rubric edit.
+
+---
+
 ## 2. The repo
 
 ```
