@@ -202,10 +202,24 @@ What is still not in the UI, all of it with client functions already written:
   `/api/canvas/courses`. The engine has four Canvas routes and listing is not among them, so the
   teacher must know the numeric ids.
 
-**`artifacts/release-evidence/frontend.json` is now stale.** It records 16 screens and 167
-controls captured 2026-07-21, before any of these controls existed. The required-screen list is
-unchanged so the gate still passes, but the recorded control count no longer describes the app —
-regenerate the visual sweep before quoting it.
+**`frontend.json` was regenerated and passes, but read what it does and does not prove.** It now
+records 41 component tests (was 18) and re-validates against `visual-sweep.json`:
+
+```bash
+uv run python scripts/frontend_evidence.py --app-dir app \
+  --visual-sweep artifacts/release-evidence/visual-sweep.json \
+  --out artifacts/release-evidence/frontend.json    # → status=PASS
+```
+
+Note the sweep argument. Passing `computer-use-sweep-current.json` — the obvious-looking name —
+returns `visual_sweep_screens: null` and fails; `visual-sweep.json` is the artifact with the 16
+named screens.
+
+**The sweep itself is a capture that predates the import, post and retry controls.** It proves
+the sixteen existing screens still render and the 47 required control labels are still present.
+It does not exercise anything added this session. The gate passing is therefore not evidence
+that the round-trip UI works — regenerating the sweep needs the app driven under Playwright or
+Computer Use, which has not been done since these controls landed.
 
 ### What the fence still owes the release matrix
 
