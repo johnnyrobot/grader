@@ -140,6 +140,35 @@ without a quality trade.
 `artifacts/` still holds pre-fence scores — rebuild it with `--grade` before the release gate
 quotes a figure, or it will report the old prompt's numbers.
 
+### What the fence still owes the release matrix
+
+**The fairness row is the one gate still standing on pre-fence evidence.** `engine/gates/bias.py`
+reads `perturbed_scores` frozen into the dataset, exactly as the quality gate reads `ai_scores`,
+and the fenced rebuild was run without `--grade-perturbations`. Pointed at it, the gate is
+explicit:
+
+```
+✗ PUBLIC PROXY FAIRNESS GATE: FAIL
+  public proxy examples have no perturbed_scores; run the builder with --grade-perturbations
+```
+
+So the `PASS` the consolidated report prints for fairness describes the *old* prompt. Closing it
+is one command and a long wait — five perturbations across 40 items is 200 gradings, roughly
+three hours at this machine's ~50s per item:
+
+```bash
+uv run python scripts/build_public_proxy.py mohler-asag --out <dir> --sources 2 \
+  --items-per-source 20 --seed 20260713 --grade --grade-perturbations \
+  --model grader-text:8b --anchor-exemplars-per-source 10 --anchor-k 6 \
+  --grade-timeout-seconds 420
+```
+
+Resuming works now (`bde0f6f`), so this can be run in pieces with `--limit` and picked up again
+rather than restarted.
+
+**Do not quote a `supervised_public_beta` verdict as describing the fenced prompt until that
+run exists.** Quality has been re-established; fairness has not.
+
 **Performance has much less headroom than recorded.** The gate passes, but a 1500-word essay now
 measures 67–77s against a 90s budget where 2026-07-12 recorded 33.5s, and it read 123s (a FAIL)
 while a VM was competing for the machine. Measure it on a quiet machine, and do not treat the
