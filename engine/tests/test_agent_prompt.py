@@ -135,3 +135,50 @@ def test_hostile_text_stays_inside_the_fence(hostile):
 
     after_close = prompt.rsplit(SUBMISSION_FENCE, 1)[1]
     assert hostile.splitlines()[0] not in after_close
+
+
+# -- A grade that never comes back -------------------------------------------
+
+
+def test_grading_carries_a_timeout_so_one_submission_cannot_stall_a_batch():
+    """Measured, not hypothetical: 4 of 120 ordinary short answers never return.
+
+    Building the 6-question public proxy, four items hit the builder's per-call
+    timeout at 420s and again at 1200s — the model simply does not finish on
+    them. Their inputs are unremarkable: 165-271 characters against a median of
+    193.
+
+    `scripts/build_public_proxy.py` already defends against this by grading in a
+    killable child process, its docstring noting that one pathological item must
+    not "stall the whole release evidence run". The engine had no equivalent:
+    `agent.run_sync()` with no timeout, on the background grading thread, blocks
+    that batch forever.
+
+    grade() already turns a failure into a GradeRun the queue can surface, so a
+    timeout only has to become an exception for the existing path to handle it.
+    """
+    from grader.agent import GRADING_SETTINGS, GRADE_TIMEOUT_SECONDS
+
+    assert GRADING_SETTINGS.get("timeout") == GRADE_TIMEOUT_SECONDS
+    assert GRADE_TIMEOUT_SECONDS > 0
+
+
+def test_a_timed_out_grade_is_a_result_rather_than_a_crash(monkeypatch):
+    """The queue has to be able to show the teacher what happened."""
+    import httpx
+
+    from grader import agent as agent_module
+
+    class HangingAgent:
+        def run_sync(self, prompt):
+            raise httpx.ReadTimeout("timed out")
+
+        def output_validator(self, fn):
+            return fn
+
+    monkeypatch.setattr(agent_module, "build_agent", lambda *a, **k: HangingAgent())
+
+    run = agent_module.grade(_rubric(), "a submission the model hangs on")
+
+    assert run.ok is False
+    assert "ReadTimeout" in (run.error or "")
