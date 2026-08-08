@@ -47,6 +47,18 @@ GRADING_SETTINGS = ModelSettings(
     temperature=0.0,
     timeout=GRADE_TIMEOUT_SECONDS,
     max_tokens=GRADE_MAX_TOKENS,
+    # `max_tokens` alone does not reach Ollama. Pydantic AI sends the modern
+    # OpenAI spelling, `max_completion_tokens`, and Ollama's /v1 compatibility
+    # layer silently ignores it — measured against a live server:
+    #
+    #   max_tokens=40             ->   40 tokens, finish_reason "length"
+    #   max_completion_tokens=40  -> 2339 tokens, finish_reason "stop"
+    #   options.num_predict=40    -> 2339 tokens   (a native /api param, not /v1)
+    #
+    # Ignored rather than rejected, which is why a cap appeared to be set and
+    # nothing was capped. extra_body puts the spelling Ollama reads into the
+    # request alongside the one Pydantic AI chose.
+    extra_body={"max_tokens": GRADE_MAX_TOKENS},
 )
 
 SYSTEM_PROMPT = """\

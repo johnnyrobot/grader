@@ -170,6 +170,13 @@ def test_grading_carries_a_timeout_so_one_submission_cannot_stall_a_batch():
     assert GRADING_SETTINGS.get("max_tokens") == GRADE_MAX_TOKENS
     assert 0 < GRADE_MAX_TOKENS < 6975
 
+    # And it has to be spelled the way Ollama reads. Pydantic AI sends
+    # `max_completion_tokens`, which Ollama's /v1 layer ignores rather than
+    # rejects — measured live: max_tokens=40 stopped at 40, and
+    # max_completion_tokens=40 ran to 2339. Without this the cap is set and
+    # nothing is capped.
+    assert GRADING_SETTINGS.get("extra_body") == {"max_tokens": GRADE_MAX_TOKENS}
+
     # The timeout still covers a server that goes silent mid-request.
     assert GRADING_SETTINGS.get("timeout") == GRADE_TIMEOUT_SECONDS
     assert GRADE_TIMEOUT_SECONDS > 0
