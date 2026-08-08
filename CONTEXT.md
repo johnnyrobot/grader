@@ -65,8 +65,12 @@ The state of an Assignment with too few Exemplars for the AI to draft at all. Th
 _Avoid_: warmup, bootstrap
 
 **Calibration health**:
-How closely current AI drafts agree with this teacher's own grading on this Assignment, and which direction the disagreement runs.
+How closely current AI drafts agree with this teacher's own grading on this Assignment, measured over every Approval — including those where the teacher changed nothing.
 _Avoid_: accuracy, quality score, model performance
+
+**Draft bias**:
+The signed direction and size of the gap between AI drafts and this teacher's approved grades on an Assignment. Negative means drafts run below the teacher.
+_Avoid_: harshness, drift, error
 
 ### Canvas
 
