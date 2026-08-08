@@ -110,6 +110,12 @@ DB_PATH = DATA_DIR / "grader_engine.db"
 # submissions.source_kind values. OCR text is a transcription of an image, so it
 # carries a reading error the grade cannot see; handwriting.py has always said
 # scanned work defaults to REVIEW_FIRST, and this is what lets triage do it.
+#
+# Only image attachments are recognised today: `_parse_image` is the OCR path and
+# reports source_type='image'. A scanned *PDF* goes through Docling, comes back
+# as 'pdf', and `_parse_with_docling` hardcodes confidence=1.0 — so nothing marks
+# it. Photos of handwritten work are covered; scanned PDFs are not, until
+# Docling's own OCR confidence is surfaced through ParsedDoc.
 SCANNED = "scanned"
 TYPED = "text"
 

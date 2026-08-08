@@ -158,3 +158,34 @@ def test_a_database_written_before_source_kind_existed_still_opens(tmp_path, mon
         assert row["source_kind"] == api.TYPED
     finally:
         sys.modules.pop("api", None)
+
+
+def test_only_image_attachments_are_recognised_as_scanned_today(tmp_path):
+    """The boundary of the signal, stated rather than implied.
+
+    `_parse_image` is the OCR path and reports source_type='image', which is
+    what the import writes down. A *scanned PDF* goes through Docling instead,
+    comes back as 'pdf', and `_parse_with_docling` hardcodes confidence=1.0 —
+    so there is no signal that its text came from OCR, and it will not be
+    routed to REVIEW_FIRST.
+
+    Photos of handwritten work (the handwriting.py path) are covered. Scanned
+    PDFs are not. Closing that needs Docling's own OCR confidence surfaced
+    through ParsedDoc, which `_parse_with_docling` does not currently do.
+    """
+    from grader.parse import parse
+
+    typed = tmp_path / "essay.txt"
+    typed.write_text("A queue is first in, first out.")
+    assert parse(typed).source_type == "txt"
+
+    # The claim under test: 'image' is the only source_type the import treats as
+    # scanned, and it comes only from the OCR path.
+    import inspect
+
+    from grader import parse as parse_module
+
+    assert 'source_type="image"' in inspect.getsource(parse_module._parse_image)
+    assert 'source_type="image"' not in inspect.getsource(
+        parse_module._parse_with_docling
+    )
