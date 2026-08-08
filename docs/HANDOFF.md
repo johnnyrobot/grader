@@ -515,6 +515,73 @@ lever tried here made it worse.
 
 ---
 
+### 1f. Confidence is calibrated; the under-scoring resists every fix tried
+
+**The release evidence now describes the shipped prompt.**
+`artifacts/public_proxy/mohler_asag_diverse_anchored_fenced` (same two questions and source
+hashes as the pilot it replaces, fenced prompt, shipped sampling, all five perturbations) returns
+**19/19, `supervised_public_beta`**, quality PASS at QWK 0.885 and fairness PASS. The pilot
+directory is left in place, and `artifacts/` is gitignored, so the datasets also live in
+`~/grader-datasets-2026-08-08/`.
+
+**Confidence tracks error better than the one bad example suggested.** Over 42 items stratified
+across all six questions:
+
+| | n | mean \|err\| |
+| --- | --- | --- |
+| confidence ≥ 0.9 | 24 | 0.71 |
+| confidence < 0.9 | 18 | 1.08 |
+
+correlation(confidence, |error|) = **−0.476**. Both items scoring 0.30 were genuinely bad (|err|
+2.5 and 4.0) and both carried flags. **Correction to §1e:** `E04.Q05.A07` returning 0.0 at
+confidence 1.0 was measured under the default-penalty build that was later reverted; under the
+shipped retry-only config it returns **2.0 against a human 2.0**. The residual is 2/42 (4.8%)
+confidently wrong — `E04.Q05.A00` (0.95, −2.5) and `E04.Q05.A01` (1.00, −3.5), both q05, both
+under-scoring, neither flagged.
+
+**None of that is in the release evidence, because the builder throws it away.** `_grade_text`
+returns only `criterion_scores`; `confidence` and `flags` are dropped. Triage routes hard cases to
+a human on a number no gate has ever measured. Recording `ai_confidence` and `ai_flags` means
+changing the return type through `_grade_text_worker` and the spawned-child queue — small, but not
+a one-liner.
+
+**The under-scoring is a collapse onto 3, not uniform harshness.**
+
+| human band | n | mean err |
+| --- | --- | --- |
+| 4.5–5.0 | 48 | −0.32 |
+| **3.5–4.4** | **21** | **−0.93** |
+| 2.5–3.4 | 22 | −0.20 |
+| 0–2.4 | 29 | +0.02 |
+
+The histogram says the same thing: **31 model threes against 15 human, and 1 model 4.5 against
+13 human**. The bottom half is unbiased and the model emits exactly as many 5s as the humans
+(35 vs 35). Two structural causes, both in a rubric **we wrote** (`build_public_proxy.py`, not
+Mohler's): levels 3 and 4 are near-synonyms ("core idea present but incomplete" vs "substantively
+correct with minor omissions"), and **39 of 120 human scores are half-points against integer-only
+levels**.
+
+**Sharpening that rubric was tried and rejected.** Descriptors rewritten in terms of how many of
+the reference answer's key elements the student states — deliberately never "prefer 4 over 3",
+which would encode the model's failure and prove nothing — plus explicit permission to award
+halves. Paired against the same 42 items:
+
+| | mean err | mean \|err\| | exact | within 1 |
+| --- | --- | --- | --- | --- |
+| baseline | −0.64 | 0.91 | 30% | 80% |
+| sharpened | **−0.81** | **1.01** | **25%** | **70%** |
+
+It fixed the band it targeted (3.5–4.4: −1.21 → −0.75) and made everything else worse. **And it
+induced two spirals that survived both the default and the escape attempt** — the first evidence
+that a runaway is rubric-dependent, and that the retry is not unconditional.
+
+**That is three instruction-level interventions rejected on measurement** — the anchor precedence
+rule, the decide-once rule, and now the rubric. Every fix that has worked on this model has been
+mechanical (a cap, a retry, a sampling change). Worth weighing before the next session reaches for
+a prompt edit.
+
+---
+
 ## 2. The repo
 
 ```
