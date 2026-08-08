@@ -140,6 +140,44 @@ without a quality trade.
 `artifacts/` still holds pre-fence scores — rebuild it with `--grade` before the release gate
 quotes a figure, or it will report the old prompt's numbers.
 
+### 1c. The Canvas round-trip is not reachable from the app
+
+**A teacher running Grader.app cannot import from Canvas, cannot post a grade to Canvas, and
+cannot get work into the app at all.** The engine implements the whole round-trip and it is
+tested; the desktop UI exposes none of it.
+
+Verified by reading the frontend, not inferred:
+
+- `app/src/` contains five screens: `FirstRun`, `ModelManager`, `Queue`, `SplitView`, `Settings`.
+- The only Canvas string anywhere outside `index.css` is in `Settings.tsx` — a URL field, a token
+  field, and an attachment directory. Nothing calls `/api/canvas/*`.
+- `app/src/api.ts` exports `importSubmissions()` and **nothing calls it**. Even the local paste
+  path is unwired — the same dead-export pattern as `OfflinePostQueue.enqueue()` and
+  `upload_file()`.
+- The Rust side (`src-tauri/src/lib.rs`) has exactly two commands, `get_engine_info` and
+  `restart_engine`. There is no file-drop or native import path either.
+- `App.tsx` calls `checkHealth`, `fetchQueue`, and `connectWebSocket`. That is the whole data flow.
+
+So the app can run first-run setup, manage models, display a queue, review and approve what is
+already in the engine database, and edit settings. Everything that *fills* that queue — Canvas
+import, local import, post-back, queue flush, and the comment attachments added this session —
+runs only from the engine API or `scripts/live_canvas_e2e.py`.
+
+**The release matrix cannot see this, and both of its rows are individually honest.** The
+`desktop UI` row checks "onboarding, queue, review, settings, model manager, recovery,
+accessibility, 200% reflow" — Canvas is not in that list, so 16 screens and 167 controls pass
+truthfully. The `Canvas` row is satisfied by `artifacts/release-evidence/canvas-live.json`, which
+`scripts/live_canvas_e2e.py` produces. Each row is true. Together they imply something false:
+that a teacher can do the round-trip in the product. No row asks that question.
+
+`docs/phases/P3.md` is the honest document here — its build sequence is engine-only and it still
+reads 🟡 in progress. §1's table above marks P3 🟢 citing a "guarded live app E2E", which is that
+script rather than the app.
+
+This is the fifth instance this week of the same shape: **code that exists, is tested, and is
+never called from where a user would reach it.** It is worth treating as the default suspicion
+when reviewing this repo — start from "who calls this?", not "is it implemented?".
+
 ### What the fence still owes the release matrix
 
 **The fairness row is the one gate still standing on pre-fence evidence.** `engine/gates/bias.py`
