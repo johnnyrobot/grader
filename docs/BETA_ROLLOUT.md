@@ -182,7 +182,11 @@ pass — a bias nobody is shown still anchors the reviewer low.
 - Citations remain experimental (69% fixture accuracy, 0 false positives) and must stay visibly
   labelled.
 - FR-3.4 comment attachments have never run against live Canvas — MockTransport only.
-- The visual sweep predates the current UI controls, so frontend evidence overstates coverage.
+- The visual sweep no longer overstates coverage: it covers 17 screens including `15-calibration`
+  and 186 visible controls, and `release_readiness.py` now floors the check at `len()` of the lists
+  `frontend_evidence.py` validates against, so the floor cannot drift from them again. One caveat
+  remains — `artifacts/release-evidence/frontend.json` was collected before the last end-to-end
+  change, so rerun `scripts/frontend_evidence.py` before treating it as final release evidence.
 - Performance: a *short* answer measured 100.7s when a runaway retry fires, against a 90s budget
   written for a 1500-word essay.
 
