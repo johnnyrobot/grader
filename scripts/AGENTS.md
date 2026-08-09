@@ -153,7 +153,18 @@ scripts/
   to `app/src-tauri/tauri.conf.json`, records artifact path/mtime/SHA-256 metadata, and rejects PASS
   updater or clean-machine artifacts whose recorded version does not match the evaluated app. Its
   JSON/Markdown report includes the end-to-end public-beta matrix; keep new public-beta evidence
-  requirements represented there instead of only in prose.
+  requirements represented there instead of only in prose. The matrix has two profiles:
+  `supervised_public_beta`, which `decide_verdict` answers, and `ship_v1`, a superset carrying what
+  only a beta can produce — a `ship_v1`-only row blocks v1.0 and can never move the beta verdict, so
+  put a requirement there when it is a ship signal rather than an entry gate. Both profiles reach the
+  report (`e2e_matrix`, `ship_v1_matrix`). `--draft-bias-artifact` supplies the teacher-local
+  `Draft bias` evidence the `ship_v1` calibration row reads; it is never committed (`teacher_local`
+  tier) and its absence is `BLOCKED_TEACHER_APPROVALS`, not a failure. It has no producer script on
+  purpose — nothing here can reach a teacher's machine — so it is written by hand from one
+  `GET /api/calibration/<assignment_id>` response during the supervised beta:
+  `{"status": "PASS", "evidence_tier": "teacher_local", "assignment_id": ..., "n": ..., "draft_bias": ...}`,
+  with `n` at or above `EVIDENCE_FLOOR` and a non-null `draft_bias`. Never paste student work,
+  names, or scores into it.
 - Fake students use `ZZGraderTest` prefix + `.invalid` email domain (RFC 2606 — can never resolve)
 - Canvas credentials: env vars (`CANVAS_BASE_URL`, `CANVAS_API_TOKEN`) or canvas-pp-cli's `credentials.toml`
 

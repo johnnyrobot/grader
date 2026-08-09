@@ -127,6 +127,7 @@ Each tester fills this out weekly during the beta:
 | Testers approve ≥60% of drafts | | | ✓ |
 | Testers would use full semester (≥3/5) | | | ✓ |
 | Style bias ≤ 1.0 | ✓ | | ✓ |
+| `Draft bias` measured on real `Approval`s (n ≥ 20) and surfaced in the app | | | ✓ |
 | Any showstopper bug | | ✓ | |
 
 ## Where the matrix actually stands (2026-08-08)
@@ -142,12 +143,13 @@ Private Beta *entry* gate above, not a ship signal.** Read against the Ship-v1.0
 | Style bias ≤ 1.0 | ✅ all five perturbations; `nonnative` −0.14 is the weakest |
 | Testers approve ≥60% of drafts | ❌ **not measurable — no testers yet** |
 | Testers would use a full semester (≥3/5) | ❌ **not measurable — no testers yet** |
+| `Draft bias` measured on real `Approval`s (n ≥ 20) and surfaced in the app | ⚠️ surfaced; **not measurable — no teacher `Approval`s yet** |
 | Any showstopper bug | ⚠️ see below |
 
-Three of the seven cannot be evaluated without the Private Beta. The gate passing is the signal to
+Four of the eight cannot be evaluated without the Private Beta. The gate passing is the signal to
 *start* that phase.
 
-### The risk this matrix does not have a row for
+### The risk this matrix now has a row for
 
 The product's safety story is that the teacher approves every grade. Three measurements strain it
 (evidence in `HANDOFF.md` §1e–§1g):
@@ -165,6 +167,15 @@ failure mode is automation bias rather than an obvious error. These are real stu
 **This is a reason to run the supervised Private Beta, not a reason to hold it** — measuring
 approval rate on real drafts is exactly how the question gets answered. It *is* a reason not to
 ship v1.0 on the strength of a passing gate.
+
+So it is a Ship-v1.0 row and not a beta-entry one (ADR-0001, decision 11). `release_readiness.py`
+carries it as `draft-bias-teacher-approvals` under the `ship_v1` profile, which is a superset of
+the `supervised_public_beta` profile the verdict is decided on: the row blocks v1.0 and cannot move
+the beta verdict. It is satisfied by teacher-local calibration evidence
+(`artifacts/release-evidence/draft-bias-teacher-local.json`, `evidence_tier: teacher_local`,
+`n ≥ 20`, a non-null `draft_bias`) *together with* the app surface, which the frontend gate's
+calibration screen and review-screen bias line already carry. Measured but unsurfaced does not
+pass — a bias nobody is shown still anchors the reviewer low.
 
 ### Also outstanding
 

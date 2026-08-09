@@ -39,6 +39,11 @@ misrepresented as grading accuracy.
 | Clean-machine | First launch, model setup, crash recovery, keyboard review, Computer Use instructor sweep, updater N->N+1 | `scripts/clean_machine_evidence.py --print-manual-runbook`, structured evidence, and clean GitHub macOS build | PASS under the hybrid supervised-beta standard: local fresh-profile behavior and signed 0.1.0 → 0.1.1 updater path pass; final source separately clean-builds on a fresh GitHub-hosted macOS runner. This is not represented as a separate physical clean Mac. | PASS for supervised beta; physical clean-Mac evidence remains the stronger unattended-release standard |
 | Release report | Consolidated verdict is `supervised_public_beta` | `scripts/release_readiness.py` | PASS: 19/19 rows pass, including one explicit `PASS_EXPERIMENTAL` citation row | Final release gate |
 
+This is the `supervised_public_beta` profile of `scripts/release_readiness.py`, and it is the one the
+verdict is decided on. The report also emits a `ship_v1` profile — the same rows plus what only a
+beta can produce, currently the `Draft bias` row from ADR-0001. Those rows block v1.0 and never the
+beta; see `docs/BETA_ROLLOUT.md`.
+
 ## Required Manual Visual Sweep
 
 Use Computer Use or Playwright screenshots to inspect every visible screen at desktop width and at
