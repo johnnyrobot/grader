@@ -185,6 +185,11 @@ test("instructor exercises every core control surface", async ({ page }, testInf
   await page.screenshot({ path: testInfo.outputPath("queue-all-controls.png"), fullPage: true });
 
   await page.getByRole("button", { name: /Student 1042/ }).click();
+  // Draft bias is disclosed where the score is read — about the assignment, never
+  // about the draft on screen.
+  const biasNote = page.getByText(/Across 34 approvals on this assignment/);
+  await expect(biasNote).toContainText("about 7% of a criterion's maximum below your grading");
+  await expect(biasNote).toContainText("not a claim about this draft");
   await page.getByRole("button", { name: "Approve AI draft" }).click();
   await expect(page.getByText("Grade approved. It is ready for your next posting step.")).toBeVisible();
   await page.keyboard.press("Escape");
@@ -283,6 +288,36 @@ test("calibration reports counts and no direction below the evidence floor", asy
   await expectNoSeriousAccessibilityViolations(page);
 });
 
+test("the review screen discloses nothing when the gap is below the disclose threshold", async ({ page }) => {
+  await page.route("http://127.0.0.1:8756/api/calibration/**", route => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({
+      ...instructorFixture.calibration,
+      draft_bias: -0.012, discloses: false, demotes: false,
+    }),
+  }));
+  await page.goto("/");
+  await page.waitForLoadState("networkidle");
+  await page.getByRole("button", { name: "Continue" }).click();
+  await page.getByRole("button", { name: "Skip appearance choices" }).click();
+  await page.getByRole("button", { name: "Continue" }).click();
+  await page.getByRole("button", { name: "Start grading" }).click();
+  // Wait for the calibration read itself, so "nothing is disclosed" is a verdict on
+  // the payload rather than on a fetch that had not landed yet.
+  const calibrationRead = page.waitForResponse(response => response.url().includes("/api/calibration/"));
+  await page.getByRole("button", { name: /Student 1042/ }).click();
+  await calibrationRead;
+
+  await expect(page.getByRole("heading", { name: "Review Student 1042" })).toBeVisible();
+  await expect(page.getByText(/on this assignment/)).toHaveCount(0);
+  await expect(page.getByText(/your grading/)).toHaveCount(0);
+  // The review surface still works, unchanged, when there is nothing to disclose.
+  await page.getByRole("button", { name: "Approve AI draft" }).click();
+  await expect(page.getByText("Grade approved. It is ready for your next posting step.")).toBeVisible();
+  await expectNoSeriousAccessibilityViolations(page);
+});
+
 test("engine disconnect is surfaced with an instructor recovery action", async ({ page }) => {
   await page.route("http://127.0.0.1:8756/health", route => {
     route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true }) });
@@ -346,6 +381,7 @@ test("visual sweep records every core screen and visible control inventory", asy
 
   await page.getByRole("button", { name: /Student 1042/ }).click();
   await expect(page.getByRole("heading", { name: "Review Student 1042" })).toBeVisible();
+  await expect(page.getByText(/Across 34 approvals on this assignment/)).toContainText("about 7% of a criterion's maximum below your grading");
   await capture("07-review-draft");
   await page.getByRole("radio", { name: "5 points for Thesis" }).check();
   await page.getByRole("textbox", { name: "Feedback for Student 1042" }).fill("Strong claim. Add one more cited example.");

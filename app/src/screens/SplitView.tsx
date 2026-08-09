@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { GradeItem, approveGrade, overrideGrade } from "../api";
+import { CalibrationHealth, GradeItem, approveGrade, fetchCalibration, overrideGrade } from "../api";
 import { AppShell } from "../components/AppShell";
 
 interface Props {
@@ -22,6 +22,34 @@ function signalLabel(flag: string) {
   return titleCase(flag);
 }
 
+function plural(count: number, word: string) {
+  return `${count} ${word}${count === 1 ? "" : "s"}`;
+}
+
+/** One assignment-level sentence about `Draft bias`, for the moment the teacher is
+ *  deciding whether to accept a score.
+ *
+ *  It is deliberately about the Assignment. Grader measures the gap over every
+ *  Approval on the assignment and has no per-draft figure at all (ADR-0001), so
+ *  the wording must not let this read as "this score is probably low".
+ *
+ *  A polite live region, as everything else in this app that arrives after its
+ *  screen does: the calibration read resolves after first paint, and a disclosure
+ *  a screen-reader user is never told about has not reached the teacher.
+ */
+function DraftBiasNote({ health }: { health: CalibrationHealth }) {
+  const bias = health.draft_bias!;
+  return (
+    <p className="calibration-note" role="status" aria-live="polite">
+      <span className="eyebrow">Calibration</span>
+      Across {plural(health.n, "approval")} on this assignment, Grader's drafts have run about{" "}
+      {Math.round(Math.abs(bias) * 100)}% of a criterion's maximum{" "}
+      {bias < 0 ? "below" : "above"} your grading — a pattern in the assignment, not a claim
+      about this draft.
+    </p>
+  );
+}
+
 function total(scores: Record<string, number>) {
   return Object.values(scores).reduce((sum, score) => sum + score, 0);
 }
@@ -42,6 +70,7 @@ export function SplitView({ item, onBack }: Props) {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [feedbackFocused, setFeedbackFocused] = useState(false);
+  const [health, setHealth] = useState<CalibrationHealth | null>(null);
 
   useEffect(() => {
     const nextScores = item.teacher_scores || item.ai_scores || {};
@@ -53,6 +82,17 @@ export function SplitView({ item, onBack }: Props) {
     setApproved(item.approved);
     setMessage("");
   }, [item]);
+
+  // The same calibration payload the calibration screen reads, for the assignment
+  // this draft belongs to. A read that fails leaves the review screen as it was:
+  // a missing figure is not a figure of zero, and it must not block a decision.
+  useEffect(() => {
+    let current = true;
+    fetchCalibration(item.assignment_id)
+      .then(result => { if (current) setHealth(result); })
+      .catch(() => { if (current) setHealth(null); });
+    return () => { current = false; };
+  }, [item.assignment_id]);
 
   const changed = useMemo(
     () => JSON.stringify(scores) !== JSON.stringify(savedScores) || feedback !== savedFeedback,
@@ -212,6 +252,9 @@ export function SplitView({ item, onBack }: Props) {
               <span>points</span>
             </div>
           </div>
+          {/* `discloses` is the engine's own verdict — it carries the 0.03 threshold
+              and the evidence floor together, and consumers do not re-derive either. */}
+          {health?.discloses && <DraftBiasNote health={health} />}
           {changed && <p className="unsaved-note" role="status">Teacher changes not saved yet.</p>}
 
           <div className="criteria-list">

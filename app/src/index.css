@@ -214,6 +214,8 @@ button { color: inherit; }
   .score-total strong { @apply text-2xl leading-none; }
   .score-total span { @apply mt-1 text-[10px] font-bold uppercase tracking-wider; }
   .unsaved-note { background: var(--warning-soft); color: var(--warning); @apply mb-4 rounded-lg px-3 py-2 text-xs font-bold; }
+  .calibration-note { background: var(--info-soft); border-left: 4px solid var(--info); color: var(--ink-strong); @apply mb-4 rounded-r-xl px-3 py-2 text-[13px] leading-5; }
+  .calibration-note .eyebrow { @apply mb-1 block; }
   .criteria-list { @apply space-y-3; }
   .criterion-card { @apply min-w-0 rounded-xl p-4; }
   .criterion-card legend { color: var(--ink-strong); @apply px-1 text-sm font-extrabold; }
