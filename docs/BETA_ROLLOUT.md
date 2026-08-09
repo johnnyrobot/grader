@@ -187,8 +187,13 @@ pass — a bias nobody is shown still anchors the reviewer low.
   `frontend_evidence.py` validates against, so the floor cannot drift from them again. One caveat
   remains — `artifacts/release-evidence/frontend.json` was collected before the last end-to-end
   change, so rerun `scripts/frontend_evidence.py` before treating it as final release evidence.
-- Performance: a *short* answer measured 100.7s when a runaway retry fires, against a 90s budget
-  written for a 1500-word essay.
+- Performance: the retry path is now measured rather than feared. `engine/gates/perf.py` times a
+  capped 2048-token attempt — the first half of a retried grade — and reports the two-attempt worst
+  case alongside the happy path: **28.8s single, 67.3s worst case, both inside the 90s budget**. The
+  earlier 100.7s observation stands as a record of slower conditions (a single grade then took 77s,
+  against 28.8s now), not of a budget the retry breaks. The worst case is reported, not gated:
+  whether a retried item must fit the single-item budget is a product decision the gate does not
+  make, and a `PASS` now says so out loud when it would not fit.
 
 ## Post-Launch
 

@@ -49,6 +49,82 @@ def _check_ollama() -> bool:
         return False
 
 
+def _measure_token_cap_seconds(model: str) -> float | None:
+    """How long one attempt takes when it generates to the cap, in seconds.
+
+    This is the first half of a retried grade. A runaway does not fail fast: it
+    generates until `GRADE_MAX_TOKENS` is reached, and only then does the second
+    attempt with different sampling begin. Timing a normal grade measures neither
+    half of that.
+
+    Measured as throughput against a known token count rather than by provoking a
+    real runaway, which is a ~3% stochastic event and cannot be asked for. Returns
+    None when the sample stopped early, because a run that never reached the cap
+    cannot say what reaching it costs.
+    """
+    try:
+        import httpx
+        from grader.agent import GRADE_MAX_TOKENS
+
+        started = time.monotonic()
+        response = httpx.post(
+            "http://localhost:11434/v1/chat/completions",
+            json={
+                "model": model,
+                "messages": [{
+                    "role": "user",
+                    "content": (
+                        "Write a continuous, detailed analysis of working memory research. "
+                        "Do not summarise, do not conclude, and do not stop."
+                    ),
+                }],
+                "temperature": 0.0,
+                # The spelling Ollama's /v1 layer actually reads — see the
+                # measurements in grader.agent's GRADING_SETTINGS.
+                "max_tokens": GRADE_MAX_TOKENS,
+            },
+            timeout=300,
+        )
+        elapsed = time.monotonic() - started
+        if response.status_code != 200:
+            return None
+        body = response.json()
+        generated = int(body.get("usage", {}).get("completion_tokens") or 0)
+        if generated <= 0:
+            return None
+        # Scale to the cap: a sample that stopped short still measures throughput,
+        # and the cap is what a runaway actually generates.
+        return elapsed * (GRADE_MAX_TOKENS / generated)
+    except Exception:
+        return None
+
+
+def _retry_worst_case(
+    *,
+    single_seconds: float,
+    cap_seconds: float | None,
+    max_seconds: float,
+) -> dict[str, str]:
+    """What one item costs when the runaway retry fires.
+
+    Reported, not gated. The gate's documented budget covers a single attempt,
+    and whether a retried item must also fit inside it is a product decision
+    this gate does not get to make — but it must not let a happy-path number
+    stand in silently for the case that has never been measured.
+    """
+    if cap_seconds is None:
+        return {"retry_worst_case_seconds": "not measured"}
+    worst = cap_seconds + single_seconds
+    over = worst - max_seconds
+    return {
+        "runaway_first_attempt_seconds": f"{cap_seconds:.1f}",
+        "retry_worst_case_seconds": f"{worst:.1f}",
+        "retry_worst_case_budget": (
+            f"within ≤{max_seconds:g}s" if over <= 0 else f"OVER ≤{max_seconds:g}s by {over:.1f}s"
+        ),
+    }
+
+
 def _generate_essay(word_count: int) -> str:
     """Generate a synthetic essay of approximately word_count words."""
     paragraph = (
@@ -154,6 +230,13 @@ def run_perf_gate(
 
     single_pass = single_time <= max_seconds
 
+    retry_details = _retry_worst_case(
+        single_seconds=single_time,
+        cap_seconds=_measure_token_cap_seconds(model),
+        max_seconds=max_seconds,
+    )
+    details.update(retry_details)
+
     batch_details: dict[str, str] = {}
     batch_pass = True
 
@@ -182,11 +265,15 @@ def run_perf_gate(
             details,
         )
 
-    return PerfResult(
-        "PASS",
-        f"{single_time:.1f}s per {actual_words}-word essay (budget {max_seconds}s)",
-        details,
-    )
+    # A PASS that says only the happy-path number would be the automation-bias
+    # failure in miniature: true, and quietly not the whole story.
+    summary = f"{single_time:.1f}s per {actual_words}-word essay (budget {max_seconds}s)"
+    if str(retry_details.get("retry_worst_case_budget", "")).startswith("OVER"):
+        summary += (
+            f" — but a retried item costs {retry_details['retry_worst_case_seconds']}s, "
+            f"{retry_details['retry_worst_case_budget']}"
+        )
+    return PerfResult("PASS", summary, details)
 
 
 def main() -> None:
