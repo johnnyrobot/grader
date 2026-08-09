@@ -4,6 +4,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parents[2]))
 
+from scripts.frontend_evidence import REQUIRED_CONTROL_LABELS, REQUIRED_VISUAL_SCREENS
 from scripts.release_readiness import (
     BETA_PROFILE,
     CLEAN_MACHINE_REQUIRED_CHECKS,
@@ -106,9 +107,9 @@ def test_build_e2e_matrix_maps_public_beta_requirements_to_evidence():
             "status": "PASS",
             "summary": {
                 "visual_sweep_validation": "PASS",
-                "visual_sweep_required_screens": 16,
-                "visual_sweep_required_controls": 47,
-                "visual_sweep_screens": 16,
+                "visual_sweep_required_screens": len(REQUIRED_VISUAL_SCREENS),
+                "visual_sweep_required_controls": len(REQUIRED_CONTROL_LABELS),
+                "visual_sweep_screens": 17,
                 "visual_sweep_visible_controls": 167,
             },
             "artifact": {"path": "artifacts/release-evidence/frontend.json"},
@@ -157,6 +158,33 @@ def test_build_e2e_matrix_maps_public_beta_requirements_to_evidence():
     assert by_id["updater-release-channel-preflight"]["evidence"] == "artifacts/release-evidence/updater-channel-current.json"
 
 
+def test_a_stale_visual_sweep_floor_does_not_pass_the_ui_row():
+    """The floor tracks the required-screen list, not a number typed once.
+
+    16 screens and 47 controls were the requirement before the calibration screen
+    landed. An artifact from that producer has not checked what is required now,
+    and a `>=` against a stale constant would wave it through.
+    """
+    evidence = _passing_evidence(frontend={
+        "status": "PASS",
+        "summary": {
+            "visual_sweep_validation": "PASS",
+            "visual_sweep_required_screens": 16,
+            "visual_sweep_required_controls": 47,
+        },
+    })
+
+    by_id = {row["id"]: row for row in build_e2e_matrix(evidence)}
+
+    assert by_id["ui-onboarding-queue-review-settings-models"]["status"] == "FAIL"
+
+
+def test_the_ui_row_passes_at_the_counts_the_frontend_gate_currently_requires():
+    by_id = {row["id"]: row for row in build_e2e_matrix(_passing_evidence())}
+
+    assert by_id["ui-onboarding-queue-review-settings-models"]["status"] == "PASS"
+
+
 def _passing_evidence(**overrides):
     """Every gate passing, so a test can vary the one thing it is about."""
     evidence = {
@@ -170,8 +198,8 @@ def _passing_evidence(**overrides):
             "status": "PASS",
             "summary": {
                 "visual_sweep_validation": "PASS",
-                "visual_sweep_required_screens": 17,
-                "visual_sweep_required_controls": 47,
+                "visual_sweep_required_screens": len(REQUIRED_VISUAL_SCREENS),
+                "visual_sweep_required_controls": len(REQUIRED_CONTROL_LABELS),
             },
         },
         "rust": {"status": "PASS"},

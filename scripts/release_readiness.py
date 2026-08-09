@@ -21,6 +21,7 @@ if str(PROJECT_ROOT / "engine") not in sys.path:
 
 from gates.result import CheckResult
 from grader.draftbias import EVIDENCE_FLOOR
+from scripts.frontend_evidence import REQUIRED_CONTROL_LABELS, REQUIRED_VISUAL_SCREENS
 from scripts.signing_doctor import collect_signing_diagnostics
 
 
@@ -251,7 +252,16 @@ def build_e2e_matrix(
     """
     frontend = evidence.get("frontend", {})
     frontend_summary = frontend.get("summary", {}) if isinstance(frontend, dict) else {}
-    frontend_status = _frontend_matrix_status(evidence, expected_screens=16, expected_controls=47)
+    # The floor is what frontend_evidence.py requires *now*, read from the same
+    # lists it validates against. Written as literals it silently stops tracking
+    # them: the calibration screen was added to the required set without this
+    # number moving, so a `>=` against a stale count waved through an artifact
+    # that had never checked for the screen.
+    frontend_status = _frontend_matrix_status(
+        evidence,
+        expected_screens=len(REQUIRED_VISUAL_SCREENS),
+        expected_controls=len(REQUIRED_CONTROL_LABELS),
+    )
     frontend_detail = (
         f"{frontend_summary.get('visual_sweep_screens', '?')} screens, "
         f"{frontend_summary.get('visual_sweep_visible_controls', '?')} visible controls, "
