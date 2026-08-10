@@ -8,13 +8,24 @@ Core grading logic: schema contract, LLM agent, anchor retrieval, metrics, triag
 grader/
 ├── schema.py        # Pydantic models: Rubric, GradeDraft, CriterionType, Flag — THE contract
 ├── agent.py         # Pydantic AI Agent: grade() entry point, output modes, temp 0
+├── gradingjob.py    # The grading pipeline, lifted out of the route layer
 ├── exemplars.py     # SQLite anchor store: embed, retrieve (similarity + band balance + override boost)
 ├── metrics.py       # QWK, agreement (signed bias), human ceiling
 ├── triage.py        # Confidence → review lane; consistency vote on low confidence; bias/scanned floors
 ├── draftbias.py     # Draft bias thresholds + verdicts — a leaf, so triage imports no stores
 ├── overrides.py     # Override → exemplar loop; pattern detection → rubric refinement proposals
 ├── rubrics.py       # Rubric ingestion: paste/build parser, Canvas import, versioned store, amendment
-└── calibration.py   # Calibration health panel (Draft bias over every Approval, override rate) + cold-start rule
+├── calibration.py   # Calibration health panel (Draft bias over every Approval, override rate) + cold-start rule
+├── approvals.py     # Sole owner of approved_at/posted_at — the invariant nothing posts without
+├── canvas.py        # Canvas adapter: read, download, post, 3-step comment upload, offline post queue
+├── attachments.py   # Which annotated file rides back with which grade, bounded to the data dir
+├── settings.py      # One frozen, validated Settings value + the store that resolves it
+├── db.py            # One connection per store, WAL + busy timeout, and the migration ledger
+├── ports.py         # Judge — the seam grading is written against
+├── parse.py         # Document parsing (Docling) and the fallback that must not grade as prose
+├── handwriting.py   # Vision transcription and the confidence it hands to triage
+├── citations.py     # Experimental citation checking
+└── writeback.py     # Annotated copies and feedback reports, always to a new destination
 ```
 
 ## WHERE TO LOOK

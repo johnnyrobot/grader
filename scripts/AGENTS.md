@@ -25,7 +25,9 @@ scripts/
 ├── computer_use_sweep_evidence.py # validate signed-app Computer Use AX/screenshot captures
 ├── clean_machine_evidence.py   # collect signed/notarized clean-machine release evidence
 ├── release_evidence_package.py # assemble clean-machine tester handoff package
-└── seed_canvas_sandbox.py      # Canvas round-trip seeder/verifier (dry-run by default)
+├── ports.py                    # source_revision — the one git-revision seam the evidence scripts share
+├── seed_canvas_sandbox.py      # Canvas round-trip seeder/verifier (dry-run by default)
+└── live_canvas_e2e.py          # guarded live Canvas import→approve→post→read-back E2E (dry-run by default)
 ```
 
 ## WHERE TO LOOK
