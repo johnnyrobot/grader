@@ -67,7 +67,7 @@ class DevMockEngineHandler(BaseHTTPRequestHandler):
         elif path == "/api/queue":
             self._send_json(fixture["queue"])
         elif path == "/api/updates/check":
-            self._send_json({"update_available": False, "current_version": "0.1.1"})
+            self._send_json({"update_available": False, "current_version": "0.1.2"})
         elif path == "/api/settings":
             self._send_json(fixture["settings"])
         elif path == "/api/rubrics":
