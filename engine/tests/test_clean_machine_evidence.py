@@ -350,6 +350,30 @@ def test_manual_evidence_runbook_includes_every_manual_check():
     assert "--updater-manifest" in runbook
 
 
+def test_the_runbook_names_the_version_being_released(tmp_path):
+    """A version typed into the runbook dates itself the next release.
+
+    The command is copied verbatim by whoever runs the manual pass, so a stale
+    `--expected-version` costs them the whole 45-minute run: the evidence comes
+    back stamped for the old version and `release_readiness` rejects it on the
+    mismatch it was regenerated to clear.
+    """
+    config = tmp_path / "tauri.conf.json"
+    config.write_text(json.dumps({"version": "9.9.9"}))
+
+    runbook = manual_evidence_runbook(config_path=config)
+
+    assert "--expected-version 9.9.9" in runbook
+
+
+def test_the_runbook_still_reads_when_no_version_can_be_found(tmp_path):
+    """Missing config must not silently produce `--expected-version None`."""
+    runbook = manual_evidence_runbook(config_path=tmp_path / "absent.json")
+
+    assert "--expected-version <version>" in runbook
+    assert "None" not in runbook
+
+
 def test_collect_release_provenance_requires_artifact_hashes_and_signed_manifest(tmp_path):
     app = tmp_path / "Grader.app"
     dmg = tmp_path / "Grader.dmg"

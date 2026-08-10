@@ -98,3 +98,10 @@ app/src-tauri/resources/
 # holds the teacher's Canvas token; live-e2e/ is what the Canvas harness sends.
 fixtures/settings.json
 fixtures/live-e2e/
+
+# Clean-machine evidence, generated per release and filled in by the tester.
+# The runbook regenerates from the current version; the filled template names a
+# person and their machine.
+clean-machine-runbook.md
+clean-machine-manual-evidence.json
+clean-machine-evidence/
