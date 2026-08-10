@@ -30,10 +30,11 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from dataclasses import dataclass, field
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from gates.result import CheckResult
 
 MAX_DELTA = 1.0
 GOLDEN_DIR = Path("fixtures/golden_set")
@@ -130,21 +131,8 @@ PERTURBATIONS = {
 }
 
 
-@dataclass
-class BiasResult:
-    status: str
-    summary: str
-    details: dict = field(default_factory=dict)
-
-    def exit_code(self) -> int:
-        return 0 if self.status != "FAIL" else 1
-
-    def print(self) -> None:
-        icon = {"PASS": "✓", "FAIL": "✗", "SKIP": "⊘"}[self.status]
-        print(f"\n{icon} FAIRNESS GATE: {self.status}")
-        print(f"  {self.summary}")
-        for k, v in self.details.items():
-            print(f"  {k}: {v}")
+class BiasResult(CheckResult):
+    label = "FAIRNESS GATE"
 
 
 def perturb(text: str, perturbation: str) -> str:
@@ -233,9 +221,6 @@ def run_bias_gate(
             "threshold": f"±{threshold}",
             "status": status,
         }
-
-    summary_parts = [f"{p}: {results[p].get('mean_delta', 'N/A')}" for p in PERTURBATIONS]
-    summary = ", ".join(summary_parts)
 
     if any_fail:
         failing = [p for p, r in results.items() if r.get("status") == "FAIL"]

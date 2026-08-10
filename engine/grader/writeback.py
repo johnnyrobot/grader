@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import shutil
 from pathlib import Path
-from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -101,7 +100,7 @@ def annotate_pdf(src: Path | str, dest: Path | str, comments: list[Comment]) -> 
     pypdf add_annotation() supports Text (sticky note) and Popup annotations.
     """
     from pypdf import PdfReader, PdfWriter
-    from pypdf.generic import AnnotationBuilder
+    from pypdf.annotations import FreeText, Text
 
     src = Path(src)
     dest = Path(dest)
@@ -115,19 +114,16 @@ def annotate_pdf(src: Path | str, dest: Path | str, comments: list[Comment]) -> 
         page_idx = (comment.page - 1) if comment.page else 0
         if page_idx >= len(writer.pages):
             page_idx = len(writer.pages) - 1
-        page = writer.pages[page_idx]
 
         try:
-            annotation = AnnotationBuilder.text(
-                text=comment.text,
-                rect=(50, 750, 200, 770),
-            )
+            annotation = Text(text=comment.text, rect=(50, 750, 200, 770))
             writer.add_annotation(page_number=page_idx, annotation=annotation)
             count += 1
         except Exception:
-            # Fallback: FreeText annotation
+            # Fallback: FreeText draws the comment onto the page itself, which
+            # every reader renders — a sticky note is the nicer of the two.
             try:
-                annotation = AnnotationBuilder.free_text(
+                annotation = FreeText(
                     text=f"{comment.author}: {comment.text}",
                     rect=(50, 700, 400, 730),
                 )
@@ -184,7 +180,6 @@ def feedback_report(
     or when the teacher wants a separate feedback document.
     """
     import docx
-    from docx.shared import Pt, Inches
 
     dest = Path(dest)
     dest.parent.mkdir(parents=True, exist_ok=True)
@@ -192,7 +187,7 @@ def feedback_report(
     doc = docx.Document()
 
     # Title
-    heading = doc.add_heading(f"Feedback: {rubric_title}", level=1)
+    doc.add_heading(f"Feedback: {rubric_title}", level=1)
 
     # Scores table
     doc.add_heading("Scores", level=2)

@@ -8,7 +8,9 @@ criterion id. Push rules into the schema rather than into prose in the prompt.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from enum import Enum
+from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -144,3 +146,27 @@ class GradeDraft(BaseModel):
         for missing in sorted(set(by_id) - seen):
             problems.append(f"criterion {missing!r} was not scored")
         return problems
+
+
+OutputMode = Literal["tool", "native", "prompted"]
+
+
+@dataclass
+class GradeRun:
+    """One grading attempt, with the telemetry P0 exists to collect.
+
+    Lives here rather than beside the agent so that anything describing a grading
+    outcome — triage, the pipeline, the engine — can name it without importing
+    pydantic_ai transitively.
+    """
+
+    draft: GradeDraft | None
+    mode: OutputMode
+    model: str
+    seconds: float
+    retries: int
+    error: str | None = None
+
+    @property
+    def ok(self) -> bool:
+        return self.draft is not None

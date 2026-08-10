@@ -1,9 +1,9 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { SplitView } from "./SplitView";
-import type { GradeItem } from "../api";
-import { approveGrade, overrideGrade } from "../api";
+import type { CalibrationHealth, GradeItem } from "../api";
+import { approveGrade, fetchCalibration, overrideGrade } from "../api";
 
 vi.mock("../api", async () => {
   const actual = await vi.importActual<typeof import("../api")>("../api");
@@ -11,8 +11,23 @@ vi.mock("../api", async () => {
     ...actual,
     approveGrade: vi.fn().mockResolvedValue(undefined),
     overrideGrade: vi.fn().mockResolvedValue({ ai_total: 7, teacher_total: 8, refinement_proposals: [] }),
+    fetchCalibration: vi.fn(),
   };
 });
+
+/** The same payload the calibration screen reads — no per-draft figure exists. */
+const calibration: CalibrationHealth = {
+  draft_bias: -0.066,
+  n: 34,
+  evidence_floor: 20,
+  discloses: true,
+  demotes: false,
+  override_count: 8,
+  override_rate: 8 / 30,
+  exemplar_count: 30,
+  per_criterion: { Thesis: { bias: -0.136, abs_bias: 0.15, count: 34 } },
+  cold_start: { unlocked: true, exemplar_count: 30, remaining: 0, message: "AI drafts unlocked — 30 exemplars calibrated." },
+};
 
 const item: GradeItem = {
   id: "grade-1",
@@ -27,6 +42,14 @@ const item: GradeItem = {
   teacher_scores: null,
   teacher_feedback: null,
 };
+
+beforeEach(() => {
+  // Nothing to disclose is the ordinary case: an assignment early in its grading.
+  vi.mocked(fetchCalibration).mockReset();
+  vi.mocked(fetchCalibration).mockResolvedValue({
+    ...calibration, draft_bias: null, n: 4, discloses: false, per_criterion: {},
+  });
+});
 
 describe("SplitView", () => {
   it("presents the AI result as an editable draft with explicit teacher ownership", async () => {
@@ -107,5 +130,65 @@ describe("SplitView", () => {
     expect(await screen.findByText("Your changes are approved. Feedback updated; score remains 7.")).toBeInTheDocument();
     expect(screen.queryByText("Score updated from 7 to 7")).not.toBeInTheDocument();
     expect(screen.queryByText("Teacher changes not saved yet.")).not.toBeInTheDocument();
+  });
+});
+
+describe("SplitView draft bias disclosure", () => {
+  it("states the assignment's Draft bias where the teacher reads the score", async () => {
+    vi.mocked(fetchCalibration).mockResolvedValue(calibration);
+    render(<SplitView item={item} onBack={vi.fn()} />);
+
+    const note = await screen.findByText(/Across 34 approvals on this assignment/);
+    // The calibration screen's payload, for the assignment this draft belongs to.
+    expect(fetchCalibration).toHaveBeenCalledWith("essay-1");
+
+    // Direction, rough size, and how many approvals it rests on.
+    expect(note).toHaveTextContent("about 7% of a criterion's maximum below your grading");
+
+    // Assignment-level only: Grader has no per-draft bias figure and claims none.
+    expect(note).toHaveTextContent("not a claim about this draft");
+
+    // Announced when it arrives, like every other message this app renders after
+    // its screen — a disclosure nobody is told about has not been disclosed.
+    expect(note).toHaveAttribute("role", "status");
+    expect(note).toHaveAttribute("aria-live", "polite");
+  });
+
+  it("says nothing when the gap is measured but too small to disclose", async () => {
+    vi.mocked(fetchCalibration).mockResolvedValue({
+      ...calibration, draft_bias: -0.012, discloses: false,
+    });
+    render(<SplitView item={item} onBack={vi.fn()} />);
+
+    await waitFor(() => expect(fetchCalibration).toHaveBeenCalledWith("essay-1"));
+    expect(screen.queryByText(/on this assignment/)).toBeNull();
+    expect(screen.queryByText(/your grading/i)).toBeNull();
+  });
+
+  it("says nothing below the evidence floor, where there is no direction to state", async () => {
+    // 12 approvals: the engine reports counts and withholds the direction, and no
+    // consumer may infer one from the counts.
+    vi.mocked(fetchCalibration).mockResolvedValue({
+      ...calibration, draft_bias: null, n: 12, discloses: false, per_criterion: {},
+    });
+    render(<SplitView item={item} onBack={vi.fn()} />);
+
+    await waitFor(() => expect(fetchCalibration).toHaveBeenCalledWith("essay-1"));
+    expect(screen.queryByText(/on this assignment/)).toBeNull();
+    expect(screen.queryByText(/12 approvals/)).toBeNull();
+  });
+
+  it("leaves the teacher's decision intact when calibration cannot be read", async () => {
+    const user = userEvent.setup();
+    vi.mocked(fetchCalibration).mockRejectedValue(new Error("calibration: 500"));
+    render(<SplitView item={item} onBack={vi.fn()} />);
+
+    await waitFor(() => expect(fetchCalibration).toHaveBeenCalledWith("essay-1"));
+    expect(screen.queryByText(/on this assignment/)).toBeNull();
+    // A calibration read that failed is not the teacher's problem mid-review.
+    expect(screen.queryByText(/calibration: 500/)).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "Approve AI draft" }));
+    expect(await screen.findByText("Grade approved. It is ready for your next posting step.")).toBeInTheDocument();
   });
 });

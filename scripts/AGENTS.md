@@ -25,7 +25,9 @@ scripts/
 ├── computer_use_sweep_evidence.py # validate signed-app Computer Use AX/screenshot captures
 ├── clean_machine_evidence.py   # collect signed/notarized clean-machine release evidence
 ├── release_evidence_package.py # assemble clean-machine tester handoff package
-└── seed_canvas_sandbox.py      # Canvas round-trip seeder/verifier (dry-run by default)
+├── ports.py                    # source_revision — the one git-revision seam the evidence scripts share
+├── seed_canvas_sandbox.py      # Canvas round-trip seeder/verifier (dry-run by default)
+└── live_canvas_e2e.py          # guarded live Canvas import→approve→post→read-back E2E (dry-run by default)
 ```
 
 ## WHERE TO LOOK
@@ -128,6 +130,18 @@ scripts/
   states such as approved + "Teacher changes not saved yet" or "Score updated from N to N". Include
   the PASS JSON in clean-machine manual evidence for `computer_use_instructor_sweep`.
 - **`seed_canvas_sandbox.py`**: dry-run by default. `--apply` to write. Refuses courses without `ZZ-GRADER-TEST` marker.
+  `--reset-grades --course-id N --assignment-id M` clears the `ZZGraderTest` students' grades so the
+  live E2E can run again on the same students; it never touches a submission whose owner's name
+  lacks the prefix.
+- **`live_canvas_e2e.py`**: dry-run by default; `--apply` writes to live Canvas and the course name
+  must start with `ZZ-GRADER-TEST`. Needs **two ungraded submissions with work in them** — one for
+  the ordinary post path, one for the upload-failure probe, since a grade Canvas has taken cannot be
+  posted again. Recycle the ones already there rather than provisioning more students:
+  `seed_canvas_sandbox.py --reset-grades --course-id 106 --assignment-id 2841 --apply`. Writes its
+  feedback file under `--attachment-dir` (default `$GRADER_DATA_DIR`, else `fixtures`), because the
+  engine refuses to send a file from anywhere else. The probe **PUTs an unroutable Canvas URL into
+  the running engine's settings** and restores it in a `finally`; a `SIGKILL` mid-probe leaves the
+  engine pointed at loopback, so check `/api/settings` if a run is killed.
 - **`clean_machine_evidence.py`**: cannot prove a clean-machine pass by itself. Generate the
   tester runbook with `--print-manual-runbook` and the evidence template with
   `--print-manual-template`. Fill it on the clean Mac with `passed: true`, `performed_at`, `tester`,
@@ -153,7 +167,18 @@ scripts/
   to `app/src-tauri/tauri.conf.json`, records artifact path/mtime/SHA-256 metadata, and rejects PASS
   updater or clean-machine artifacts whose recorded version does not match the evaluated app. Its
   JSON/Markdown report includes the end-to-end public-beta matrix; keep new public-beta evidence
-  requirements represented there instead of only in prose.
+  requirements represented there instead of only in prose. The matrix has two profiles:
+  `supervised_public_beta`, which `decide_verdict` answers, and `ship_v1`, a superset carrying what
+  only a beta can produce — a `ship_v1`-only row blocks v1.0 and can never move the beta verdict, so
+  put a requirement there when it is a ship signal rather than an entry gate. Both profiles reach the
+  report (`e2e_matrix`, `ship_v1_matrix`). `--draft-bias-artifact` supplies the teacher-local
+  `Draft bias` evidence the `ship_v1` calibration row reads; it is never committed (`teacher_local`
+  tier) and its absence is `BLOCKED_TEACHER_APPROVALS`, not a failure. It has no producer script on
+  purpose — nothing here can reach a teacher's machine — so it is written by hand from one
+  `GET /api/calibration/<assignment_id>` response during the supervised beta:
+  `{"status": "PASS", "evidence_tier": "teacher_local", "assignment_id": ..., "n": ..., "draft_bias": ...}`,
+  with `n` at or above `EVIDENCE_FLOOR` and a non-null `draft_bias`. Never paste student work,
+  names, or scores into it.
 - Fake students use `ZZGraderTest` prefix + `.invalid` email domain (RFC 2606 — can never resolve)
 - Canvas credentials: env vars (`CANVAS_BASE_URL`, `CANVAS_API_TOKEN`) or canvas-pp-cli's `credentials.toml`
 
@@ -163,10 +188,11 @@ scripts/
 - **NEVER run `seed_canvas_sandbox.py` without `--apply` expecting writes** — it stubs every write in dry-run mode.
 - **NEVER point `seed_canvas_sandbox.py` at a real course** — `guard_sandbox()` checks for `ZZ-GRADER-TEST` marker in course name.
 - **NEVER delete users not starting with `ZZGraderTest`** — teardown's `--delete-users` filters by prefix.
+- **NEVER treat a `live_canvas_e2e.py` PASS as current without checking `source_commit`** — the artifact records the commit it ran against precisely so a run from three commits ago cannot be quoted as proof of present behaviour.
 
 ## NOTES
 
 - **Why `make_models.sh` exists**: Ollama loads at full default context. Qwen3-VL's 262k default → 4B model consumed 41 GB. Capping at 16k → ~6 GB. Grading needs ~5,500 tokens.
-- **Canvas gotchas in code**: bulk-update is async (poll Progress); submission files need `as_user_id` masquerade; Canvas returns HTML without `Accept: application/json`; Canvas Free-for-Teacher is dead.
+- **Canvas gotchas in code**: bulk-update is async (poll Progress); submission files need `as_user_id` masquerade; Canvas returns HTML without `Accept: application/json`; Canvas Free-for-Teacher is dead. Two more, both found by reading results back off Canvas rather than trusting a 200: `submissions update` needs a **nested** JSON body over `--stdin` (bracket keys are form-encoding, and as JSON keys Canvas ignores them and echoes the unchanged submission), and `submissions index` returns **only Canvas's first page of ten** with no flag to ask for more — `grader/canvas.py` paginates that one itself.
 - Live sandbox: course 106, assignment 2836, rubric 189, test student 8, cohort 9-14
 - `seed_canvas_sandbox.py` is 621 lines — the cohort section (C1-C5) exercises multi-student paths the Test Student can't reach

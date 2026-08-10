@@ -20,12 +20,12 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from dataclasses import dataclass, field
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from grader.metrics import Agreement, agreement, human_ceiling, quadratic_weighted_kappa
+from gates.result import CheckResult
+from grader.metrics import agreement
 
 QWK_FLOOR = 0.70
 REGRESSION_MAX = 0.03
@@ -34,21 +34,8 @@ BASELINE_FILE = Path("engine/gate_baseline.json")
 CALIBRATION_RESULTS = Path("engine/calibration_results.json")
 
 
-@dataclass
-class GateResult:
-    status: str  # PASS, FAIL, SKIP
-    summary: str
-    details: dict = field(default_factory=dict)
-
-    def exit_code(self) -> int:
-        return 0 if self.status != "FAIL" else 1
-
-    def print(self) -> None:
-        icon = {"PASS": "✓", "FAIL": "✗", "SKIP": "⊘"}[self.status]
-        print(f"\n{icon} QUALITY GATE: {self.status}")
-        print(f"  {self.summary}")
-        for k, v in self.details.items():
-            print(f"  {k}: {v}")
+class GateResult(CheckResult):
+    label = "QUALITY GATE"
 
 
 def _load_golden_set(golden_dir: Path) -> list[dict] | None:

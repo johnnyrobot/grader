@@ -34,7 +34,7 @@ import sys
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, TypeVar
+from typing import Any, Callable, NamedTuple, TypeVar
 
 import pandas as pd
 
@@ -239,7 +239,26 @@ def _render_anchor_context(anchors: list[SelectedMohlerRow], *, k: int) -> str:
     return "\n\n".join(chunks)
 
 
-def _grade_text(example: dict[str, Any], text: str, model: str, *, anchors: str = "") -> dict[str, float]:
+class GradedText(NamedTuple):
+    """One grade, with the two signals this builder used to throw away.
+
+    Triage routes hard cases to a human on the model's self-reported confidence,
+    and no release gate has ever measured whether that number tracks error —
+    because only `scores` survived this function. Measured separately over 42
+    items it does track error (correlation −0.476; mean |err| 0.71 above 0.9
+    against 1.08 below), with a residual 4.8% confidently wrong. That is worth
+    knowing per-run rather than per-investigation.
+
+    Plain primitives only: this crosses a process boundary via a queue, so the
+    enum flags are stored as their string values.
+    """
+
+    scores: dict[str, float]
+    confidence: float | None
+    flags: list[str]
+
+
+def _grade_text(example: dict[str, Any], text: str, model: str, *, anchors: str = "") -> GradedText:
     from grader.agent import grade
     from grader.schema import Rubric
 
@@ -254,7 +273,11 @@ def _grade_text(example: dict[str, Any], text: str, model: str, *, anchors: str 
     )
     if not run.ok:
         raise RuntimeError(run.error or "grading failed")
-    return {score.criterion_id: float(score.score) for score in run.draft.criterion_scores}
+    return GradedText(
+        scores={score.criterion_id: float(score.score) for score in run.draft.criterion_scores},
+        confidence=float(run.draft.confidence) if run.draft.confidence is not None else None,
+        flags=[getattr(flag, "value", str(flag)) for flag in (run.draft.flags or [])],
+    )
 
 
 def _write_examples(path: Path, examples: list[dict[str, Any]]) -> None:
@@ -305,7 +328,7 @@ def populate_model_scores(
             example["anchor_ids"] = anchor_ids
         try:
             if not example.get("ai_scores"):
-                example["ai_scores"] = _grade_text_with_timeout(
+                graded = _grade_text_with_timeout(
                     example,
                     example["student_text"],
                     model,
@@ -313,12 +336,23 @@ def populate_model_scores(
                     seconds=grade_timeout_seconds,
                     label=f"{example['id']} original",
                 )
+                example["ai_scores"] = graded.scores
+                # Recorded alongside the scores rather than discarded, so a run
+                # can be asked afterwards whether confidence tracked error. A
+                # dataset built before this existed has scores and no
+                # confidence; resuming will not backfill it, because resuming
+                # skips anything already scored.
+                example["ai_confidence"] = graded.confidence
+                example["ai_flags"] = graded.flags
             if grade_perturbations:
                 perturbed_scores = example.setdefault("perturbed_scores", {})
                 for name in PERTURBATIONS:
                     if name in perturbed_scores:
                         continue
                     text = perturb(example["student_text"], name)
+                    # `.scores` only: engine/gates/bias.py reads perturbed_scores
+                    # as criterion -> score, and widening that shape would break
+                    # the fairness gate.
                     perturbed_scores[name] = _grade_text_with_timeout(
                         example,
                         text,
@@ -326,7 +360,7 @@ def populate_model_scores(
                         anchors=anchors,
                         seconds=grade_timeout_seconds,
                         label=f"{example['id']} perturbation={name}",
-                    )
+                    ).scores
                     if checkpoint_path is not None:
                         _write_examples(checkpoint_path, examples)
             example.pop("grade_error", None)
@@ -347,6 +381,27 @@ def _has_complete_perturbations(example: dict[str, Any], expected_perturbations:
 
 class GradeTimeoutError(TimeoutError):
     pass
+
+
+def _start_method() -> str:
+    """How to start the grading child process.
+
+    Never ``fork`` on macOS. The child grades over HTTP, and Python resolves
+    proxies for that call through ``SCDynamicStoreCopyProxiesWithOptions``,
+    which reads CFPreferences — and CoreFoundation is not fork-safe. Once the
+    parent has touched it, the forked child dies in
+    ``_os_log_preferences_refresh`` with SIGSEGV.
+
+    It failed exactly where it mattered least visibly: a fresh run forks before
+    the parent has initialised CoreFoundation and survives, so this only bit
+    runs that resumed an existing evidence directory — where the parent reads
+    the previous examples first. Every regraded item came back unscored, the
+    builder recorded `grade_error` per item, and the process still exited 0.
+
+    ``spawn`` costs an interpreter start per grade and is correct on every
+    platform this runs on. `fork` stays for Linux, where it is safe and cheap.
+    """
+    return "fork" if sys.platform.startswith("linux") else "spawn"
 
 
 def _grade_text_worker(
@@ -370,7 +425,7 @@ def _grade_text_with_timeout(
     anchors: str = "",
     seconds: int,
     label: str,
-) -> dict[str, float]:
+) -> GradedText:
     """Grade text in a killable child process.
 
     ``SIGALRM`` can fail to interrupt blocking model-client paths on macOS. A separate
@@ -380,8 +435,7 @@ def _grade_text_with_timeout(
     if seconds <= 0:
         return _grade_text(example, text, model, anchors=anchors)
 
-    context_name = "fork" if sys.platform != "win32" else "spawn"
-    context = mp.get_context(context_name)
+    context = mp.get_context(_start_method())
     result_queue = context.Queue(maxsize=1)
     process = context.Process(
         target=_grade_text_worker,

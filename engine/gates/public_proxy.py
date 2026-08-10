@@ -12,7 +12,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from grader.metrics import agreement, human_ceiling, quadratic_weighted_kappa
+from gates.result import CheckResult
+from grader.metrics import agreement, human_ceiling
 
 QWK_FLOOR = 0.70
 SOURCE_QWK_FLOOR = 0.60
@@ -24,38 +25,12 @@ REGRESSION_MAX = 0.03
 NON_RELEASE_SCOPES = {"mechanics_fixture", "synthetic_fixture", "tiny_fixture"}
 
 
-@dataclass
-class GateResult:
-    status: str
-    summary: str
-    details: dict[str, Any] = field(default_factory=dict)
-
-    def exit_code(self) -> int:
-        return 0 if self.status != "FAIL" else 1
-
-    def print(self) -> None:
-        icon = {"PASS": "✓", "FAIL": "✗", "SKIP": "⊘"}[self.status]
-        print(f"\n{icon} PUBLIC PROXY QUALITY GATE: {self.status}")
-        print(f"  {self.summary}")
-        for key, value in self.details.items():
-            print(f"  {key}: {value}")
+class GateResult(CheckResult):
+    label = "PUBLIC PROXY QUALITY GATE"
 
 
-@dataclass
-class FairnessResult:
-    status: str
-    summary: str
-    details: dict[str, Any] = field(default_factory=dict)
-
-    def exit_code(self) -> int:
-        return 0 if self.status != "FAIL" else 1
-
-    def print(self) -> None:
-        icon = {"PASS": "✓", "FAIL": "✗", "SKIP": "⊘"}[self.status]
-        print(f"\n{icon} PUBLIC PROXY FAIRNESS GATE: {self.status}")
-        print(f"  {self.summary}")
-        for key, value in self.details.items():
-            print(f"  {key}: {value}")
+class FairnessResult(CheckResult):
+    label = "PUBLIC PROXY FAIRNESS GATE"
 
 
 @dataclass(frozen=True)
@@ -196,16 +171,25 @@ def _source_breakdown(examples: list[PublicProxyExample]) -> dict[str, dict[str,
         ai_scores = [row.ai_total for row in scored if row.ai_total is not None]
         human_scores = [row.human_total for row in scored]
         agr = agreement(ai_scores, human_scores)
-        breakdown[source] = {
+        entry: dict[str, Any] = {
             "items": len(scored),
             "qwk": f"{agr.qwk:.3f}",
             "exact": f"{agr.exact:.0%}",
             "adjacent": f"{agr.adjacent:.0%}",
             "mean_error": f"{agr.mean_error:+.2f}",
+            # The waiver is for a source that is small *by design*, so it counts
+            # the rows the source has — not the ones that happened to grade. On
+            # `len(scored)` an item lost to a grading timeout dropped the source
+            # under the threshold and bought it an exemption, which makes a
+            # failure to grade a reason the gate passes. Seen live: mohler_q05
+            # reported PASS at QWK 0.599 against a 0.60 floor, on 19 of 20 items.
             "status": "PASS"
-            if len(scored) < SOURCE_FLOOR_MIN_ITEMS or agr.qwk >= SOURCE_QWK_FLOOR
+            if len(rows) < SOURCE_FLOOR_MIN_ITEMS or agr.qwk >= SOURCE_QWK_FLOOR
             else "FAIL",
         }
+        if len(scored) != len(rows):
+            entry["ungraded"] = len(rows) - len(scored)
+        breakdown[source] = entry
     return breakdown
 
 
@@ -272,7 +256,10 @@ def evaluate_public_proxy_quality(
     ai_scores = [example.ai_total for example in scored if example.ai_total is not None]
     human_scores = [example.human_total for example in scored]
     agr = agreement(ai_scores, human_scores)
-    source_details = _source_breakdown(scored)
+    # The whole test split, not just what graded: _source_breakdown decides the
+    # small-source waiver from how many items a source *has*, and it cannot see
+    # an item that failed to grade if it is filtered out first.
+    source_details = _source_breakdown(examples)
     ceiling = _human_ceiling(scored)
     floor = QWK_FLOOR
     if ceiling is not None and ceiling < QWK_FLOOR:

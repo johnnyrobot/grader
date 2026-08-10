@@ -29,7 +29,7 @@ def _passing_assertions(name: str) -> dict[str, bool]:
     }
 
 
-def _runner(command, text, capture_output, check):
+def _runner(command, text, capture_output, check, **kwargs):
     return subprocess.CompletedProcess(command, 0, stdout="ok", stderr="")
 
 
@@ -93,7 +93,7 @@ def test_collect_checks_can_use_app_inside_dmg_when_loose_app_signature_fails(tm
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict><key>system-entities</key><array><dict><key>mount-point</key><string>{mounted}</string></dict></array></dict></plist>"""
 
-    def runner(command, text, capture_output, check):
+    def runner(command, text, capture_output, check, **kwargs):
         if command[:2] == ["hdiutil", "attach"]:
             return subprocess.CompletedProcess(command, 0, stdout=attach_plist, stderr="")
         if command[:2] == ["hdiutil", "detach"]:

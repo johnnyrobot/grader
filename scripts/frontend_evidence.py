@@ -37,8 +37,9 @@ REQUIRED_VISUAL_SCREENS = [
     "12-settings-model-defaults",
     "13-settings-rubrics",
     "14-model-manager",
-    "15-responsive-200-percent",
-    "16-engine-recovery-alert",
+    "15-calibration",
+    "16-responsive-200-percent",
+    "17-engine-recovery-alert",
 ]
 
 REQUIRED_CONTROL_LABELS = [
@@ -89,6 +90,8 @@ REQUIRED_CONTROL_LABELS = [
     "Install handwriting model",
     "Install exemplar finder model",
     "Restart local engine",
+    "Calibration",
+    "Refresh calibration",
 ]
 
 

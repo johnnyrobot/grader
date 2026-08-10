@@ -126,7 +126,24 @@ export async function gradeBatch(assignmentId: string, model?: string): Promise<
   return r.json();
 }
 
-export async function fetchCalibration(assignmentId: string): Promise<any> {
+export interface CalibrationHealth {
+  /** Signed, already scaled as a fraction of criterion max; negative means drafts
+   *  run below the teacher. Null below the evidence floor, where no consumer may
+   *  infer a direction. */
+  draft_bias: number | null;
+  n: number;
+  evidence_floor: number;
+  /** The thresholds' own verdicts — read these rather than re-deriving them. */
+  discloses: boolean;
+  demotes: boolean;
+  override_count: number;
+  override_rate: number;
+  exemplar_count: number;
+  per_criterion: Record<string, { bias: number; abs_bias: number; count: number }>;
+  cold_start: { unlocked: boolean; exemplar_count: number; remaining: number; message: string };
+}
+
+export async function fetchCalibration(assignmentId: string): Promise<CalibrationHealth> {
   const r = await fetch(`${base}/api/calibration/${assignmentId}`, { headers: headers() });
   if (!r.ok) throw new Error(`calibration: ${r.status}`);
   return r.json();
@@ -190,4 +207,142 @@ export async function saveRubric(rubricData: any): Promise<{ id: number }> {
   });
   if (!r.ok) throw new Error(`save rubric: ${r.status}`);
   return r.json();
+}
+
+// ---------------------------------------------------------------------------
+// Canvas round-trip.
+//
+// The engine has implemented import, post, the offline queue and comment
+// attachments for some time; this file had no way to reach any of it, so no
+// screen could either. These are the client functions a Canvas UI needs. They
+// commit to no particular screen layout.
+// ---------------------------------------------------------------------------
+
+export interface CanvasImportResult {
+  imported: number;
+  submissions: { id: string; canvas_user_id: string }[];
+  failures: { user_id: string; error: string }[];
+  /**
+   * Students Canvas listed who handed nothing in. They are deliberately kept
+   * out of the queue — an AI draft scored from an empty submission looks
+   * exactly like a draft of real work — but they are reported, because a
+   * teacher expecting 30 rows and seeing 26 needs to know why.
+   */
+  skipped: { user_id: string; reason: string }[];
+}
+
+export interface CanvasPostResult {
+  posted: number;
+  /** Non-zero when Canvas was unreachable and the posts were queued (FR-3.5). */
+  queued: number;
+  queued_reason?: string;
+  skipped: string[];
+  posted_scores: Record<string, number>;
+  progress_state: string;
+  completion: number;
+}
+
+export interface PostQueueStatus {
+  pending: number;
+  items: Record<string, unknown>[];
+}
+
+export interface FlushResult {
+  posted: number;
+  failed: number;
+  /** Entries that burned their retries and stopped being attempted. */
+  abandoned: number;
+  /**
+   * Posts delivered without the feedback file attached to them, because Canvas
+   * would not take the upload after every retry. The grade reached the student;
+   * the file did not.
+   */
+  attachments_abandoned: number;
+  remaining: number;
+}
+
+export async function canvasImport(
+  courseId: number,
+  assignmentId: number,
+  downloadAttachments = true,
+): Promise<CanvasImportResult> {
+  const r = await fetch(`${base}/api/canvas/import`, {
+    method: "POST",
+    headers: { ...headers(), "Content-Type": "application/json" },
+    body: JSON.stringify({
+      course_id: courseId,
+      assignment_id: assignmentId,
+      download_attachments: downloadAttachments,
+    }),
+  });
+  if (!r.ok) throw new Error(`canvas import: ${r.status}`);
+  return r.json();
+}
+
+export async function canvasPost(
+  courseId: number,
+  assignmentId: number,
+  gradeIds: string[],
+): Promise<CanvasPostResult> {
+  const r = await fetch(`${base}/api/canvas/post`, {
+    method: "POST",
+    headers: { ...headers(), "Content-Type": "application/json" },
+    body: JSON.stringify({
+      course_id: courseId,
+      assignment_id: assignmentId,
+      grade_ids: gradeIds,
+    }),
+  });
+  if (!r.ok) throw new Error(`canvas post: ${r.status}`);
+  return r.json();
+}
+
+export async function fetchPostQueue(): Promise<PostQueueStatus> {
+  const r = await fetch(`${base}/api/canvas/post-queue`, { headers: headers() });
+  if (!r.ok) throw new Error(`post queue: ${r.status}`);
+  return r.json();
+}
+
+export async function flushPostQueue(): Promise<FlushResult> {
+  const r = await fetch(`${base}/api/canvas/flush`, {
+    method: "POST",
+    headers: headers(),
+  });
+  if (!r.ok) throw new Error(`flush queue: ${r.status}`);
+  return r.json();
+}
+
+export async function listGradeAttachments(
+  gradeId: string,
+): Promise<{ grade_id: string; attachments: { path: string; exists: boolean }[] }> {
+  const r = await fetch(`${base}/api/grades/${gradeId}/attachments`, {
+    headers: headers(),
+  });
+  if (!r.ok) throw new Error(`attachments: ${r.status}`);
+  return r.json();
+}
+
+export async function attachToGrade(gradeId: string, path: string): Promise<{ path: string }> {
+  const r = await fetch(`${base}/api/grades/${gradeId}/attachments`, {
+    method: "POST",
+    headers: { ...headers(), "Content-Type": "application/json" },
+    body: JSON.stringify({ path }),
+  });
+  if (!r.ok) throw new Error(`attach: ${r.status}`);
+  return r.json();
+}
+
+/** Course and assignment ids out of an engine assignment key.
+ *
+ * `/api/canvas/import` stores submissions under `canvas_<course>_<assignment>`,
+ * so a queue row already knows which Canvas assignment it came from. Anything
+ * else — a locally pasted batch — is not postable and returns null, which is
+ * how a caller tells "post is unavailable here" from "post failed".
+ */
+export function canvasTargetOf(
+  assignmentId: string,
+): { courseId: number; assignmentId: number } | null {
+  const match = /^canvas_(\d+)_(\d+)$/.exec(assignmentId.trim());
+  if (!match) return null;
+  return { courseId: Number(match[1]), assignmentId: Number(match[2]) };
 }

@@ -65,11 +65,15 @@ The state of an Assignment with too few Exemplars for the AI to draft at all. Th
 _Avoid_: warmup, bootstrap
 
 **Calibration health**:
-How closely current AI drafts agree with this teacher's own grading on this Assignment, and which direction the disagreement runs.
+How closely current AI drafts agree with this teacher's own grading on this Assignment, measured over every Approval — including those where the teacher changed nothing.
 _Avoid_: accuracy, quality score, model performance
+
+**Draft bias**:
+The signed direction and size of the gap between AI drafts and this teacher's approved grades on an Assignment. Negative means drafts run below the teacher.
+_Avoid_: harshness, drift, error
 
 ### Canvas
 
 **Post queue**:
-Approved grades waiting to reach Canvas because it was unreachable when they were approved. Draining the queue is a retry, never a re-approval.
+Approved grades waiting to reach Canvas because it was unreachable when they were approved. An entry also carries any feedback file that has not been uploaded yet, so an outage during the upload does not deliver the grade with the teacher's feedback silently missing. Draining the queue is a retry, never a re-approval.
 _Avoid_: outbox, retry buffer

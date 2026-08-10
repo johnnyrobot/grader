@@ -18,14 +18,18 @@ from __future__ import annotations
 
 import json
 import os
+import sqlite3
 import subprocess
 import tomllib
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import httpx
+
+from grader.db import Database
 
 CLI_PATH = os.environ.get("CANVAS_PP_CLI", "canvas-pp-cli")
 CREDS_PATHS = [
@@ -145,15 +149,43 @@ def list_submissions(
 
     Returns per-student: user_id, score, workflow_state, attachments[], submission_comments[],
     rubric_assessment (if already graded).
+
+    Paginated straight against Canvas rather than through `canvas-pp-cli`. The
+    CLI has no page-size flag and no cursor, and its read envelope carries no
+    pagination metadata, so it returns Canvas's default first page — **ten
+    submissions** — and nothing says the rest exist. A class of thirty imported
+    ten and reported a complete import. This is the same CLI gap as
+    `download_attachment`, found the same way: by counting what came back.
     """
-    envelope = _run(
-        "submissions", "index", str(course_id), str(assignment_id),
-        "--include", "submission_comments",
-        timeout=30,
-        base_url=base_url,
-        token=token,
+    tok = token or resolve_canvas_token()
+    if not tok:
+        raise RuntimeError("no Canvas token set")
+    base = (base_url or resolve_canvas_base_url() or "https://canvas.instructure.com").rstrip("/")
+
+    url: str | None = (
+        f"{base}/api/v1/courses/{course_id}/assignments/{assignment_id}/submissions"
     )
-    return _read_results(envelope)
+    params: dict[str, Any] | None = {
+        "include[]": "submission_comments",
+        "per_page": 100,
+    }
+    submissions: list[dict] = []
+    with httpx.Client(timeout=60, follow_redirects=True) as client:
+        while url:
+            response = client.get(
+                url,
+                params=params,
+                headers={"Authorization": f"Bearer {tok}", "Accept": "application/json"},
+            )
+            response.raise_for_status()
+            page = response.json()
+            submissions.extend(page if isinstance(page, list) else [page])
+            # The next link already carries the cursor; re-sending params would
+            # reset it and fetch page two forever.
+            next_link = response.links.get("next") or {}
+            url = next_link.get("url")
+            params = None
+    return submissions
 
 
 def list_ungraded(
@@ -163,9 +195,28 @@ def list_ungraded(
     base_url: str | None = None,
     token: str | None = None,
 ) -> list[dict]:
-    """Filter to submissions that need grading (workflow_state != 'graded')."""
+    """Filter to the submissions that still need a grade."""
     subs = list_submissions(course_id, assignment_id, base_url=base_url, token=token)
-    return [s for s in subs if s.get("workflow_state") != "graded"]
+    return [s for s in subs if needs_grading(s)]
+
+
+def needs_grading(submission: dict) -> bool:
+    """Is Canvas still waiting for a grade on this submission?
+
+    `workflow_state` alone is not the answer. Canvas leaves it at `graded` when
+    a teacher *removes* a score, and removing a score is how a teacher says "do
+    this one over" — so the one submission they asked Grader to re-do was the
+    one it could not see. An absent score is the truer signal.
+
+    Excused is the case that breaks the simple version of that rule: it reads
+    identically — `graded`, no score — and grading an excused student is worse
+    than missing one, so it is checked first.
+    """
+    if submission.get("excused"):
+        return False
+    if submission.get("workflow_state") != "graded":
+        return True
+    return submission.get("score") is None
 
 
 def get_submission(
@@ -269,24 +320,39 @@ def post_grade(
     base_url: str | None = None,
     token: str | None = None,
 ) -> dict:
-    """Post a single grade via `submissions update`.
+    """Post a single grade via `submissions update`. The queue's delivery path.
 
     rubric_assessment: {criterion_id: {points: float, comments: str}}
     comment_file_ids: Canvas file IDs from the 3-step upload flow.
-    """
-    args = [
-        "submissions", "update", str(course_id), str(assignment_id), str(user_id),
-        f"--submission-posted-grade={grade}",
-    ]
-    if comment:
-        args.append(f"--comment-text-comment={comment}")
-    if rubric_assessment:
-        args.append(f"--rubric-assessment={json.dumps(rubric_assessment)}")
-    if comment_file_ids:
-        for fid in comment_file_ids:
-            args.append(f"--comment-file-ids={fid}")
 
-    envelope = _run(*args, timeout=15, base_url=base_url, token=token)
+    The body goes over stdin as nested JSON, not as `--submission-posted-grade`
+    and friends. Those flags exist, are spelled as the CLI's help describes,
+    and produce a body of flat keys like `"submission[posted_grade]"` — but the
+    brackets are *form*-encoding. As JSON keys they are part of the key name,
+    so Canvas finds no `submission` to update, answers 200, and echoes back the
+    submission it did not change. Nothing about the call looks wrong; the score
+    simply stays null. Only reading it back off Canvas shows it, which is why
+    this was written the wrong way for as long as it was.
+    """
+    body: dict[str, Any] = {"submission": {"posted_grade": str(grade)}}
+    if rubric_assessment:
+        body["rubric_assessment"] = rubric_assessment
+    comment_body: dict[str, Any] = {}
+    if comment:
+        comment_body["text_comment"] = str(comment)
+    if comment_file_ids:
+        comment_body["file_ids"] = [int(fid) for fid in comment_file_ids]
+    if comment_body:
+        body["comment"] = comment_body
+
+    envelope = _run(
+        "submissions", "update", str(course_id), str(assignment_id), str(user_id),
+        "--stdin",
+        timeout=15,
+        stdin_json=body,
+        base_url=base_url,
+        token=token,
+    )
     return _mutation_data(envelope)
 
 
@@ -393,19 +459,31 @@ def _poll_progress(
 # File upload: 3-step flow for annotated feedback files
 # ---------------------------------------------------------------------------
 
-def upload_file(
+def upload_comment_attachment(
     course_id: int | str,
+    assignment_id: int | str,
+    user_id: int | str,
     file_path: Path,
     *,
-    as_user_id: int | str | None = None,
     base_url: str | None = None,
     token: str | None = None,
 ) -> int:
-    """Upload a file to Canvas via the 3-step flow. Returns Canvas file ID.
+    """Upload one file as a submission-comment attachment. Returns its Canvas file id.
 
-    Step 1: notify Canvas of the upload intent.
-    Step 2: PUT the file bytes to the returned URL.
-    Step 3: confirm with Canvas, get the file ID.
+    Targets the submission's own comment-files endpoint:
+
+        POST /courses/:c/assignments/:a/submissions/:u/comments/files
+
+    **Not** `/courses/:c/files`. That is course files — shared course content — and
+    an annotated submission uploaded there is one student's work placed where
+    other students can reach it. This function carries a student's graded work,
+    so the destination is the part of Canvas scoped to that student's submission.
+
+    Canvas's 3-step flow:
+      1. Tell Canvas the name and size; it answers with a one-shot upload URL.
+      2. POST the bytes there. Canvas answers 201 with the file, or 3xx to a
+         location that returns it.
+      3. Read the id out of whichever of those came back.
     """
     tok = token or resolve_canvas_token()
     if not tok:
@@ -414,61 +492,81 @@ def upload_file(
     canvas_base = base_url or resolve_canvas_base_url()
     base = canvas_base.rstrip("/") if canvas_base else "https://canvas.instructure.com"
     headers = {"Authorization": f"Bearer {tok}", "Accept": "application/json"}
-    file_size = file_path.stat().st_size
     params: dict[str, Any] = {
         "name": file_path.name,
-        "size": file_size,
+        "size": file_path.stat().st_size,
         "content_type": "application/octet-stream",
-        "parent_folder_path": "graded_feedback",
     }
-    if as_user_id is not None:
-        params["as_user_id"] = as_user_id
 
-    with httpx.Client(timeout=60, follow_redirects=True) as client:
-        # Step 1: notify
-        url = f"{base}/api/v1/courses/{course_id}/files"
+    # Step 2 must not carry the Authorization header: the upload URL is
+    # pre-signed, and some Canvas file backends reject a request that presents
+    # both. follow_redirects stays off so step 3 is explicit about what it read.
+    with httpx.Client(timeout=120, follow_redirects=False) as client:
+        url = (
+            f"{base}/api/v1/courses/{course_id}/assignments/{assignment_id}"
+            f"/submissions/{user_id}/comments/files"
+        )
         r = client.post(url, headers=headers, data=params)
         r.raise_for_status()
         upload_info = r.json()
-        upload_url = upload_info["upload_url"]
-        upload_params = upload_info["upload_params"]
 
-        # Step 2: PUT file bytes
-        with open(file_path, "rb") as f:
-            files = {"file": (file_path.name, f, "application/octet-stream")}
-            r = client.put(upload_url, data=upload_params, files=files)
-            r.raise_for_status()
+        with open(file_path, "rb") as handle:
+            r = client.post(
+                upload_info["upload_url"],
+                data=upload_info.get("upload_params") or {},
+                files={"file": (file_path.name, handle, "application/octet-stream")},
+            )
+        if r.status_code in (301, 302, 303, 307, 308):
+            location = r.headers.get("location")
+            if not location:
+                raise RuntimeError("Canvas redirected the upload without a location")
+            r = client.get(location, headers=headers)
+        r.raise_for_status()
 
-        # Step 3: confirm
-        r = client.get(upload_info.get("redirect_url", ""), headers=headers)
-        if r.status_code != 200:
-            r = client.post(url, headers=headers, data={"name": file_path.name, "size": file_size})
-            r.raise_for_status()
         file_id = r.json().get("id")
         if file_id is None:
-            raise RuntimeError(f"Canvas file upload did not return id: {r.json()}")
-        return file_id
+            raise RuntimeError(f"Canvas file upload did not return id: {r.text[:200]}")
+        return int(file_id)
 
 
 # ---------------------------------------------------------------------------
 # Offline post queue
 # ---------------------------------------------------------------------------
 
+# How many times a queued post may be retried before the queue stops trying.
+# Five spans a long outage without letting an entry Canvas will never accept
+# re-post on every flush forever.
+MAX_POST_ATTEMPTS = 5
+
+# What a caller hands `flush` so a file an outage stopped can still be uploaded.
+# Returns the Canvas file id, or None when the file is no longer one this machine
+# may send — deleted, moved, or pointed out of the attachment root since it was
+# queued. Raising means the upload itself failed and the file stays pending.
+Uploader = Callable[[str, str, str, Path], "int | None"]
+
+
+def _add_pending_files(conn: sqlite3.Connection) -> None:
+    """A queue written before attachments could outlive an outage."""
+    columns = {row["name"] for row in conn.execute("PRAGMA table_info(post_queue)")}
+    if "pending_files" not in columns:
+        conn.execute("ALTER TABLE post_queue ADD COLUMN pending_files TEXT")
+
+
 class OfflinePostQueue:
     """Queues grade posts when offline; flushes when connectivity returns.
 
     Imported batches grade with no network. Posts queue here and flush on reconnect.
     Each entry carries enough context to retry without re-computing the grade.
+
+    `file_ids` and `pending_files` are the two halves of one attachment: an id
+    is a file Canvas already holds, a path is one it does not have yet. An
+    outage between the two used to lose the file — the grade queued, the path
+    did not, and the flush delivered feedback the teacher had attached with the
+    attachment silently missing.
     """
 
-    def __init__(self, path: Path | str = "fixtures/post_queue.db") -> None:
-        import sqlite3
-        self.path = Path(path)
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.db = sqlite3.connect(str(self.path), check_same_thread=False)
-        # Shared across the request threadpool and the grading thread; see exemplars.py.
-        self.db.execute("PRAGMA journal_mode=WAL")
-        self.db.row_factory = sqlite3.Row
+    def __init__(self, db: Database) -> None:
+        self.db = db
         self.db.executescript("""
             CREATE TABLE IF NOT EXISTS post_queue (
                 id          INTEGER PRIMARY KEY,
@@ -479,6 +577,7 @@ class OfflinePostQueue:
                 rubric_assessment TEXT,
                 comment     TEXT,
                 file_ids    TEXT,
+                pending_files TEXT,
                 approved_at TEXT NOT NULL,
                 attempts    INTEGER DEFAULT 0,
                 last_error  TEXT,
@@ -486,6 +585,7 @@ class OfflinePostQueue:
             );
             CREATE INDEX IF NOT EXISTS idx_pq_course ON post_queue(course_id, assignment_id);
         """)
+        self.db.migrate("post_queue", [_add_pending_files])
 
     def enqueue(
         self,
@@ -497,15 +597,16 @@ class OfflinePostQueue:
         rubric_assessment: str | None = None,
         comment: str | None = None,
         file_ids: str | None = None,
+        pending_files: str | None = None,
         approved_at: str | None = None,
     ) -> int:
         from datetime import datetime, timezone
         cur = self.db.execute(
             "INSERT INTO post_queue (course_id, assignment_id, user_id, grade, "
-            "rubric_assessment, comment, file_ids, approved_at, created_at) "
-            "VALUES (?,?,?,?,?,?,?,?,?)",
+            "rubric_assessment, comment, file_ids, pending_files, approved_at, created_at) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?)",
             (course_id, assignment_id, user_id, grade,
-             rubric_assessment, comment, file_ids,
+             rubric_assessment, comment, file_ids, pending_files,
              approved_at or datetime.now(timezone.utc).isoformat(),
              datetime.now(timezone.utc).isoformat()),
         )
@@ -529,18 +630,114 @@ class OfflinePostQueue:
         )
         self.db.commit()
 
-    def flush(self, *, base_url: str | None = None, token: str | None = None) -> dict:
-        """Attempt to post all queued grades. Returns {posted, failed, remaining}."""
+    def _upload_pending(
+        self,
+        item: dict,
+        file_ids: list[int],
+        paths: list[str],
+        upload: Uploader | None,
+    ) -> tuple[list[int], list[str], str]:
+        """Send what the outage left behind. Returns (ids, still pending, error).
+
+        Each success is written back before the post is attempted, so a post
+        that fails again does not re-upload a file Canvas already has — the
+        same reason `canvas_post` carries its uploaded ids into the queue.
+        """
+        if upload is None:
+            raise RuntimeError("no uploader was given for a queued attachment")
+        uploaded = list(file_ids)
+        still: list[str] = []
+        error = ""
+        for path in paths:
+            try:
+                file_id = upload(
+                    item["course_id"], item["assignment_id"], item["user_id"], Path(path)
+                )
+            except Exception as exc:
+                still.append(path)
+                error = str(exc)
+                continue
+            # None is the uploader saying this file is no longer one this
+            # machine may send. It is dropped rather than retried forever.
+            if file_id is not None:
+                uploaded.append(int(file_id))
+        self.db.execute(
+            "UPDATE post_queue SET file_ids = ?, pending_files = ? WHERE id = ?",
+            (json.dumps(uploaded) if uploaded else None,
+             json.dumps(still) if still else None,
+             item["id"]),
+        )
+        self.db.commit()
+        return uploaded, still, error
+
+    def _give_up_on(
+        self, queue_id: int, file_ids: list[int], paths: list[str], error: str
+    ) -> None:
+        """Stop waiting for these files and let the grade go.
+
+        The row is cleared of them and the reason is left on the entry, so the
+        flush that deletes it still reports why the feedback never went — the
+        teacher attached it and is entitled to know it did not arrive.
+        """
+        self.db.execute(
+            "UPDATE post_queue SET file_ids = ?, pending_files = NULL, last_error = ? "
+            "WHERE id = ?",
+            (json.dumps(file_ids) if file_ids else None,
+             f"gave up on {len(paths)} attachment(s): {error}"[:300],
+             queue_id),
+        )
+        self.db.commit()
+
+    def flush(
+        self,
+        *,
+        base_url: str | None = None,
+        token: str | None = None,
+        upload: Uploader | None = None,
+    ) -> dict:
+        """Attempt to post all queued grades.
+
+        Returns {posted, failed, abandoned, remaining}.
+
+        `upload` is how an entry whose attachment never reached Canvas finishes
+        the job. Without one, such an entry fails rather than posting a grade
+        the teacher attached feedback to — a post missing its attachment reads
+        as complete and is not retried.
+
+        `canvas-pp-cli` reports every failure as one RuntimeError, so the queue
+        cannot tell a network outage from a grade Canvas will never accept — a
+        student who dropped the course, say. Retrying is therefore right by
+        default and wrong forever: without a bound, one such entry re-posts on
+        every flush for the life of the install. Past MAX_POST_ATTEMPTS an entry
+        stops being retried but stays in the queue, so it surfaces to the
+        teacher through /api/canvas/post-queue instead of failing silently.
+        """
         posted = 0
         failed = 0
+        abandoned = 0
+        attachments_abandoned = 0
         for item in self.pending():
+            if item["attempts"] >= MAX_POST_ATTEMPTS:
+                abandoned += 1
+                continue
             try:
                 ra = json.loads(item["rubric_assessment"]) if item["rubric_assessment"] else None
-                fids = json.loads(item["file_ids"]) if item["file_ids"] else None
+                fids = json.loads(item["file_ids"]) if item["file_ids"] else []
+                paths = json.loads(item["pending_files"]) if item["pending_files"] else []
+                if paths:
+                    fids, still, error = self._upload_pending(item, fids, paths, upload)
+                    if still and item["attempts"] + 1 < MAX_POST_ATTEMPTS:
+                        raise RuntimeError(f"attachment upload failed: {error}")
+                    if still:
+                        # Out of attempts. Holding the grade back any longer is
+                        # worse than the silent drop this replaced: the file is
+                        # gone either way, and now so is the student's grade.
+                        self._give_up_on(item["id"], fids, still, error)
+                        attachments_abandoned += 1
                 post_grade(
                     item["course_id"], item["assignment_id"], item["user_id"],
                     grade=item["grade"], rubric_assessment=ra,
-                    comment=item["comment"], comment_file_ids=fids,
+                    comment=item["comment"], comment_file_ids=fids or None,
                     base_url=base_url, token=token,
                 )
                 self.mark_done(item["id"])
@@ -549,4 +746,10 @@ class OfflinePostQueue:
                 self.mark_failed(item["id"], str(e))
                 failed += 1
         remaining = len(self.pending())
-        return {"posted": posted, "failed": failed, "remaining": remaining}
+        return {
+            "posted": posted,
+            "failed": failed,
+            "abandoned": abandoned,
+            "attachments_abandoned": attachments_abandoned,
+            "remaining": remaining,
+        }

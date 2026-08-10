@@ -69,7 +69,9 @@ scripts/           Model baking, Canvas sandbox seeder
 - **`build_model()` is the only place that knows about Ollama** — MLX swap touches
   nothing else.
 - **Temperature 0** for grading; uncertainty measured by separate sampling.
-- **`mean_error` is signed** — positive = AI lenient, negative = AI harsh.
+- **`mean_error` and `Draft bias` are signed** — both are AI minus teacher: positive
+  = AI lenient, negative = AI harsh. `Draft bias` is additionally scaled as a
+  fraction of criterion max, and is what the calibration panel reports.
 - **Exemplar retrieval is band-balanced** — round-robin across score bands, not
   pure nearest-neighbour.
 

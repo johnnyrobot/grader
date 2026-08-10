@@ -30,6 +30,7 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).parent))
 
 from grader.agent import grade  # noqa: E402
+from grader.db import Database  # noqa: E402
 from grader.exemplars import Exemplar, ExemplarStore, render_anchors  # noqa: E402
 from grader.metrics import agreement, human_ceiling  # noqa: E402
 from grader.schema import CriterionType, Rubric, RubricCriterion, RubricLevel  # noqa: E402
@@ -136,7 +137,7 @@ def main() -> None:
     # --- Load the teacher's graded work into the exemplar store ------------------------
     store_path = Path("fixtures/exemplars_mohler.db")
     store_path.unlink(missing_ok=True)
-    store = ExemplarStore(store_path)
+    store = ExemplarStore(Database.at(store_path))
     t0 = time.perf_counter()
     store.add_many([
         Exemplar(

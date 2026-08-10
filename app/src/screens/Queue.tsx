@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { QueueData, GradeItem, gradeBatch, checkUpdates } from "../api";
+import { useCallback, useEffect, useState } from "react";
+import { QueueData, GradeItem, gradeBatch, checkUpdates, canvasImport, canvasPost, canvasTargetOf, fetchPostQueue, flushPostQueue } from "../api";
 import { AppShell } from "../components/AppShell";
 import { checkDesktopUpdate, installPendingUpdate } from "../updater";
 
@@ -16,6 +16,7 @@ interface Props {
   onRecoverEngine?: () => void;
   onOpenModels: () => void;
   onOpenSettings: () => void;
+  onOpenCalibration: () => void;
 }
 
 const LANE_META: Record<string, { summary: string; filter: string; description: string; className: string }> = {
@@ -48,14 +49,125 @@ function signalLabel(flag: string) {
   return titleCase(flag);
 }
 
-export function QueueScreen({ data, onSelectItem, assignmentId, setAssignmentId, selectedLane, setSelectedLane, onRefresh, engineIssue = "", recoveringEngine = false, onRecoverEngine, onOpenModels, onOpenSettings }: Props) {
+export function QueueScreen({ data, onSelectItem, assignmentId, setAssignmentId, selectedLane, setSelectedLane, onRefresh, engineIssue = "", recoveringEngine = false, onRecoverEngine, onOpenModels, onOpenSettings, onOpenCalibration }: Props) {
   const [grading, setGrading] = useState(false);
   const [gradeMsg, setGradeMsg] = useState("");
   const [updateVersion, setUpdateVersion] = useState("");
   const [updateStatus, setUpdateStatus] = useState("");
   const [installingUpdate, setInstallingUpdate] = useState(false);
+  const [posting, setPosting] = useState(false);
+  const [postReceipt, setPostReceipt] = useState<string[]>([]);
+  const [importCourse, setImportCourse] = useState("");
+  const [importAssignment, setImportAssignment] = useState("");
+  const [importing, setImporting] = useState(false);
+  const [pendingPosts, setPendingPosts] = useState(0);
+  const [flushing, setFlushing] = useState(false);
   const stats = data?.stats;
   const items = data?.items || [];
+
+  // Post is offered only for a batch imported from Canvas, and only once the
+  // teacher has approved something. Approval remains the engine's to judge —
+  // this just avoids offering an action that postable() would refuse outright.
+  const canvasTarget = canvasTargetOf(assignmentId);
+  const approvedIds = items.filter(item => item.approved).map(item => item.id);
+
+  const refreshPostQueue = useCallback(async () => {
+    try {
+      setPendingPosts((await fetchPostQueue()).pending);
+    } catch {
+      // The engine being unreachable is already surfaced elsewhere; a failed
+      // count must not replace the screen with an error.
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshPostQueue();
+  }, [refreshPostQueue, postReceipt]);
+
+  async function handleFlush() {
+    setFlushing(true);
+    try {
+      const result = await flushPostQueue();
+      const lines = [`Retried the queue: ${result.posted} posted, ${result.remaining} still waiting.`];
+      // An entry that burned its retries has stopped being attempted. Saying so
+      // is the whole point of the bound — otherwise it just sits there.
+      if (result.abandoned > 0) {
+        lines.push(
+          `${result.abandoned} gave up after repeated failures and need your attention.`,
+        );
+      }
+      setPostReceipt(lines);
+      onRefresh();
+    } catch (error) {
+      setPostReceipt([`Could not flush the queue: ${(error as Error).message}`]);
+    } finally {
+      setFlushing(false);
+      refreshPostQueue();
+    }
+  }
+
+  async function handleImport() {
+    const course = Number(importCourse.trim());
+    const assignment = Number(importAssignment.trim());
+    if (!Number.isInteger(course) || !Number.isInteger(assignment) || !course || !assignment) {
+      setPostReceipt(["Enter the numeric Canvas course and assignment ids."]);
+      return;
+    }
+    setImporting(true);
+    setPostReceipt([]);
+    try {
+      const result = await canvasImport(course, assignment);
+      const lines = [
+        `Imported ${result.imported} submission${result.imported === 1 ? "" : "s"}.`,
+      ];
+      // A file that produced no readable text is reported per student rather
+      // than quietly graded as empty.
+      for (const failure of result.failures || []) {
+        lines.push(`Student ${failure.user_id}: ${failure.error}`);
+      }
+      setPostReceipt(lines);
+      setAssignmentId(`canvas_${course}_${assignment}`);
+      onRefresh();
+    } catch (error) {
+      setPostReceipt([`Could not import: ${(error as Error).message}`]);
+    } finally {
+      setImporting(false);
+    }
+  }
+
+  async function handlePost() {
+    if (!canvasTarget || approvedIds.length === 0) return;
+    setPosting(true);
+    setPostReceipt([]);
+    try {
+      const result = await canvasPost(
+        canvasTarget.courseId, canvasTarget.assignmentId, approvedIds,
+      );
+      const lines: string[] = [];
+      if (result.posted > 0) {
+        lines.push(`Posted ${result.posted} grade${result.posted === 1 ? "" : "s"} to Canvas.`);
+        for (const [student, score] of Object.entries(result.posted_scores || {})) {
+          lines.push(`Student ${student}: ${score}`);
+        }
+      }
+      // Queued is not a failure. Canvas was unreachable; the approvals are kept
+      // and will go out on the next flush.
+      if (result.queued > 0) {
+        lines.push(
+          `Canvas was unreachable, so ${result.queued} approved grade` +
+          `${result.queued === 1 ? " is" : "s are"} queued and will post when it is back.`,
+        );
+      }
+      for (const skipped of result.skipped || []) lines.push(`Skipped: ${skipped}`);
+      if (lines.length === 0) lines.push("Nothing to post.");
+      setPostReceipt(lines);
+      onRefresh();
+    } catch (error) {
+      setPostReceipt([`Could not post: ${(error as Error).message}`]);
+    } finally {
+      setPosting(false);
+    }
+  }
 
   useEffect(() => {
     checkDesktopUpdate().then(update => {
@@ -117,6 +229,36 @@ export function QueueScreen({ data, onSelectItem, assignmentId, setAssignmentId,
           className="field-control"
         />
       </label>
+      <div className="filter-group" role="group" aria-label="Import a batch from Canvas">
+        <label className="assignment-field">
+          <span>Canvas course</span>
+          <input
+            value={importCourse}
+            onChange={event => setImportCourse(event.target.value)}
+            placeholder="106"
+            inputMode="numeric"
+            className="field-control"
+          />
+        </label>
+        <label className="assignment-field">
+          <span>Canvas assignment</span>
+          <input
+            value={importAssignment}
+            onChange={event => setImportAssignment(event.target.value)}
+            placeholder="2841"
+            inputMode="numeric"
+            className="field-control"
+          />
+        </label>
+        <button
+          type="button"
+          className="button-secondary"
+          onClick={handleImport}
+          disabled={importing}
+        >
+          {importing ? "Importing…" : "Import from Canvas"}
+        </button>
+      </div>
       <div className="filter-group" role="group" aria-label="Filter submissions by review lane">
         <button
           type="button"
@@ -151,16 +293,46 @@ export function QueueScreen({ data, onSelectItem, assignmentId, setAssignmentId,
         <>
           <button className="button-quiet" onClick={onOpenSettings}>Settings</button>
           <button className="button-quiet" onClick={onOpenModels}>Local models</button>
+          <button className="button-quiet" onClick={onOpenCalibration}>Calibration</button>
           <button className="button-secondary" onClick={onRefresh}>Refresh queue</button>
           <button className="button-primary" onClick={handleGrade} disabled={grading || !assignmentId.trim()}>
             {grading ? "Starting…" : "Grade submissions"}
           </button>
+          {pendingPosts > 0 && (
+            <button
+              className="button-secondary"
+              onClick={handleFlush}
+              disabled={flushing}
+            >
+              {flushing ? "Retrying…" : `Retry ${pendingPosts} queued post${pendingPosts === 1 ? "" : "s"}`}
+            </button>
+          )}
+          {canvasTarget && (
+            <button
+              className="button-primary"
+              onClick={handlePost}
+              disabled={posting || approvedIds.length === 0}
+              title={approvedIds.length === 0 ? "Approve a grade first" : undefined}
+            >
+              {posting ? "Posting…" : `Post ${approvedIds.length} approved to Canvas`}
+            </button>
+          )}
         </>
       )}
       footer={(
         <p><strong>Keyboard ready:</strong> open a submission, then use <kbd>A</kbd> to approve, <kbd>E</kbd> to edit feedback, or <kbd>Esc</kbd> to return.</p>
       )}
     >
+      {postReceipt.length > 0 && (
+        <div className="notice-row" role="status" aria-live="polite">
+          <div>
+            <h2>Canvas post receipt</h2>
+            <ul>
+              {postReceipt.map(line => <li key={line}>{line}</li>)}
+            </ul>
+          </div>
+        </div>
+      )}
       {(gradeMsg || updateVersion) && (
         <div className="notice-row" role="status" aria-live="polite">
           {gradeMsg && <p>{gradeMsg}</p>}

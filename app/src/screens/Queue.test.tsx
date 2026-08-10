@@ -1,6 +1,6 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { QueueScreen } from "./Queue";
 import type { QueueData } from "../api";
 import { checkDesktopUpdate, installPendingUpdate } from "../updater";
@@ -71,6 +71,7 @@ function renderQueue(data: QueueData | null = queue) {
     onRecoverEngine: vi.fn(),
     onOpenModels: vi.fn(),
     onOpenSettings: vi.fn(),
+    onOpenCalibration: vi.fn(),
   };
   render(<QueueScreen {...props} />);
   return props;
@@ -92,6 +93,14 @@ describe("QueueScreen", () => {
     expect(all).toHaveAttribute("aria-pressed", "true");
     await user.click(screen.getByRole("button", { name: "Needs review" }));
     expect(props.setSelectedLane).toHaveBeenCalledWith("review_first");
+  });
+
+  it("reaches the calibration screen from the queue's own navigation", async () => {
+    const user = userEvent.setup();
+    const props = renderQueue();
+
+    await user.click(screen.getByRole("button", { name: "Calibration" }));
+    expect(props.onOpenCalibration).toHaveBeenCalled();
   });
 
   it("explains the first useful action when no submissions are available", () => {
@@ -135,5 +144,317 @@ describe("QueueScreen", () => {
 
     expect(installPendingUpdate).toHaveBeenCalled();
     expect(screen.getByText(/Preparing the signed update/i)).toBeInTheDocument();
+  });
+});
+
+
+/** The request to exactly this path — "/api/canvas/post" must not match
+ *  "/api/canvas/post-queue", which is a GET and carries no body. */
+function callTo(fetchMock: { mock: { calls: unknown[][] } }, path: string) {
+  const call = fetchMock.mock.calls.find(c => String(c[0]).endsWith(path));
+  if (!call) throw new Error(`no request to ${path}`);
+  return call[1] as { body: string };
+}
+
+describe("posting approved grades to Canvas", () => {
+  const postable = {
+    submission_id: "Student 98765",
+    assignment_id: "canvas_106_2841",
+    ai_scores: { thesis: 4 },
+    ai_feedback: "Good work.",
+    confidence: 0.9,
+    flags: [],
+    lane: "standard",
+    teacher_scores: null,
+    teacher_feedback: null,
+  };
+
+  const canvasQueue: QueueData = {
+    items: [
+      { ...postable, id: "gr_1", approved: true },
+      { ...postable, id: "gr_2", approved: false },
+    ],
+    stats: { total: 2, review_first: 0, standard: 2, high_confidence: 0, summary: "2 to review" },
+  };
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  function renderCanvasQueue(onRefresh = vi.fn()) {
+    return render(
+      <QueueScreen
+        data={canvasQueue}
+        onSelectItem={vi.fn()}
+        assignmentId="canvas_106_2841"
+        setAssignmentId={vi.fn()}
+        selectedLane={undefined}
+        setSelectedLane={vi.fn()}
+        onRefresh={onRefresh}
+        onOpenModels={vi.fn()}
+        onOpenSettings={vi.fn()}
+        onOpenCalibration={vi.fn()}
+      />,
+    );
+  }
+
+  it("offers no post button for a batch that did not come from Canvas", () => {
+    render(
+      <QueueScreen
+        data={canvasQueue}
+        onSelectItem={vi.fn()}
+        assignmentId="essay-1"
+        setAssignmentId={vi.fn()}
+        selectedLane={undefined}
+        setSelectedLane={vi.fn()}
+        onRefresh={vi.fn()}
+        onOpenModels={vi.fn()}
+        onOpenSettings={vi.fn()}
+        onOpenCalibration={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByRole("button", { name: /Post .* to Canvas/ })).toBeNull();
+  });
+
+  it("posts only the grades the teacher has approved", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue({
+        posted: 1, queued: 0, skipped: [], posted_scores: { "98765": 7 },
+        progress_state: "completed", completion: 100,
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    renderCanvasQueue();
+
+    fireEvent.click(screen.getByRole("button", { name: /Post 1 approved to Canvas/ }));
+
+    await waitFor(() =>
+      expect(fetchMock.mock.calls.some(c => String(c[0]).endsWith("/api/canvas/post"))).toBe(true),
+    );
+    const body = JSON.parse(callTo(fetchMock, "/api/canvas/post").body);
+    expect(body.grade_ids).toEqual(["gr_1"]);
+    expect(body.course_id).toBe(106);
+    expect(body.assignment_id).toBe(2841);
+  });
+
+  it("shows a per-student receipt after posting", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue({
+        posted: 1, queued: 0, skipped: [], posted_scores: { "98765": 7 },
+        progress_state: "completed", completion: 100,
+      }),
+    }));
+    renderCanvasQueue();
+
+    fireEvent.click(screen.getByRole("button", { name: /Post 1 approved/ }));
+
+    expect(await screen.findByText(/Posted 1 grade to Canvas/)).toBeInTheDocument();
+    expect(screen.getByText(/Student 98765: 7/)).toBeInTheDocument();
+  });
+
+  it("tells the teacher a queued post is kept, not lost", async () => {
+    // FR-3.5. posted === 0 here, and reading that as failure would be wrong.
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue({
+        posted: 0, queued: 1, queued_reason: "connection refused", skipped: [],
+        posted_scores: {}, progress_state: "queued", completion: 0,
+      }),
+    }));
+    renderCanvasQueue();
+
+    fireEvent.click(screen.getByRole("button", { name: /Post 1 approved/ }));
+
+    const receipt = await screen.findByText(/Canvas was unreachable/);
+    expect(receipt).toBeInTheDocument();
+    expect(receipt.textContent).toMatch(/queued and will post/);
+  });
+
+  it("surfaces what the engine refused to post", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue({
+        posted: 0, queued: 0, skipped: ["gr_9: not approved"],
+        posted_scores: {}, progress_state: "completed", completion: 100,
+      }),
+    }));
+    renderCanvasQueue();
+
+    fireEvent.click(screen.getByRole("button", { name: /Post 1 approved/ }));
+
+    expect(await screen.findByText(/Skipped: gr_9: not approved/)).toBeInTheDocument();
+  });
+});
+
+describe("importing a batch from Canvas", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  function renderQueue(setAssignmentId = vi.fn(), onRefresh = vi.fn()) {
+    render(
+      <QueueScreen
+        data={queue}
+        onSelectItem={vi.fn()}
+        assignmentId=""
+        setAssignmentId={setAssignmentId}
+        selectedLane={undefined}
+        setSelectedLane={vi.fn()}
+        onRefresh={onRefresh}
+        onOpenModels={vi.fn()}
+        onOpenSettings={vi.fn()}
+        onOpenCalibration={vi.fn()}
+      />,
+    );
+  }
+
+  function typeIds() {
+    fireEvent.change(screen.getByLabelText("Canvas course"), { target: { value: "106" } });
+    fireEvent.change(screen.getByLabelText("Canvas assignment"), { target: { value: "2841" } });
+  }
+
+  it("asks the engine for that course and assignment", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue({ imported: 3, submissions: [], failures: [] }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    renderQueue();
+    typeIds();
+
+    fireEvent.click(screen.getByRole("button", { name: "Import from Canvas" }));
+
+    await waitFor(() =>
+      expect(fetchMock.mock.calls.some(c => String(c[0]).endsWith("/api/canvas/import"))).toBe(true),
+    );
+    const body = JSON.parse(callTo(fetchMock, "/api/canvas/import").body);
+    expect(body).toEqual({ course_id: 106, assignment_id: 2841, download_attachments: true });
+  });
+
+  it("points the queue at what it just imported", async () => {
+    const setAssignmentId = vi.fn();
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue({ imported: 3, submissions: [], failures: [] }),
+    }));
+    renderQueue(setAssignmentId);
+    typeIds();
+
+    fireEvent.click(screen.getByRole("button", { name: "Import from Canvas" }));
+
+    await waitFor(() => expect(setAssignmentId).toHaveBeenCalledWith("canvas_106_2841"));
+  });
+
+  it("names the students whose files could not be read", async () => {
+    // The engine reports these per student now; burying them would leave a
+    // teacher believing a submission was graded when nothing was extracted.
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue({
+        imported: 2,
+        submissions: [],
+        failures: [{ user_id: "1042", error: "no readable text extracted from essay.pdf" }],
+      }),
+    }));
+    renderQueue();
+    typeIds();
+
+    fireEvent.click(screen.getByRole("button", { name: "Import from Canvas" }));
+
+    expect(await screen.findByText(/Student 1042: no readable text/)).toBeInTheDocument();
+  });
+
+  it("refuses to call the engine without numeric ids", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    renderQueue();
+    fireEvent.change(screen.getByLabelText("Canvas course"), { target: { value: "not a course" } });
+
+    fireEvent.click(screen.getByRole("button", { name: "Import from Canvas" }));
+
+    expect(await screen.findByText(/numeric Canvas course and assignment ids/)).toBeInTheDocument();
+    // The post-queue count is polled on mount; what must not happen is an import.
+    expect(fetchMock.mock.calls.some(c => String(c[0]).endsWith("/api/canvas/import"))).toBe(false);
+  });
+});
+
+describe("the offline post queue", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  function stubQueue(pending: number, flushResult?: unknown) {
+    const fetchMock = vi.fn().mockImplementation((url: string, init?: { method?: string }) => {
+      if (String(url).includes("/api/canvas/flush") && init?.method === "POST") {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve(flushResult) });
+      }
+      if (String(url).includes("/api/canvas/post-queue")) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ pending, items: [] }) });
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    return fetchMock;
+  }
+
+  function renderQueue() {
+    render(
+      <QueueScreen
+        data={queue}
+        onSelectItem={vi.fn()}
+        assignmentId=""
+        setAssignmentId={vi.fn()}
+        selectedLane={undefined}
+        setSelectedLane={vi.fn()}
+        onRefresh={vi.fn()}
+        onOpenModels={vi.fn()}
+        onOpenSettings={vi.fn()}
+        onOpenCalibration={vi.fn()}
+      />,
+    );
+  }
+
+  it("stays out of the way when nothing is queued", async () => {
+    stubQueue(0);
+    renderQueue();
+
+    await waitFor(() => {
+      expect(screen.queryByRole("button", { name: /Retry .* queued/ })).toBeNull();
+    });
+  });
+
+  it("offers a retry when approvals are waiting", async () => {
+    stubQueue(2);
+    renderQueue();
+
+    expect(
+      await screen.findByRole("button", { name: "Retry 2 queued posts" }),
+    ).toBeInTheDocument();
+  });
+
+  it("reports what the retry achieved", async () => {
+    stubQueue(1, { posted: 1, failed: 0, abandoned: 0, remaining: 0 });
+    renderQueue();
+
+    fireEvent.click(await screen.findByRole("button", { name: /Retry 1 queued post/ }));
+
+    expect(await screen.findByText(/1 posted, 0 still waiting/)).toBeInTheDocument();
+  });
+
+  it("says when an entry has given up, rather than leaving it sitting silently", async () => {
+    stubQueue(1, { posted: 0, failed: 0, abandoned: 1, remaining: 1 });
+    renderQueue();
+
+    fireEvent.click(await screen.findByRole("button", { name: /Retry 1 queued post/ }));
+
+    expect(
+      await screen.findByText(/1 gave up after repeated failures/),
+    ).toBeInTheDocument();
   });
 });

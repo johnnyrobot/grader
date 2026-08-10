@@ -53,7 +53,7 @@
     "canvas_url": "https://canvas.example.invalid",
     "canvas_token_masked": "tok...fake",
     "data_dir": "/tmp/grader-synthetic",
-    "auto_approve_threshold": 0.95,
+    "high_confidence_threshold": 0.95,
     "review_first_threshold": 0.7,
     "model_text": "grader-text:8b",
     "model_vision": "grader-vision:1.3b",
@@ -75,5 +75,25 @@
     "available": [
       { "name": "grader-text:8b", "size": 8100000000 }
     ]
+  },
+  "calibration": {
+    "draft_bias": -0.066,
+    "n": 34,
+    "evidence_floor": 20,
+    "discloses": true,
+    "demotes": false,
+    "override_count": 8,
+    "override_rate": 0.2667,
+    "exemplar_count": 30,
+    "per_criterion": {
+      "Thesis": { "bias": -0.136, "abs_bias": 0.15, "count": 34 },
+      "Evidence": { "bias": 0.02, "abs_bias": 0.06, "count": 30 }
+    },
+    "cold_start": {
+      "unlocked": true,
+      "exemplar_count": 30,
+      "remaining": 0,
+      "message": "AI drafts unlocked — 30 exemplars calibrated."
+    }
   }
 }

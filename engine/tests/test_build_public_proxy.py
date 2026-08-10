@@ -187,7 +187,7 @@ def test_populate_model_scores_resumes_partial_perturbations(monkeypatch):
 
     def fake_grade_text(_example, text, _model, *, anchors=""):
         calls.append(text)
-        return {"correctness": 2.0}
+        return builder.GradedText(scores={"correctness": 2.0}, confidence=0.9, flags=[])
 
     monkeypatch.setattr(builder, "_grade_text", fake_grade_text)
 
@@ -200,6 +200,46 @@ def test_populate_model_scores_resumes_partial_perturbations(monkeypatch):
 
     assert set(example["perturbed_scores"]) == set(PERTURBATIONS)
     assert len(calls) == len(PERTURBATIONS) - 1
+
+
+def test_model_confidence_and_flags_are_recorded_beside_the_scores(monkeypatch):
+    """Triage routes on confidence, so a release run has to record it.
+
+    `_grade_text` used to return only `criterion_scores`, dropping `confidence`
+    and `flags` on the floor. Measured separately over 42 items, confidence does
+    track error — correlation −0.476, mean |err| 0.71 above 0.9 confidence
+    against 1.08 below, with a residual 4.8% confidently wrong — but no gate
+    could see that, because no dataset carried the number.
+
+    The shape of `ai_scores` and `perturbed_scores` must not move: engine/gates
+    read both as criterion -> score, so widening either breaks the quality and
+    fairness gates.
+    """
+    from gates.bias import PERTURBATIONS
+
+    example = row_to_example(select_mohler_rows(_fake_mohler(), sources=1, items_per_source=1, seed=7)[0])
+
+    def fake_grade_text(_example, _text, _model, *, anchors=""):
+        return builder.GradedText(
+            scores={"correctness": 4.0}, confidence=0.75, flags=["needs_human"]
+        )
+
+    monkeypatch.setattr(builder, "_grade_text", fake_grade_text)
+
+    populate_model_scores(
+        [example],
+        model="grader-text:8b",
+        grade_perturbations=True,
+        grade_timeout_seconds=0,
+    )
+
+    assert example["ai_confidence"] == 0.75
+    assert example["ai_flags"] == ["needs_human"]
+
+    # Unchanged shapes, or the gates stop reading these.
+    assert example["ai_scores"] == {"correctness": 4.0}
+    for name in PERTURBATIONS:
+        assert example["perturbed_scores"][name] == {"correctness": 4.0}
 
 
 def test_grade_text_with_timeout_kills_slow_model_call(monkeypatch):
@@ -240,3 +280,25 @@ def test_call_with_timeout_raises_for_slow_call():
         assert "slow unit exceeded 1s" in str(error)
     else:  # pragma: no cover
         raise AssertionError("expected timeout")
+
+
+def test_grading_children_are_never_forked_on_macos():
+    """CoreFoundation is not fork-safe, and the grading child resolves proxies.
+
+    A forked child dies in _os_log_preferences_refresh with SIGSEGV, but only
+    once the parent has touched CoreFoundation — which a fresh run does not and
+    a resumed run does. The failure therefore hid in exactly the runs that
+    regenerate existing release evidence, and the builder still exited 0 with
+    every regraded item unscored.
+    """
+    import sys as _sys
+    from unittest.mock import patch
+
+    from scripts.build_public_proxy import _start_method
+
+    with patch.object(_sys, "platform", "darwin"):
+        assert _start_method() == "spawn"
+    with patch.object(_sys, "platform", "win32"):
+        assert _start_method() == "spawn"
+    with patch.object(_sys, "platform", "linux"):
+        assert _start_method() == "fork"

@@ -91,8 +91,10 @@ uv run python engine/verify_citations.py --fixtures fixtures/citations/citation_
 - Git repo. See `CONTRIBUTING.md` for the contributor flow.
 - Never commit forbidden data (see Security & Data). `.gitignore` already excludes golden sets,
   handwriting samples, databases, credentials, model weights, DMGs, and notarization artifacts.
-- End every commit message with:
-  `Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>`
+- End every commit message with the `Co-Authored-By:` trailer the agent's own session specifies —
+  currently `Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>`. Naming a model
+  here rather than deferring to the session is why this line went a whole model release stale: the
+  session is the authority, and this is the example.
 - Only commit or push when the user asks. Never commit, discard, or overwrite the working-tree state
   under `.omo/run-continuation/` unless explicitly requested.
 

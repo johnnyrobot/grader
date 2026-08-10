@@ -30,11 +30,12 @@ import re
 import subprocess
 import sys
 import time
-from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from gates.result import CheckResult
 
 ALLOWLIST_HOSTS = {
     "localhost",
@@ -72,21 +73,8 @@ STUDENT_DATA_PATTERNS = [
 ]
 
 
-@dataclass
-class EgressResult:
-    status: str
-    summary: str
-    details: dict = field(default_factory=dict)
-
-    def exit_code(self) -> int:
-        return 0 if self.status != "FAIL" else 1
-
-    def print(self) -> None:
-        icon = {"PASS": "✓", "FAIL": "✗", "SKIP": "⊘"}[self.status]
-        print(f"\n{icon} PRIVACY GATE: {self.status}")
-        print(f"  {self.summary}")
-        for k, v in self.details.items():
-            print(f"  {k}: {v}")
+class EgressResult(CheckResult):
+    label = "PRIVACY GATE"
 
 
 def _capture_connections(duration: float = 10.0) -> list[dict]:

@@ -1,7 +1,20 @@
-"""Calibration health panel: rolling QWK, override rate, per-criterion disagreement.
+"""Calibration health panel: Draft bias, override rate, per-criterion disagreement.
 
-This is the data the teacher sees to know whether calibration is working. It rolls
-up the override history and the AI-vs-teacher agreement into a living dashboard.
+This is the data the teacher sees to know whether calibration is working, and
+`Draft bias` is the part that matters: the signed gap between what the AI drafts
+and what the teacher approves, measured over *every* Approval on the Assignment.
+
+The population is the whole substance of the term (ADR-0001). Reading only the
+overrides — items the teacher changed — inverts the metric under exactly the
+failure it needs to catch: a teacher who has begun rubber-stamping low drafts
+generates fewer overrides, so the panel reads better as automation bias gets
+worse. An approval with no override is a complete recorded comparison and counts.
+
+Bias is a fraction of criterion max, never a point count: minus 1 point means two
+different things on a 5-point criterion and a 100-point one. Below `EVIDENCE_FLOOR`
+approvals the panel reports counts and no direction, and no consumer may infer one.
+QWK is not here — it rounds the half-points teachers actually grade in, and it
+remains a release-gate metric only.
 
 Also contains the cold-start rule: AI drafts unlock after the teacher grades
 3 items (or imports past graded work). This makes calibration structural —
@@ -11,10 +24,33 @@ the teacher must demonstrate their standard before the AI drafts anything.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Protocol
 
-from grader.metrics import agreement
-from grader.overrides import OverrideStore
+from grader.draftbias import (
+    DEMOTE_THRESHOLD,
+    DISCLOSE_THRESHOLD,
+    EVIDENCE_FLOOR,
+    demotes_high_confidence,
+    discloses_to_teacher,
+)
 from grader.exemplars import ExemplarStore
+from grader.overrides import OverrideStore
+from grader.schema import Rubric
+
+# Re-exported: the thresholds and the floor are read from here by everything that
+# already knows about calibration. Only triage, which must import no stores, goes
+# to grader.draftbias directly.
+__all__ = [
+    "DEMOTE_THRESHOLD",
+    "DISCLOSE_THRESHOLD",
+    "EVIDENCE_FLOOR",
+    "ApprovedComparison",
+    "ApprovedComparisons",
+    "CalibrationHealth",
+    "can_draft",
+    "cold_start_status",
+    "compute_health",
+]
 
 
 # ---------------------------------------------------------------------------
@@ -50,113 +86,168 @@ def cold_start_status(exemplar_store: ExemplarStore, assignment_id: str) -> dict
 
 
 # ---------------------------------------------------------------------------
+# Draft bias: measured here, judged by grader.draftbias (ADR-0001)
+# ---------------------------------------------------------------------------
+
+# The most recent approvals the figure is measured over, so that a teacher who
+# recalibrates mid-assignment is not held to grading they have moved on from.
+# It also caps the `n` the panel reports.
+ROLLING_WINDOW = 200
+
+
+@dataclass(frozen=True)
+class ApprovedComparison:
+    """One Approval, as the AI-vs-teacher comparison it already is.
+
+    `teacher_scores` is None when the teacher approved the draft unchanged; that
+    is a zero-delta comparison, not a missing one.
+
+    `rubric` is the one the grade was actually produced against, already resolved
+    by whoever read the record. This module does not know how records are stored
+    or how a Rubric is found from one.
+    """
+
+    ai_scores: dict[str, float]
+    teacher_scores: dict[str, float] | None
+    rubric: Rubric
+
+    def scaled_deltas(self) -> list[tuple[str, float]]:
+        """(criterion_id, AI minus teacher as a fraction of that criterion's max).
+
+        Negative means the draft ran below the teacher. A criterion the draft did
+        not score contributes nothing; one the teacher left alone contributes a
+        zero, which is the data point the override-only population was missing.
+        """
+        approved = self.teacher_scores or self.ai_scores
+        deltas: list[tuple[str, float]] = []
+        for criterion in self.rubric.criteria:
+            if criterion.id not in self.ai_scores or criterion.max_points <= 0:
+                continue
+            ai = self.ai_scores[criterion.id]
+            teacher = approved.get(criterion.id, ai)
+            deltas.append((criterion.id, (ai - teacher) / criterion.max_points))
+        return deltas
+
+
+class ApprovedComparisons(Protocol):
+    """The approved comparisons for one Assignment, newest first.
+
+    Deliberately the narrowest thing `compute_health` can be given: no writes, no
+    grade ids, no rows. Rows this reader cannot turn into a comparison — no AI
+    scores, or no resolvable Rubric — are left out rather than returned empty,
+    since a comparison that cannot be scaled is not evidence about anything.
+    """
+
+    def list(
+        self, assignment_id: str, *, limit: int = ROLLING_WINDOW
+    ) -> list[ApprovedComparison]: ...
+
+
+# ---------------------------------------------------------------------------
 # Calibration health panel
 # ---------------------------------------------------------------------------
 
 @dataclass
 class CalibrationHealth:
     """The data behind the calibration health dashboard (PRD FR-5.4)."""
-    # Rolling agreement
-    qwk: float | None = None          # AI-draft vs teacher-final, rolling window
-    exact: float | None = None
-    adjacent: float | None = None
-    mean_error: float | None = None    # signed: + = AI lenient, - = AI harsh
-    mean_abs_error: float | None = None
+    # Draft bias: signed, scaled as a fraction of criterion max. Negative means
+    # drafts run below the teacher. None below the evidence floor — the counts
+    # are still reported there, the direction is not.
+    draft_bias: float | None = None
+    # Approvals the figure rests on: the comparisons the reader could actually
+    # make, capped at ROLLING_WINDOW. An approval whose Rubric no longer resolves
+    # is not one of them — it can be counted but not scaled.
     n: int = 0
+    discloses: bool = False           # clears DISCLOSE_THRESHOLD
+    demotes: bool = False             # clears DEMOTE_THRESHOLD
 
-    # Override rate
+    # Override rate. A different population on purpose: an Override is a
+    # teacher's correction, and the rate counts corrections.
     override_count: int = 0
     total_graded: int = 0
     override_rate: float = 0.0
 
-    # Per-criterion disagreement
+    # Per-criterion disagreement, over the same approvals as draft_bias and in
+    # the same convention: signed AI-minus-teacher, scaled by that criterion's max.
     per_criterion: dict[str, dict[str, float]] = field(default_factory=dict)
-    # {criterion_id: {"mean_delta": signed, "abs_delta": float, "count": int}}
+    # {criterion_id: {"bias": signed, "abs_bias": float, "count": int}}
 
     # Exemplar store size
     exemplar_count: int = 0
 
-    # Trend (last N vs previous N)
-    qwk_trend: float | None = None    # current window QWK - previous window QWK
-
     def __str__(self) -> str:
         lines = ["Calibration Health"]
-        if self.qwk is not None:
-            bias = ("lenient" if self.mean_error and self.mean_error > 0.15
-                    else "harsh" if self.mean_error and self.mean_error < -0.15
-                    else "neutral")
-            lines.append(f"  QWK: {self.qwk:.3f} (bias: {bias})")
-        if self.qwk_trend is not None:
-            arrow = "↑" if self.qwk_trend > 0.01 else "↓" if self.qwk_trend < -0.01 else "→"
-            lines.append(f"  Trend: {arrow} {self.qwk_trend:+.3f}")
+        if self.draft_bias is None:
+            lines.append(f"  Draft bias: not yet — {self.n}/{EVIDENCE_FLOOR} approvals")
+        elif not self.discloses:
+            lines.append(f"  Draft bias: {self.draft_bias:+.1%} of max — "
+                         f"too small to mention (n={self.n})")
+        else:
+            direction = "below" if self.draft_bias < 0 else "above"
+            lines.append(f"  Draft bias: {self.draft_bias:+.1%} of max "
+                         f"(drafts run {direction} you, n={self.n})")
         lines.append(f"  Overrides: {self.override_count}/{self.total_graded} "
                      f"({self.override_rate:.0%})")
         lines.append(f"  Exemplars: {self.exemplar_count}")
         if self.per_criterion:
             lines.append("  Per-criterion disagreement:")
             for cid, stats in sorted(self.per_criterion.items()):
-                lines.append(f"    {cid}: Δ={stats['mean_delta']:+.2f} "
-                             f"|Δ|={stats['abs_delta']:.2f} (n={stats['count']})")
+                lines.append(f"    {cid}: {stats['bias']:+.1%} "
+                             f"|{stats['abs_bias']:.1%}| (n={stats['count']:.0f})")
         return "\n".join(lines)
 
 
+
 def compute_health(
+    approved_comparisons: ApprovedComparisons,
     override_store: OverrideStore,
     exemplar_store: ExemplarStore,
     assignment_id: str,
-    *,
-    window: int = 20,
 ) -> CalibrationHealth:
-    """Compute the calibration health panel from override + exemplar data.
+    """Compute the calibration health panel for one Assignment.
 
-    The QWK here is AI-draft vs teacher-final on overridden items — it measures
-    where the teacher disagreed, which is where calibration matters most.
+    `Draft bias` and per-criterion disagreement come from every Approval on the
+    Assignment, the zero-delta ones included. `Override` rate and `Exemplar`
+    count keep their own stores and their own meaning.
     """
     health = CalibrationHealth()
-    overrides = override_store.list(assignment_id, limit=200)
 
     health.exemplar_count = exemplar_store.count(assignment_id)
-    health.override_count = len(overrides)
-
-    # QWK on overridden items (AI vs teacher)
-    if overrides:
-        ai_scores = [o.ai_total for o in overrides]
-        teacher_scores = [o.teacher_total for o in overrides]
-        agr = agreement(ai_scores, teacher_scores)
-        health.qwk = agr.qwk
-        health.exact = agr.exact
-        health.adjacent = agr.adjacent
-        health.mean_error = agr.mean_error
-        health.mean_abs_error = agr.mean_abs_error
-        health.n = agr.n
-
-        # Per-criterion disagreement
-        crit_data: dict[str, list[float]] = {}
-        for ov in overrides:
-            for cid, delta in ov.criterion_delta.items():
-                crit_data.setdefault(cid, []).append(delta)
-        for cid, deltas in crit_data.items():
-            n = len(deltas)
-            health.per_criterion[cid] = {
-                "mean_delta": sum(deltas) / n,
-                "abs_delta": sum(abs(d) for d in deltas) / n,
-                "count": n,
-            }
-
-        # Trend: compare last `window` overrides to the previous `window`
-        if len(overrides) >= window * 2:
-            recent = overrides[:window]
-            older = overrides[window : window * 2]
-            recent_ai = [o.ai_total for o in recent]
-            recent_t = [o.teacher_total for o in recent]
-            older_ai = [o.ai_total for o in older]
-            older_t = [o.teacher_total for o in older]
-            recent_qwk = agreement(recent_ai, recent_t).qwk
-            older_qwk = agreement(older_ai, older_t).qwk
-            health.qwk_trend = recent_qwk - older_qwk
-
+    health.override_count = override_store.count(assignment_id)
     health.total_graded = health.exemplar_count
     if health.total_graded > 0:
         health.override_rate = health.override_count / health.total_graded
 
+    approvals = approved_comparisons.list(assignment_id, limit=ROLLING_WINDOW)
+    health.n = len(approvals)
+    if health.n < EVIDENCE_FLOOR:
+        return health
+
+    # One approval, one data point — the same population `n` reports and the floor
+    # counts. Averaging the criterion deltas directly would let a draft that scored
+    # four criteria outweigh one that scored two.
+    per_approval: list[float] = []
+    per_criterion: dict[str, list[float]] = {}
+    for approval in approvals:
+        deltas = approval.scaled_deltas()
+        if not deltas:
+            continue
+        per_approval.append(sum(delta for _, delta in deltas) / len(deltas))
+        for criterion_id, delta in deltas:
+            per_criterion.setdefault(criterion_id, []).append(delta)
+
+    if not per_approval:
+        return health
+
+    health.draft_bias = sum(per_approval) / len(per_approval)
+    health.discloses = discloses_to_teacher(health.draft_bias)
+    health.demotes = demotes_high_confidence(health.draft_bias)
+    health.per_criterion = {
+        cid: {
+            "bias": sum(deltas) / len(deltas),
+            "abs_bias": sum(abs(d) for d in deltas) / len(deltas),
+            "count": len(deltas),
+        }
+        for cid, deltas in per_criterion.items()
+    }
     return health

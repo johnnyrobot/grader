@@ -4,9 +4,7 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
-import os
 import platform
 import re
 import subprocess
@@ -18,7 +16,12 @@ from typing import Any
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
+if str(PROJECT_ROOT / "engine") not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT / "engine"))
 
+from gates.result import CheckResult
+from grader.draftbias import EVIDENCE_FLOOR
+from scripts.frontend_evidence import REQUIRED_CONTROL_LABELS, REQUIRED_VISUAL_SCREENS
 from scripts.signing_doctor import collect_signing_diagnostics
 
 
@@ -65,6 +68,21 @@ CLEAN_MACHINE_MANUAL_CHECKS = (
 )
 
 PASSING_STATUSES = {"PASS", "PASS_EXPERIMENTAL"}
+
+# Two audiences read this matrix and they are not asking the same question.
+# `supervised_public_beta` is the entry gate for the supervised beta, and it is
+# what `decide_verdict` answers. `ship_v1` is everything that gate asks plus what
+# only a beta can produce — so it is a superset, and a row that belongs to it
+# alone can never move the beta verdict.
+BETA_PROFILE = "supervised_public_beta"
+SHIP_V1_PROFILE = "ship_v1"
+
+DRAFT_BIAS_ROW_ID = "draft-bias-teacher-approvals"
+DRAFT_BIAS_ARTIFACT = "artifacts/release-evidence/draft-bias-teacher-local.json"
+# Real approvals by a real teacher on their own Assignment. The public proxy is
+# graded against a rubric we wrote, so a bias measured on it says nothing about
+# whether Grader anchors *a teacher* low (ADR-0001, "Revisit when").
+DRAFT_BIAS_EVIDENCE_TIER = "teacher_local"
 
 
 def _status_is_passing(status: str) -> bool:
@@ -137,7 +155,8 @@ def _matrix_row(
     status: str,
     evidence: str,
     summary: str = "",
-) -> dict[str, str | bool]:
+    profiles: tuple[str, ...] = (BETA_PROFILE, SHIP_V1_PROFILE),
+) -> dict[str, Any]:
     return {
         "id": id,
         "area": area,
@@ -147,6 +166,7 @@ def _matrix_row(
         "evidence": evidence,
         "summary": summary,
         "blocking": not _status_is_passing(status),
+        "profiles": list(profiles),
     }
 
 
@@ -191,10 +211,82 @@ def _frontend_matrix_status(evidence: dict[str, Any], expected_screens: int, exp
     return "FAIL"
 
 
-def build_e2e_matrix(evidence: dict[str, Any]) -> list[dict[str, str | bool]]:
+def _canvas_matrix_status(evidence: dict[str, Any]) -> str:
+    """PASS only when the run read the comment attachment back off Canvas.
+
+    The artifact's own `status` was decided by whatever harness wrote it, and a
+    run from before FR-3.4 was covered says PASS about the score and comment
+    alone. The release docs now assert attachment write-back is verified, so
+    the row has to check the evidence for it rather than take PASS on trust —
+    including that the file did not land in shared course files, which is one
+    student's work put where their classmates can reach it.
+    """
+    status = _gate_status(evidence, "canvas")
+    if status != "PASS":
+        return status
+    canvas = evidence.get("canvas", {})
+    if not isinstance(canvas, dict):
+        return "FAIL"
+    for key in ("attachment", "attachment_queue"):
+        block = canvas.get(key)
+        if not isinstance(block, dict):
+            return "FAIL"
+        if not block.get("read_back") or block.get("in_shared_course_files"):
+            return "FAIL"
+    return "PASS"
+
+
+def _draft_bias_is_surfaced(evidence: dict[str, Any]) -> bool:
+    """Is the measured figure actually in front of the teacher?
+
+    The app half of the row, and the frontend gate is what carries it: its
+    required visual sweep covers the calibration screen and the review-screen
+    bias line. Measurement alone is not the mitigation — a bias nobody is shown
+    still anchors the reviewer low.
+    """
+    return _status_is_passing(_gate_status(evidence, "frontend"))
+
+
+def _draft_bias_matrix_status(evidence: dict[str, Any]) -> str:
+    """Measured *and* surfaced, or the row does not pass."""
+    measured = _gate_status(evidence, "draft_bias")
+    if not _status_is_passing(measured):
+        return measured
+    return "PASS" if _draft_bias_is_surfaced(evidence) else "FAIL"
+
+
+def _draft_bias_summary(evidence: dict[str, Any]) -> str:
+    summary = _gate_summary(evidence.get("draft_bias", {}))
+    if _status_is_passing(_gate_status(evidence, "draft_bias")) and not _draft_bias_is_surfaced(evidence):
+        surfaced = (
+            "measured, but not surfaced in the app: frontend gate "
+            f"{_gate_status(evidence, 'frontend')}"
+        )
+        return f"{summary}; {surfaced}" if summary else surfaced
+    return summary
+
+
+def build_e2e_matrix(
+    evidence: dict[str, Any],
+    profile: str = BETA_PROFILE,
+) -> list[dict[str, Any]]:
+    """The matrix rows one profile asks for.
+
+    `ship_v1` is a superset of `supervised_public_beta`: v1.0 asks everything the
+    beta entry gate asks, and more.
+    """
     frontend = evidence.get("frontend", {})
     frontend_summary = frontend.get("summary", {}) if isinstance(frontend, dict) else {}
-    frontend_status = _frontend_matrix_status(evidence, expected_screens=16, expected_controls=47)
+    # The floor is what frontend_evidence.py requires *now*, read from the same
+    # lists it validates against. Written as literals it silently stops tracking
+    # them: the calibration screen was added to the required set without this
+    # number moving, so a `>=` against a stale count waved through an artifact
+    # that had never checked for the screen.
+    frontend_status = _frontend_matrix_status(
+        evidence,
+        expected_screens=len(REQUIRED_VISUAL_SCREENS),
+        expected_controls=len(REQUIRED_CONTROL_LABELS),
+    )
     frontend_detail = (
         f"{frontend_summary.get('visual_sweep_screens', '?')} screens, "
         f"{frontend_summary.get('visual_sweep_visible_controls', '?')} visible controls, "
@@ -270,9 +362,13 @@ def build_e2e_matrix(evidence: dict[str, Any]) -> list[dict[str, str | bool]]:
         _matrix_row(
             id="canvas-import-approve-post-readback",
             area="Canvas",
-            requirement="Live Canvas import → approve/override → post → Progress completed → read-back path passes.",
+            requirement=(
+                "Live Canvas import → approve/override → post → Progress completed → "
+                "read-back path passes, including the comment attachment on the "
+                "student's submission and not in shared course files."
+            ),
             gate="canvas",
-            status=_gate_status(evidence, "canvas"),
+            status=_canvas_matrix_status(evidence),
             evidence=_artifact_path(canvas, "artifacts/release-evidence/canvas-live.json"),
             summary=canvas_summary,
         ),
@@ -393,11 +489,33 @@ def build_e2e_matrix(evidence: dict[str, Any]) -> list[dict[str, str | bool]]:
             evidence="scripts/clean_machine_evidence.py manual evidence",
             summary=clean_summary,
         ),
+        _matrix_row(
+            id=DRAFT_BIAS_ROW_ID,
+            area="calibration",
+            requirement=(
+                f"Draft bias is measured over real teacher Approvals at n >= {EVIDENCE_FLOOR} "
+                "on an Assignment, and surfaced in the app."
+            ),
+            gate="draft_bias",
+            status=_draft_bias_matrix_status(evidence),
+            evidence=(
+                f"{_artifact_path(evidence.get('draft_bias'), DRAFT_BIAS_ARTIFACT)} "
+                f"({DRAFT_BIAS_EVIDENCE_TIER} calibration health from "
+                "GET /api/calibration/{assignment_id}); the app surface is the frontend "
+                "gate's 15-calibration required screen and the review-screen Draft bias "
+                "line asserted in app/e2e/neuroinclusive-ui.spec.ts"
+            ),
+            summary=_draft_bias_summary(evidence),
+            # Ship-v1.0 only. The beta entry gate has already been read as
+            # passing, and this risk was settled as a reason to run the
+            # supervised beta rather than to hold it (ADR-0001).
+            profiles=(SHIP_V1_PROFILE,),
+        ),
     ]
-    return rows
+    return [row for row in rows if profile in row["profiles"]]
 
 
-def summarize_e2e_matrix(matrix: list[dict[str, str | bool]]) -> dict[str, int]:
+def summarize_e2e_matrix(matrix: list[dict[str, Any]]) -> dict[str, int]:
     summary = {"total": len(matrix), "passing": 0, "blocking": 0}
     for row in matrix:
         status = str(row.get("status", "MISSING"))
@@ -556,40 +674,20 @@ def _run_jsonish(command: list[str]) -> dict[str, Any]:
     return {"status": status, "command": command, "returncode": proc.returncode, "output": output}
 
 
-def _load_json(path: Path | None) -> dict[str, Any] | None:
-    if path is None or not path.exists():
-        return None
-    return json.loads(path.read_text())
-
-
-def _artifact_ref(path: Path | None) -> dict[str, Any]:
-    if path is None:
-        return {"path": None, "exists": False}
-    ref: dict[str, Any] = {"path": str(path), "exists": path.exists()}
-    if not path.exists():
-        return ref
-    stat = path.stat()
-    ref.update({
-        "size_bytes": stat.st_size,
-        "mtime": datetime.fromtimestamp(stat.st_mtime, timezone.utc).isoformat(),
-        "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
-    })
-    return ref
-
-
 def _normalize_artifact(path: Path | None, default_status: str) -> dict[str, Any]:
-    artifact = _artifact_ref(path)
-    data = _load_json(path)
-    if data is None:
-        return {"status": default_status, "artifact": artifact}
-    data = dict(data)
-    data["artifact"] = artifact
-    if "status" not in data:
-        if data.get("release_status"):
-            data["status"] = data["release_status"]
-        elif data.get("citation_mode", {}).get("release_status"):
-            data["status"] = data["citation_mode"]["release_status"]
-    return data
+    """One check's evidence, as the flat dict the rest of this report expects.
+
+    Reading an artifact — where the status hides, what to do when the file is
+    absent or corrupt, what provenance to record — is gates.result's job now, so
+    every check here reads its evidence by the same rules. `default_status` says
+    what an absent artifact means for this particular check: SKIP where it is
+    optional, a BLOCKED_* reason where its absence is itself the finding.
+    """
+    result = CheckResult.load(path, missing=default_status)
+    # The artifact's own keys, plus a status and provenance — and nothing else.
+    # Consumers downstream read `summary` as a structured block of the check's
+    # own making, so a key the artifact never had cannot be invented here.
+    return {"status": result.status, **result.details}
 
 
 def _app_version_from_config(config_path: Path | None = None) -> str:
@@ -654,6 +752,42 @@ def _normalize_citation_artifact(path: Path | None) -> dict[str, Any]:
     return citation
 
 
+def _normalize_draft_bias_artifact(path: Path | None) -> dict[str, Any]:
+    """Teacher-local `Draft bias` evidence, checked against what the term means.
+
+    Absent evidence blocks on the reason it is absent: before the supervised beta
+    there are no real teacher Approvals to measure over, so this is a gap that a
+    release cannot close by rerunning anything locally.
+    """
+    bias = _normalize_artifact(path, "BLOCKED_TEACHER_APPROVALS")
+    if bias.get("status") == "BLOCKED_TEACHER_APPROVALS" and not bias.get("reason"):
+        bias["reason"] = (
+            f"no {DRAFT_BIAS_EVIDENCE_TIER} Draft bias evidence — real teacher Approvals "
+            "do not exist before the supervised beta"
+        )
+    if bias.get("status") != "PASS":
+        return bias
+
+    failures: list[str] = []
+    tier = str(bias.get("evidence_tier") or "")
+    if tier != DRAFT_BIAS_EVIDENCE_TIER:
+        failures.append(
+            f"evidence tier {tier or 'missing'!r} is not {DRAFT_BIAS_EVIDENCE_TIER!r}: "
+            "Draft bias must be measured over real teacher Approvals"
+        )
+    n = bias.get("n")
+    if not isinstance(n, int) or n < EVIDENCE_FLOOR:
+        failures.append(f"n={n} is below the evidence floor of {EVIDENCE_FLOOR} approvals")
+    if bias.get("draft_bias") is None:
+        failures.append("draft_bias is null: no direction was measured")
+
+    if failures:
+        bias["status"] = "FAIL"
+        bias["reason"] = "teacher-local Draft bias evidence does not meet the floor"
+        bias["failures"] = failures
+    return bias
+
+
 def _normalize_updater_artifact(path: Path | None, expected_version: str) -> dict[str, Any]:
     updater = _normalize_artifact(path, "BLOCKED_UPDATER_EVIDENCE")
     if updater.get("status") != "PASS":
@@ -670,14 +804,6 @@ def _normalize_updater_artifact(path: Path | None, expected_version: str) -> dic
             ("details.manifest_version", details.get("manifest_version")),
         ],
     )
-
-
-def _normalize_updater_key_artifact(path: Path | None) -> dict[str, Any]:
-    return _normalize_artifact(path, "SKIP")
-
-
-def _normalize_github_release_artifact(path: Path | None) -> dict[str, Any]:
-    return _normalize_artifact(path, "BLOCKED_GITHUB_RELEASE_PREFLIGHT")
 
 
 def _normalize_updater_channel_artifact(path: Path | None, expected_version: str) -> dict[str, Any]:
@@ -820,8 +946,9 @@ def collect_evidence(args: argparse.Namespace) -> dict[str, Any]:
     evidence["frontend"] = _normalize_artifact(args.frontend_artifact, "SKIP")
     evidence["rust"] = _normalize_artifact(args.rust_artifact, "SKIP")
     evidence["release_version"] = _normalize_artifact(args.release_version_artifact, "BLOCKED_RELEASE_VERSION")
-    evidence["github_release"] = _normalize_github_release_artifact(args.github_release_artifact)
-    evidence["updater_key"] = _normalize_updater_key_artifact(args.updater_key_artifact)
+    evidence["github_release"] = _normalize_artifact(
+        args.github_release_artifact, "BLOCKED_GITHUB_RELEASE_PREFLIGHT")
+    evidence["updater_key"] = _normalize_artifact(args.updater_key_artifact, "SKIP")
     evidence["updater"] = _augment_updater_with_key_diagnostic(
         _normalize_updater_artifact(args.updater_artifact, expected_version),
         evidence["updater_key"],
@@ -835,12 +962,27 @@ def collect_evidence(args: argparse.Namespace) -> dict[str, Any]:
         args.clean_machine_artifact,
         expected_version=expected_version,
     )
+    evidence["draft_bias"] = _normalize_draft_bias_artifact(args.draft_bias_artifact)
     evidence["verdict"] = decide_verdict(evidence)
     evidence["blockers"] = summarize_blockers(evidence)
     evidence["e2e_matrix"] = build_e2e_matrix(evidence)
     evidence["e2e_matrix_summary"] = summarize_e2e_matrix(evidence["e2e_matrix"])
+    evidence["ship_v1_matrix"] = build_e2e_matrix(evidence, SHIP_V1_PROFILE)
+    evidence["ship_v1_matrix_summary"] = summarize_e2e_matrix(evidence["ship_v1_matrix"])
     evidence["next_actions"] = build_next_actions(evidence)
     return evidence
+
+
+def _matrix_table_rows(matrix: list[dict[str, Any]]) -> list[str]:
+    lines = []
+    for row in matrix:
+        area = str(row.get("area", "")).replace("|", "\\|")
+        requirement = str(row.get("requirement", "")).replace("|", "\\|")
+        row_evidence = str(row.get("evidence", "")).replace("|", "\\|")
+        status = str(row.get("status", "MISSING"))
+        summary = str(row.get("summary", "")).replace("|", "\\|")
+        lines.append(f"| {area} | {requirement} | {row_evidence} | `{status}` | {summary} |")
+    return lines
 
 
 def write_reports(evidence: dict[str, Any], out_dir: Path) -> tuple[Path, Path]:
@@ -877,13 +1019,31 @@ def write_reports(evidence: dict[str, Any], out_dir: Path) -> tuple[Path, Path]:
         "| Area | Requirement | Evidence | Status | Summary |",
         "| --- | --- | --- | --- | --- |",
     ])
-    for row in matrix:
-        area = str(row.get("area", "")).replace("|", "\\|")
-        requirement = str(row.get("requirement", "")).replace("|", "\\|")
-        row_evidence = str(row.get("evidence", "")).replace("|", "\\|")
-        status = str(row.get("status", "MISSING"))
-        summary = str(row.get("summary", "")).replace("|", "\\|")
-        lines.append(f"| {area} | {requirement} | {row_evidence} | `{status}` | {summary} |")
+    lines.extend(_matrix_table_rows(matrix))
+
+    # Ship-v1.0 asks for everything above and more, so only the difference is
+    # tabulated — repeating the beta rows would invite the two tables to be read
+    # as alternatives rather than as one nested inside the other.
+    ship_matrix = evidence.get("ship_v1_matrix") or build_e2e_matrix(evidence, SHIP_V1_PROFILE)
+    ship_summary = evidence.get("ship_v1_matrix_summary") or summarize_e2e_matrix(ship_matrix)
+    beta_ids = {row.get("id") for row in matrix}
+    ship_only = [row for row in ship_matrix if row.get("id") not in beta_ids]
+    if ship_only:
+        lines.extend([
+            "",
+            "## Ship v1.0 Matrix",
+            "",
+            (
+                "Ship v1.0 requires every row above, plus the rows below. This is not the "
+                "beta entry gate and does not change the verdict. Passing rows: "
+                f"{ship_summary.get('passing', 0)}/{ship_summary.get('total', len(ship_matrix))}; "
+                f"blocking rows: {ship_summary.get('blocking', 0)}."
+            ),
+            "",
+            "| Area | Requirement | Evidence | Status | Summary |",
+            "| --- | --- | --- | --- | --- |",
+        ])
+        lines.extend(_matrix_table_rows(ship_only))
     blockers = evidence.get("blockers") or summarize_blockers(evidence)
     if blockers:
         lines.extend(["", "## Blocking Items", ""])
@@ -947,6 +1107,15 @@ def main() -> None:
         help="Optional updater signing-key preflight artifact from scripts/updater_key_doctor.py",
     )
     parser.add_argument("--clean-machine-artifact", type=Path, default=None)
+    parser.add_argument(
+        "--draft-bias-artifact",
+        type=Path,
+        default=Path(DRAFT_BIAS_ARTIFACT),
+        help=(
+            "Optional teacher-local Draft bias evidence: the calibration health payload for one "
+            f"Assignment, with evidence_tier={DRAFT_BIAS_EVIDENCE_TIER}. Ship-v1.0 only."
+        ),
+    )
     parser.add_argument(
         "--expected-version",
         default=None,

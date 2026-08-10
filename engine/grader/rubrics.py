@@ -12,13 +12,13 @@ from __future__ import annotations
 
 import json
 import re
-import sqlite3
 from datetime import datetime, timezone
 
-from pathlib import Path
 from typing import Any
 
 from grader.schema import CriterionType, Rubric, RubricCriterion, RubricLevel
+
+from grader.db import Database
 
 
 # ---------------------------------------------------------------------------
@@ -59,13 +59,8 @@ def _parse_criterion_type(s: str) -> CriterionType:
 class RubricStore:
     """Versioned rubric store. Versions are immutable once created."""
 
-    def __init__(self, path: Path | str = "fixtures/rubrics.db") -> None:
-        self.path = Path(path)
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.db = sqlite3.connect(self.path)
-        # Shared across the request threadpool and the grading thread; see exemplars.py.
-        self.db.execute("PRAGMA journal_mode=WAL")
-        self.db.row_factory = sqlite3.Row
+    def __init__(self, db: Database) -> None:
+        self.db = db
         self.db.executescript(SCHEMA)
 
     def save(self, rubric: Rubric, *, canvas_id: str | None = None) -> int:
@@ -125,14 +120,21 @@ def parse_pasted_rubric(text: str, *, title: str | None = None) -> Rubric:
     page, or a syllabus should get something usable without formatting lectures.
     """
     lines = [line.rstrip() for line in text.strip().splitlines() if line.strip()]
+    if not lines:
+        raise ValueError("rubric text is empty")
 
-    # Detect title from first heading or first non-table line
+    # Detect the title from a document heading. Only a level-1 heading: `## ` is
+    # how _parse_text_rubric marks a criterion, so consuming one here would eat
+    # the first criterion of any rubric pasted without a title above it — and a
+    # rubric silently missing a dimension grades every student against it.
     if title is None:
-        if lines[0].startswith("#"):
+        if lines[0].startswith("#") and not lines[0].startswith("##"):
             title = lines[0].lstrip("#").strip()
             lines = lines[1:]
         else:
             title = "Pasted Rubric"
+        if not lines:
+            raise ValueError("rubric text has a title but no criteria")
 
     # Try markdown table format first
     if "|" in lines[0] and "---" in lines[1] if len(lines) > 1 else False:
