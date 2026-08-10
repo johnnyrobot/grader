@@ -222,6 +222,13 @@ export interface CanvasImportResult {
   imported: number;
   submissions: { id: string; canvas_user_id: string }[];
   failures: { user_id: string; error: string }[];
+  /**
+   * Students Canvas listed who handed nothing in. They are deliberately kept
+   * out of the queue — an AI draft scored from an empty submission looks
+   * exactly like a draft of real work — but they are reported, because a
+   * teacher expecting 30 rows and seeing 26 needs to know why.
+   */
+  skipped: { user_id: string; reason: string }[];
 }
 
 export interface CanvasPostResult {
@@ -245,6 +252,12 @@ export interface FlushResult {
   failed: number;
   /** Entries that burned their retries and stopped being attempted. */
   abandoned: number;
+  /**
+   * Posts delivered without the feedback file attached to them, because Canvas
+   * would not take the upload after every retry. The grade reached the student;
+   * the file did not.
+   */
+  attachments_abandoned: number;
   remaining: number;
 }
 

@@ -942,6 +942,7 @@ def canvas_import(req: CanvasImportReq,
     imported = 0
     imported_submissions: list[dict] = []
     failures: list[dict] = []
+    skipped: list[dict] = []
 
     for sub in submissions:
         user_id = sub.get("user_id")
@@ -951,6 +952,17 @@ def canvas_import(req: CanvasImportReq,
         # Canvas sends `"body": null` — the key is there — for a student who
         # uploaded a file instead of typing, so a default cannot stand in.
         body = (sub.get("body") or "").strip()
+
+        # Canvas returns a row for every enrolled student, submitted or not.
+        # Importing one produces an AI draft scored from nothing, sitting in
+        # the queue looking exactly like a draft of real work — and a teacher
+        # working down the lane approves it. Note this is emptiness at the
+        # source, not a file Grader could not read: that student did submit,
+        # and dropping them would hide real work behind a line in `failures`.
+        if not body and not sub.get("attachments"):
+            skipped.append({"user_id": user_id, "reason": "nothing submitted"})
+            continue
+
         texts: list[str] = [body] if body else []
 
         scanned = False
@@ -1003,8 +1015,13 @@ def canvas_import(req: CanvasImportReq,
 
     db.commit()
     _audit(f"canvas_{req.course_id}_{req.assignment_id}", "canvas", "import",
-           {"imported": imported, "failures": len(failures)})
-    return {"imported": imported, "submissions": imported_submissions, "failures": failures}
+           {"imported": imported, "failures": len(failures), "skipped": len(skipped)})
+    return {
+        "imported": imported,
+        "submissions": imported_submissions,
+        "failures": failures,
+        "skipped": skipped,
+    }
 
 
 @app.post("/api/canvas/post", dependencies=[Depends(_auth)])

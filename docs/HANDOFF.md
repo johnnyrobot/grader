@@ -124,6 +124,13 @@ Both remaining promises were then implemented, and a fourth defect surfaced on t
   nothing. `sub.get("body", "").strip()` therefore hit `None`, and one such row was a 500 for the
   entire class: nobody imported. Latent until `list_submissions` started reading Canvas directly;
   `canvas-pp-cli --compact` had been dropping the key, so the default stood in.
+- **A student who handed nothing in got an AI draft anyway.** Canvas returns a submission row for
+  every enrolled student, submitted or not, and import took them all — so an empty submission was
+  graded from nothing and sat in the queue looking exactly like a draft of real work, which is
+  precisely the thing a teacher working down a lane approves. Import now skips them and reports
+  them in a `skipped` list, because a teacher expecting 30 rows and seeing 26 needs to know why.
+  The line is emptiness *at the source*: a file Grader could not parse still imports, because that
+  student did submit and dropping them would hide real work behind one line in `failures`.
 - **A cleared grade was invisible to import.** `list_ungraded` tested `workflow_state != "graded"`,
   but Canvas leaves that at `graded` when a teacher *removes* a score — and removing a score is how
   a teacher says "do this one over". `needs_grading()` now reads the score, with `excused` checked
