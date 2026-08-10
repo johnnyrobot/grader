@@ -23,6 +23,7 @@ import os
 import secrets
 import threading
 from collections import defaultdict
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -1029,14 +1030,23 @@ def canvas_post(req: CanvasPostReq, settings: Settings = Depends(current_setting
     # the upload is the same outage FR-3.5 already covers. Ids that did land are
     # kept so a queued post carries them and the file is not uploaded twice.
     uploaded: dict[str, list[int]] = {}
+    pending: dict[str, list[str]] = {}
+    upload_error = ""
     try:
         for grade in batch.ready:
-            file_ids = _upload_attachments_for(
+            upload = _upload_attachments_for(
                 grade, req.course_id, req.assignment_id, settings
             )
-            if file_ids:
-                uploaded[grade.canvas_user_id] = file_ids
-                grade_data[grade.canvas_user_id]["file_ids"] = file_ids
+            if upload.file_ids:
+                uploaded[grade.canvas_user_id] = upload.file_ids
+                grade_data[grade.canvas_user_id]["file_ids"] = upload.file_ids
+            if upload.pending:
+                pending[grade.canvas_user_id] = upload.pending
+                upload_error = upload_error or upload.error
+        if pending:
+            # Posting now would deliver the grade without the feedback the
+            # teacher attached to it, and nothing would be left to send it.
+            raise RuntimeError(f"attachment upload failed: {upload_error}")
 
         result = post_grades_batch(
             req.course_id,
@@ -1055,6 +1065,7 @@ def canvas_post(req: CanvasPostReq, settings: Settings = Depends(current_setting
         # because queued is not posted.
         for grade in batch.ready:
             ids = uploaded.get(grade.canvas_user_id)
+            paths = pending.get(grade.canvas_user_id)
             _post_queue.enqueue(
                 str(req.course_id),
                 str(req.assignment_id),
@@ -1062,10 +1073,12 @@ def canvas_post(req: CanvasPostReq, settings: Settings = Depends(current_setting
                 str(grade.posted_grade),
                 comment=grade.text_comment,
                 file_ids=json.dumps(ids) if ids else None,
+                pending_files=json.dumps(paths) if paths else None,
                 approved_at=grade.approved_at,
             )
         _audit(f"canvas_{req.course_id}_{req.assignment_id}", "canvas", "post_queued",
-               {"error": str(e)[:200], "queued": len(batch.ready)})
+               {"error": str(e)[:200], "queued": len(batch.ready),
+                "pending_attachments": sum(len(p) for p in pending.values())})
         return {
             "posted": 0,
             "queued": len(batch.ready),
@@ -1096,39 +1109,93 @@ def canvas_post(req: CanvasPostReq, settings: Settings = Depends(current_setting
     }
 
 
+@dataclass
+class AttachmentUploads:
+    """What became of one grade's attachments on the way to Canvas.
+
+    A path in `pending` is a file this machine may still send that Canvas did
+    not take. It is kept apart from the ids so the queue can finish the job:
+    the alternative is a grade posted without the feedback attached to it.
+    """
+
+    file_ids: list[int]
+    pending: list[str]
+    error: str = ""
+
+
+def _sendable(entity_ref: str, path: Path) -> bool:
+    """May these bytes leave this machine, and are they still there?
+
+    Re-checked at every send, not only at attach time: a path can be replaced
+    with a symlink out of the data directory between choosing and posting, and
+    a file the teacher moved or deleted is no longer feedback to send.
+
+    `entity_ref` is whatever the caller can name the send by — a grade id while
+    posting, an assignment key while flushing, because a queue entry is
+    deliberately keyed by student rather than by grade so it survives without
+    one. Both are audit entity refs; neither is assumed to be the other.
+    """
+    if not path.resolve().is_relative_to(_attachments.root):
+        _audit(entity_ref, "canvas", "attachment_refused", {"path": str(path)})
+        return False
+    if not path.is_file():
+        _audit(entity_ref, "canvas", "attachment_missing", {"path": str(path)})
+        return False
+    return True
+
+
 def _upload_attachments_for(
     grade, course_id: int | str, assignment_id: int | str, settings: Settings
-) -> list[int]:
-    """Upload this grade's attachments, newest last. Returns their Canvas ids.
+) -> AttachmentUploads:
+    """Upload this grade's attachments, newest last.
 
-    A file the teacher attached and then moved or deleted is skipped rather than
-    failing the post: the grade is the thing that must reach the student, and a
-    missing feedback copy is recorded in the audit log for them to see.
+    A file the teacher attached and then moved or deleted is skipped rather
+    than failing the post: the grade is the thing that must reach the student,
+    and a missing feedback copy is recorded in the audit log for them to see. A
+    file Canvas would not *take*, though, is a different case — the file is
+    still there, so it is reported as pending and FR-3.5 queues it.
     """
     from grader.canvas import upload_comment_attachment
 
     file_ids: list[int] = []
+    pending: list[str] = []
+    error = ""
     for attachment in _attachments.for_grade(grade.grade_id):
-        # Re-checked here, not only at attach time: a path can be replaced with
-        # a symlink out of the data directory between choosing and posting.
-        if not attachment.path.resolve().is_relative_to(_attachments.root):
-            _audit(grade.grade_id, "canvas", "attachment_refused",
-                   {"path": str(attachment.path)})
+        if not _sendable(grade.grade_id, attachment.path):
             continue
-        if not attachment.exists:
-            _audit(grade.grade_id, "canvas", "attachment_missing",
-                   {"path": str(attachment.path)})
-            continue
-        file_ids.append(
-            upload_comment_attachment(
-                course_id,
-                assignment_id,
-                grade.canvas_user_id,
-                attachment.path,
-                **settings.canvas.as_kwargs(),
+        try:
+            file_ids.append(
+                upload_comment_attachment(
+                    course_id,
+                    assignment_id,
+                    grade.canvas_user_id,
+                    attachment.path,
+                    **settings.canvas.as_kwargs(),
+                )
             )
+        except Exception as exc:
+            pending.append(str(attachment.path))
+            error = error or str(exc)[:200]
+    return AttachmentUploads(file_ids=file_ids, pending=pending, error=error)
+
+
+def _queued_uploader(settings: Settings):
+    """How the queue finishes an upload an outage stopped.
+
+    The bound on which bytes may leave this machine belongs to this layer, not
+    to the queue, so it is applied again here rather than trusted from the row.
+    Returning None tells the queue to drop a path that no longer qualifies.
+    """
+    from grader.canvas import upload_comment_attachment
+
+    def upload(course_id: str, assignment_id: str, user_id: str, path: Path) -> int | None:
+        if not _sendable(f"canvas_{course_id}_{assignment_id}", path):
+            return None
+        return upload_comment_attachment(
+            course_id, assignment_id, user_id, path, **settings.canvas.as_kwargs()
         )
-    return file_ids
+
+    return upload
 
 
 class AttachmentReq(BaseModel):
@@ -1190,7 +1257,9 @@ def canvas_post_queue_status() -> dict:
 @app.post("/api/canvas/flush", dependencies=[Depends(_auth)])
 def canvas_flush_queue(settings: Settings = Depends(current_settings)) -> dict:
     """Flush the offline post queue — attempt to post all pending grades."""
-    result = _post_queue.flush(**settings.canvas.as_kwargs())
+    result = _post_queue.flush(
+        upload=_queued_uploader(settings), **settings.canvas.as_kwargs()
+    )
     _audit("canvas_queue", "engine", "flush", result)
     return result
 

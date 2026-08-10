@@ -181,7 +181,12 @@ pass — a bias nobody is shown still anchors the reviewer low.
 
 - Citations remain experimental (69% fixture accuracy, 0 false positives) and must stay visibly
   labelled.
-- FR-3.4 comment attachments have never run against live Canvas — MockTransport only.
+- FR-3.4 comment attachments now have live evidence. `scripts/live_canvas_e2e.py --apply` uploads
+  a feedback file with a graded submission and reads it back off Canvas — on that student's
+  submission comment, and absent from `/courses/:c/files`, which is the shared-course-content
+  defect the endpoint choice exists to avoid. It also fails the upload on purpose and checks that
+  FR-3.5 queues the post with the file still to send. Both passed on course `106`, assignment
+  `2841`; see `artifacts/release-evidence/canvas-live-current.json`.
 - The visual sweep no longer overstates coverage: it covers 17 screens including `15-calibration`
   and 186 visible controls, and `release_readiness.py` now floors the check at `len()` of the lists
   `frontend_evidence.py` validates against, so the floor cannot drift from them again. One caveat

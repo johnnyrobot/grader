@@ -96,7 +96,8 @@ def test_flush_posts_each_pending_entry_and_clears_it(queue, monkeypatch):
 
     result = queue.flush()
 
-    assert result == {"posted": 2, "failed": 0, "abandoned": 0, "remaining": 0}
+    assert result == {"posted": 2, "failed": 0, "abandoned": 0,
+                      "attachments_abandoned": 0, "remaining": 0}
     assert posted == [("10", "20", "1", "7"), ("10", "20", "2", "7")]
     assert queue.pending() == []
 
@@ -131,7 +132,8 @@ def test_a_failing_post_stays_queued_so_it_can_be_retried(queue, monkeypatch):
 
     result = queue.flush()
 
-    assert result == {"posted": 0, "failed": 1, "abandoned": 0, "remaining": 1}
+    assert result == {"posted": 0, "failed": 1, "abandoned": 0,
+                      "attachments_abandoned": 0, "remaining": 1}
     assert queue.pending()[0]["attempts"] == 1
 
 
@@ -146,7 +148,8 @@ def test_one_failing_entry_does_not_block_the_others(queue, monkeypatch):
 
     result = queue.flush()
 
-    assert result == {"posted": 1, "failed": 1, "abandoned": 0, "remaining": 1}
+    assert result == {"posted": 1, "failed": 1, "abandoned": 0,
+                      "attachments_abandoned": 0, "remaining": 1}
     assert [row["user_id"] for row in queue.pending()] == ["bad"]
 
 
@@ -165,7 +168,8 @@ def test_an_entry_stops_being_retried_once_it_has_burned_its_attempts(queue, mon
         result = queue.flush()
 
     assert len(tries) == MAX_POST_ATTEMPTS
-    assert result == {"posted": 0, "failed": 0, "abandoned": 1, "remaining": 1}
+    assert result == {"posted": 0, "failed": 0, "abandoned": 1,
+                      "attachments_abandoned": 0, "remaining": 1}
 
 
 def test_an_abandoned_entry_stays_visible_with_its_last_error(queue, monkeypatch):
@@ -183,6 +187,91 @@ def test_an_abandoned_entry_stays_visible_with_its_last_error(queue, monkeypatch
     assert len(pending) == 1
     assert pending[0]["attempts"] == MAX_POST_ATTEMPTS
     assert pending[0]["last_error"] == "student is not enrolled"
+
+
+def test_a_queued_attachment_with_no_uploader_is_not_silently_posted_without_it(
+    queue, monkeypatch
+):
+    """Flushing without a way to upload must not deliver the grade bare."""
+    monkeypatch.setattr(
+        "grader.canvas.post_grade",
+        lambda *a, **k: pytest.fail("must not post while a file is still pending"),
+    )
+    _enqueue(queue, pending_files=json.dumps(["/tmp/feedback.docx"]))
+
+    result = queue.flush()
+
+    assert result == {"posted": 0, "failed": 1, "abandoned": 0,
+                      "attachments_abandoned": 0, "remaining": 1}
+    assert "uploader" in queue.pending()[0]["last_error"]
+
+
+def test_a_file_canvas_will_never_take_stops_holding_the_grade_hostage(queue, monkeypatch):
+    """The grade is what has to reach the student.
+
+    Holding it back until the attachment lands is right while the failure
+    might be an outage. Held forever it is worse than the silent drop it
+    replaced: the student gets no grade at all.
+    """
+    posts = []
+    monkeypatch.setattr(
+        "grader.canvas.post_grade",
+        lambda course_id, assignment_id, user_id, **kw: posts.append(kw),
+    )
+
+    def canvas_refuses_the_file(*args, **kwargs):
+        raise RuntimeError("file exceeds the course quota")
+
+    _enqueue(queue, pending_files=json.dumps(["/tmp/feedback.docx"]))
+
+    for _ in range(MAX_POST_ATTEMPTS - 1):
+        result = queue.flush(upload=canvas_refuses_the_file)
+    assert posts == [], "the grade waits while the failure might still be an outage"
+
+    result = queue.flush(upload=canvas_refuses_the_file)
+
+    assert result["posted"] == 1
+    assert result["attachments_abandoned"] == 1
+    assert posts[0]["comment_file_ids"] is None
+    assert queue.pending() == []
+
+
+def test_a_file_given_up_on_leaves_why_behind_on_the_entry(queue, monkeypatch):
+    """The teacher has to be able to find out the feedback never went."""
+    monkeypatch.setattr("grader.canvas.post_grade", lambda *a, **k: None)
+    _enqueue(queue, pending_files=json.dumps(["/tmp/feedback.docx"]))
+
+    for _ in range(MAX_POST_ATTEMPTS - 1):
+        queue.flush(
+            upload=lambda *a, **k: (_ for _ in ()).throw(RuntimeError("course quota"))
+        )
+
+    assert "course quota" in queue.pending()[0]["last_error"]
+
+
+def test_a_queue_written_before_pending_files_existed_gains_the_column(tmp_path):
+    """An install that queued a post under the old schema must still flush."""
+    db = Database.at(tmp_path / "post_queue.db")
+    db.executescript(
+        """
+        CREATE TABLE post_queue (
+            id INTEGER PRIMARY KEY, course_id TEXT NOT NULL,
+            assignment_id TEXT NOT NULL, user_id TEXT NOT NULL, grade TEXT NOT NULL,
+            rubric_assessment TEXT, comment TEXT, file_ids TEXT,
+            approved_at TEXT NOT NULL, attempts INTEGER DEFAULT 0,
+            last_error TEXT, created_at TEXT NOT NULL
+        );
+        INSERT INTO post_queue (course_id, assignment_id, user_id, grade, approved_at,
+                                created_at)
+        VALUES ('10','20','98765','7','2026-08-07T00:00:00+00:00',
+                '2026-08-07T00:00:00+00:00');
+        """
+    )
+    db.commit()
+
+    reopened = OfflinePostQueue(db)
+
+    assert reopened.pending()[0]["pending_files"] is None
 
 
 # -- The route that is supposed to fill it -----------------------------------

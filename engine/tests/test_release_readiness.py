@@ -120,6 +120,7 @@ def test_build_e2e_matrix_maps_public_beta_requirements_to_evidence():
             "assignment_id": 2841,
             "posted": 1,
             "progress_state": "completed",
+            **CANVAS_ATTACHMENT_EVIDENCE,
             "artifact": {"path": "artifacts/release-evidence/canvas-live.json"},
         },
         "rust": {"status": "PASS"},
@@ -185,13 +186,49 @@ def test_the_ui_row_passes_at_the_counts_the_frontend_gate_currently_requires():
     assert by_id["ui-onboarding-queue-review-settings-models"]["status"] == "PASS"
 
 
+CANVAS_ATTACHMENT_EVIDENCE = {
+    "attachment": {"read_back": True, "in_shared_course_files": False},
+    "attachment_queue": {"read_back": True, "in_shared_course_files": False},
+}
+
+
+def test_a_canvas_run_without_attachment_evidence_does_not_pass_the_canvas_row():
+    """The docs now say attachment write-back is verified. Something has to
+    check it: an older artifact says PASS about the score and comment alone."""
+    evidence = _passing_evidence(canvas={"status": "PASS"})
+
+    by_id = {row["id"]: row for row in build_e2e_matrix(evidence)}
+
+    assert by_id["canvas-import-approve-post-readback"]["status"] == "FAIL"
+
+
+def test_a_canvas_run_whose_file_reached_shared_course_files_fails_the_row():
+    evidence = _passing_evidence(canvas={
+        "status": "PASS",
+        "attachment": {"read_back": True, "in_shared_course_files": True},
+        "attachment_queue": {"read_back": True, "in_shared_course_files": False},
+    })
+
+    by_id = {row["id"]: row for row in build_e2e_matrix(evidence)}
+
+    assert by_id["canvas-import-approve-post-readback"]["status"] == "FAIL"
+
+
+def test_the_canvas_row_passes_with_both_attachment_paths_read_back():
+    evidence = _passing_evidence(canvas={"status": "PASS", **CANVAS_ATTACHMENT_EVIDENCE})
+
+    by_id = {row["id"]: row for row in build_e2e_matrix(evidence)}
+
+    assert by_id["canvas-import-approve-post-readback"]["status"] == "PASS"
+
+
 def _passing_evidence(**overrides):
     """Every gate passing, so a test can vary the one thing it is about."""
     evidence = {
         "quality": {"status": "PASS"},
         "fairness": {"status": "PASS"},
         "citations": {"status": "PASS_EXPERIMENTAL"},
-        "canvas": {"status": "PASS"},
+        "canvas": {"status": "PASS", **CANVAS_ATTACHMENT_EVIDENCE},
         "privacy": {"status": "PASS"},
         "performance": {"status": "PASS"},
         "frontend": {

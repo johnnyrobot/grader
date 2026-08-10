@@ -294,6 +294,156 @@ def test_ids_already_uploaded_survive_into_the_queue_when_the_post_fails(
     assert json.loads(api._post_queue.pending()[0]["file_ids"]) == [4242]
 
 
+# -- An upload that failed: FR-3.5, not a lost file --------------------------
+
+
+def _upload_is_down(*args, **kwargs):
+    raise RuntimeError("connection refused")
+
+
+def test_an_upload_canvas_refused_queues_the_post_instead_of_dropping_the_file(
+    tmp_path, monkeypatch, api_module, a_file
+):
+    """The outage took the file, not the grade.
+
+    Posting the grade now would deliver it without the feedback the teacher
+    attached, and the queue would have nothing left to send.
+    """
+    api = api_module
+    _engine_with_approved_grade(api, tmp_path, monkeypatch)
+    api._attachments.attach("gr_1", a_file)
+
+    monkeypatch.setattr("grader.canvas.upload_comment_attachment", _upload_is_down)
+    monkeypatch.setattr(
+        "grader.canvas.post_grades_batch",
+        lambda *a, **k: pytest.fail("must not post a grade whose feedback is missing"),
+    )
+
+    result = api.canvas_post(
+        api.CanvasPostReq(course_id=10, assignment_id=20, grade_ids=["gr_1"]),
+        settings=api.current_settings(),
+    )
+
+    assert result["queued"] == 1
+    assert json.loads(api._post_queue.pending()[0]["pending_files"]) == [
+        str(a_file.resolve())
+    ]
+
+
+def test_an_upload_that_failed_does_not_throw_away_the_approval(
+    tmp_path, monkeypatch, api_module, a_file
+):
+    api = api_module
+    _engine_with_approved_grade(api, tmp_path, monkeypatch)
+    api._attachments.attach("gr_1", a_file)
+
+    monkeypatch.setattr("grader.canvas.upload_comment_attachment", _upload_is_down)
+    monkeypatch.setattr("grader.canvas.post_grades_batch", lambda *a, **k: {})
+
+    api.canvas_post(
+        api.CanvasPostReq(course_id=10, assignment_id=20, grade_ids=["gr_1"]),
+        settings=api.current_settings(),
+    )
+
+    row = api._db().execute(
+        "SELECT approved_at, posted_at FROM grade_records WHERE id = ?", ("gr_1",)
+    ).fetchone()
+    assert row["approved_at"] is not None
+    assert row["posted_at"] is None
+
+
+def test_flushing_uploads_the_file_the_outage_stopped_and_sends_its_id(
+    tmp_path, monkeypatch, api_module, a_file
+):
+    api = api_module
+    _engine_with_approved_grade(api, tmp_path, monkeypatch)
+    api._attachments.attach("gr_1", a_file)
+    monkeypatch.setattr("grader.canvas.upload_comment_attachment", _upload_is_down)
+    api.canvas_post(
+        api.CanvasPostReq(course_id=10, assignment_id=20, grade_ids=["gr_1"]),
+        settings=api.current_settings(),
+    )
+
+    uploaded: list[Path] = []
+
+    def canvas_is_back(course_id, assignment_id, user_id, path, **kwargs):
+        uploaded.append(Path(path))
+        return 4242
+
+    posted: dict = {}
+    monkeypatch.setattr("grader.canvas.upload_comment_attachment", canvas_is_back)
+    monkeypatch.setattr(
+        "grader.canvas.post_grade",
+        lambda *a, **kw: posted.update(kw),
+    )
+
+    result = api.canvas_flush_queue(settings=api.current_settings())
+
+    assert result["posted"] == 1
+    assert uploaded == [a_file.resolve()]
+    assert posted["comment_file_ids"] == [4242]
+    assert api._post_queue.pending() == []
+
+
+def test_a_file_uploaded_during_a_flush_is_not_uploaded_twice(
+    tmp_path, monkeypatch, api_module, a_file
+):
+    """Canvas took the file on the retry, then refused the grade."""
+    api = api_module
+    _engine_with_approved_grade(api, tmp_path, monkeypatch)
+    api._attachments.attach("gr_1", a_file)
+    monkeypatch.setattr("grader.canvas.upload_comment_attachment", _upload_is_down)
+    api.canvas_post(
+        api.CanvasPostReq(course_id=10, assignment_id=20, grade_ids=["gr_1"]),
+        settings=api.current_settings(),
+    )
+
+    monkeypatch.setattr(
+        "grader.canvas.upload_comment_attachment", lambda c, a, u, p, **kw: 4242
+    )
+    monkeypatch.setattr(
+        "grader.canvas.post_grade",
+        lambda *a, **k: (_ for _ in ()).throw(RuntimeError("canvas rejected it")),
+    )
+
+    api.canvas_flush_queue(settings=api.current_settings())
+
+    entry = api._post_queue.pending()[0]
+    assert json.loads(entry["file_ids"]) == [4242]
+    assert json.loads(entry["pending_files"] or "[]") == []
+
+
+def test_a_queued_file_that_left_the_data_directory_is_not_uploaded_at_flush(
+    tmp_path, monkeypatch, api_module, a_file
+):
+    """The same bound as attaching. A queued path is re-checked, not trusted."""
+    api = api_module
+    _engine_with_approved_grade(api, tmp_path, monkeypatch)
+    api._attachments.attach("gr_1", a_file)
+    monkeypatch.setattr("grader.canvas.upload_comment_attachment", _upload_is_down)
+    api.canvas_post(
+        api.CanvasPostReq(course_id=10, assignment_id=20, grade_ids=["gr_1"]),
+        settings=api.current_settings(),
+    )
+
+    outside = tmp_path.parent / "secrets.txt"
+    outside.write_text("ssh-rsa AAAA...")
+    a_file.unlink()
+    a_file.symlink_to(outside)
+
+    monkeypatch.setattr(
+        "grader.canvas.upload_comment_attachment",
+        lambda *a, **k: pytest.fail("must not send a file from outside the data dir"),
+    )
+    posted: dict = {}
+    monkeypatch.setattr("grader.canvas.post_grade", lambda *a, **kw: posted.update(kw))
+
+    result = api.canvas_flush_queue(settings=api.current_settings())
+
+    assert result["posted"] == 1
+    assert not posted["comment_file_ids"]
+
+
 # -- What may be sent --------------------------------------------------------
 
 

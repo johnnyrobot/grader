@@ -177,7 +177,7 @@ uv run python scripts/generate_appcast.py --app /path/to/Grader.app --version 0.
 uv run python scripts/updater_evidence.py --manifest latest.json --artifact /path/to/Grader.app.tar.gz --out artifacts/release-evidence/updater-current.json  # fails if local artifacts predate the current git commit
 uv run python scripts/publish_local_release.py --dmg /path/to/Grader.dmg --updater-bundle /path/to/Grader.app.tar.gz --manifest latest.json --version 0.1.1  # dry-run; add --apply only after all local evidence passes
 uv run python scripts/updater_channel_preflight.py --current-version 0.1.0 --out artifacts/release-evidence/updater-channel-current.json  # run after publishing 0.1.1 to test installed 0.1.0 -> 0.1.1
-uv run python scripts/live_canvas_e2e.py --apply --course-id 106 --assignment-id 2841 --course-name "ZZ-GRADER-TEST-SANDBOX (safe to delete)" --output artifacts/release-evidence/canvas-live-current.json
+uv run python scripts/live_canvas_e2e.py --apply --course-id 106 --assignment-id 2841 --course-name "ZZ-GRADER-TEST-SANDBOX (safe to delete)" --output artifacts/release-evidence/canvas-live-current.json  # needs the engine running and two ungraded sandbox submissions; writes its feedback file under --attachment-dir (default $GRADER_DATA_DIR, else fixtures)
 uv run python scripts/clean_machine_evidence.py --print-manual-runbook > clean-machine-runbook.md
 uv run python scripts/clean_machine_evidence.py --print-manual-template > clean-machine-manual-evidence.json
 uv run python scripts/computer_use_sweep_evidence.py --capture-dir /path/to/computer-use-captures --out /path/to/evidence-root/computer_use_instructor_sweep.json

@@ -128,6 +128,14 @@ scripts/
   states such as approved + "Teacher changes not saved yet" or "Score updated from N to N". Include
   the PASS JSON in clean-machine manual evidence for `computer_use_instructor_sweep`.
 - **`seed_canvas_sandbox.py`**: dry-run by default. `--apply` to write. Refuses courses without `ZZ-GRADER-TEST` marker.
+- **`live_canvas_e2e.py`**: dry-run by default; `--apply` writes to live Canvas and the course name
+  must start with `ZZ-GRADER-TEST`. Needs **two ungraded submissions** — one for the ordinary post
+  path, one for the upload-failure probe, since a grade Canvas has taken cannot be posted again.
+  Top up with `seed_canvas_sandbox.py`'s `ensure_students` / `submit_for_cohort`. Writes its
+  feedback file under `--attachment-dir` (default `$GRADER_DATA_DIR`, else `fixtures`), because the
+  engine refuses to send a file from anywhere else. The probe **PUTs an unroutable Canvas URL into
+  the running engine's settings** and restores it in a `finally`; a `SIGKILL` mid-probe leaves the
+  engine pointed at loopback, so check `/api/settings` if a run is killed.
 - **`clean_machine_evidence.py`**: cannot prove a clean-machine pass by itself. Generate the
   tester runbook with `--print-manual-runbook` and the evidence template with
   `--print-manual-template`. Fill it on the clean Mac with `passed: true`, `performed_at`, `tester`,
@@ -174,6 +182,7 @@ scripts/
 - **NEVER run `seed_canvas_sandbox.py` without `--apply` expecting writes** — it stubs every write in dry-run mode.
 - **NEVER point `seed_canvas_sandbox.py` at a real course** — `guard_sandbox()` checks for `ZZ-GRADER-TEST` marker in course name.
 - **NEVER delete users not starting with `ZZGraderTest`** — teardown's `--delete-users` filters by prefix.
+- **NEVER treat a `live_canvas_e2e.py` PASS as current without checking `source_commit`** — the artifact records the commit it ran against precisely so a run from three commits ago cannot be quoted as proof of present behaviour.
 
 ## NOTES
 

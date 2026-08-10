@@ -211,6 +211,31 @@ def _frontend_matrix_status(evidence: dict[str, Any], expected_screens: int, exp
     return "FAIL"
 
 
+def _canvas_matrix_status(evidence: dict[str, Any]) -> str:
+    """PASS only when the run read the comment attachment back off Canvas.
+
+    The artifact's own `status` was decided by whatever harness wrote it, and a
+    run from before FR-3.4 was covered says PASS about the score and comment
+    alone. The release docs now assert attachment write-back is verified, so
+    the row has to check the evidence for it rather than take PASS on trust —
+    including that the file did not land in shared course files, which is one
+    student's work put where their classmates can reach it.
+    """
+    status = _gate_status(evidence, "canvas")
+    if status != "PASS":
+        return status
+    canvas = evidence.get("canvas", {})
+    if not isinstance(canvas, dict):
+        return "FAIL"
+    for key in ("attachment", "attachment_queue"):
+        block = canvas.get(key)
+        if not isinstance(block, dict):
+            return "FAIL"
+        if not block.get("read_back") or block.get("in_shared_course_files"):
+            return "FAIL"
+    return "PASS"
+
+
 def _draft_bias_is_surfaced(evidence: dict[str, Any]) -> bool:
     """Is the measured figure actually in front of the teacher?
 
@@ -337,9 +362,13 @@ def build_e2e_matrix(
         _matrix_row(
             id="canvas-import-approve-post-readback",
             area="Canvas",
-            requirement="Live Canvas import → approve/override → post → Progress completed → read-back path passes.",
+            requirement=(
+                "Live Canvas import → approve/override → post → Progress completed → "
+                "read-back path passes, including the comment attachment on the "
+                "student's submission and not in shared course files."
+            ),
             gate="canvas",
-            status=_gate_status(evidence, "canvas"),
+            status=_canvas_matrix_status(evidence),
             evidence=_artifact_path(canvas, "artifacts/release-evidence/canvas-live.json"),
             summary=canvas_summary,
         ),

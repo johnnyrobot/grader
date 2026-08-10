@@ -39,7 +39,7 @@ three you gave 4s"), and it ships zero per-teacher model artifacts. LoRA fine-tu
 | **P0** Engine spike | 🟢 **Core risk retired, and it reversed a model choice.** `qwen3:8b` in Pydantic AI **Tool-Output mode: 100% schema success, 0 retries**, correct rank-ordering, 27–66s, **zero variance at temp 0**. **But Qwen3-VL is dead for vision** — see the ⚠️ below. |
 | **P1** Calibration core | 🟢 **Complete.** 5 experiments run. Anchors lift QWK +0.127/+0.135 at k=6 (the sweet spot). Context capping has zero quality impact. k≥8 HURTS (too many anchors from a small pool). Override loop, rubric ingestion, refinement, health panel, cold-start rule all built. P5 ship gate blocked on teacher's own graded work. |
 | **P2** App shell + UX | 🟢 **Implemented and evidence-backed.** Neuroinclusive light-first UI covers onboarding, queue, review, settings, and model manager. Frontend evidence passes with 15 component tests, 4 Playwright E2E tests, 16 visual-sweep screens, 47 required controls, and 167 visible controls. |
-| **P3** Canvas round-trip | 🟢 **Score/comment beta scope passes.** Guarded live app E2E on `canvas.johnnyrobot.ai` course `106`, assignment `2841`: import → teacher override/approval → post → Progress completed → score/comment read-back. Rubric-assessment posting remains disabled until local criteria map to real Canvas criterion IDs; attachment write-back still needs separate release evidence. |
+| **P3** Canvas round-trip | 🟢 **Score/comment/attachment beta scope passes.** Guarded live app E2E on `canvas.johnnyrobot.ai` course `106`, assignment `2841`: import → teacher override/approval → post → Progress completed → score/comment read-back, plus the FR-3.4 comment attachment read back off the student's submission comment and confirmed absent from shared course files. A deliberate upload failure shows FR-3.5 queueing the post with the file still to send. Rubric-assessment posting remains disabled until local criteria map to real Canvas criterion IDs. |
 | **P4** Documents & citations | 🟡 **Built; citations are experimental.** parse.py, handwriting.py, writeback.py, citations.py built. Citation fixture rerun is 20/29 (69%), 0 false positives, 3/3 retractions caught; acceptable only when visibly labeled experimental until enabled-mode accuracy reaches >=90%. |
 | **P5** Hardening & release | 🟢 **Supervised public-beta gate passes.** All 19 release-matrix rows pass. The public channel serves the signed/notarized DMG plus a Tauri-compatible signed `Grader.app.tar.gz`; the signed 0.1.0 → 0.1.1 in-app install/relaunch passed. Citations remain visibly experimental and teacher-local claims still require authorized data. |
 
@@ -100,9 +100,19 @@ Both remaining promises were then implemented, and a fourth defect surfaced on t
   `upload_comment_attachment`, aimed at `/courses/:c/assignments/:a/submissions/:u/comments/files`
   (confirmed against Canvas's API docs), joined to grades by `grader/attachments.py`, and
   uploaded inside `canvas_post`'s try so an outage takes the FR-3.5 queueing path.
-  **Not yet verified against live Canvas** — `canvas-pp-cli` is not installed on this machine;
-  the 3-step flow is covered by MockTransport against documented shapes. This is the P3
-  "attachment write-back needs separate release evidence" item.
+  **Now verified against live Canvas** — `scripts/live_canvas_e2e.py --apply` uploads a feedback
+  file with a graded submission and reads it back off that student's submission comment, with zero
+  matches in `/courses/:c/files`. Only Canvas can answer where the file landed, which is why the
+  MockTransport coverage was never enough.
+- **`post_grade()` had never written anything to Canvas, and said it had.** Found by the same
+  live run: the queue flushed, reported one post, and the submission still read `score: null`.
+  The function sent `submission[posted_grade]` as a *JSON key*. That bracket notation is
+  form-encoding — as a JSON key the brackets are part of the key name, so Canvas finds no
+  `submission` to update, answers **200**, and echoes back the submission it did not change.
+  Every flag was spelled exactly as `canvas-pp-cli --help` describes it. The body is now nested
+  JSON over `--stdin`, the same shape `post_grades_batch` already used, which is why bulk posting
+  worked and single posting never did. FR-3.5's whole delivery path ran through this, so until
+  now flushing the offline queue silently delivered nothing.
 - **Scanned work now routes to REVIEW_FIRST.** `submissions.source_kind`, written at import,
   carried through `SubmissionText` into `triage(scanned=...)` as a floor on the lane. Covers
   *photo* attachments only: a scanned PDF goes through Docling, returns `source_type='pdf'`, and
@@ -784,9 +794,14 @@ spread 100/60/20/0/100/60.
 
 Current app-level public-beta Canvas evidence is narrower and cleaner: `scripts/live_canvas_e2e.py`
 passed on course `106`, assignment `2841`, with teacher override/approval, post, Progress
-`completed`, exact score, and at least one teacher feedback comment read back. Treat Canvas
-rubric-assessment posting and attachment write-back as separate remaining evidence, not as covered
-by that score/comment beta scope.
+`completed`, exact score, at least one teacher feedback comment, and the FR-3.4 comment attachment
+all read back. Canvas rubric-assessment posting remains separate remaining evidence, not covered by
+that beta scope.
+
+The harness needs **two ungraded submissions** — one for the ordinary post path and one for the
+upload-failure probe, since a grade Canvas has already taken cannot be posted again. When the
+sandbox runs out, add students and submissions with the seeder's own `ensure_students` /
+`submit_for_cohort` rather than pointing the run at a real course.
 
 ---
 

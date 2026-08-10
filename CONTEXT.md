@@ -75,5 +75,5 @@ _Avoid_: harshness, drift, error
 ### Canvas
 
 **Post queue**:
-Approved grades waiting to reach Canvas because it was unreachable when they were approved. Draining the queue is a retry, never a re-approval.
+Approved grades waiting to reach Canvas because it was unreachable when they were approved. An entry also carries any feedback file that has not been uploaded yet, so an outage during the upload does not deliver the grade with the teacher's feedback silently missing. Draining the queue is a retry, never a re-approval.
 _Avoid_: outbox, retry buffer

@@ -18,9 +18,11 @@ from __future__ import annotations
 
 import json
 import os
+import sqlite3
 import subprocess
 import tomllib
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -271,24 +273,39 @@ def post_grade(
     base_url: str | None = None,
     token: str | None = None,
 ) -> dict:
-    """Post a single grade via `submissions update`.
+    """Post a single grade via `submissions update`. The queue's delivery path.
 
     rubric_assessment: {criterion_id: {points: float, comments: str}}
     comment_file_ids: Canvas file IDs from the 3-step upload flow.
-    """
-    args = [
-        "submissions", "update", str(course_id), str(assignment_id), str(user_id),
-        f"--submission-posted-grade={grade}",
-    ]
-    if comment:
-        args.append(f"--comment-text-comment={comment}")
-    if rubric_assessment:
-        args.append(f"--rubric-assessment={json.dumps(rubric_assessment)}")
-    if comment_file_ids:
-        for fid in comment_file_ids:
-            args.append(f"--comment-file-ids={fid}")
 
-    envelope = _run(*args, timeout=15, base_url=base_url, token=token)
+    The body goes over stdin as nested JSON, not as `--submission-posted-grade`
+    and friends. Those flags exist, are spelled as the CLI's help describes,
+    and produce a body of flat keys like `"submission[posted_grade]"` — but the
+    brackets are *form*-encoding. As JSON keys they are part of the key name,
+    so Canvas finds no `submission` to update, answers 200, and echoes back the
+    submission it did not change. Nothing about the call looks wrong; the score
+    simply stays null. Only reading it back off Canvas shows it, which is why
+    this was written the wrong way for as long as it was.
+    """
+    body: dict[str, Any] = {"submission": {"posted_grade": str(grade)}}
+    if rubric_assessment:
+        body["rubric_assessment"] = rubric_assessment
+    comment_body: dict[str, Any] = {}
+    if comment:
+        comment_body["text_comment"] = str(comment)
+    if comment_file_ids:
+        comment_body["file_ids"] = [int(fid) for fid in comment_file_ids]
+    if comment_body:
+        body["comment"] = comment_body
+
+    envelope = _run(
+        "submissions", "update", str(course_id), str(assignment_id), str(user_id),
+        "--stdin",
+        timeout=15,
+        stdin_json=body,
+        base_url=base_url,
+        token=token,
+    )
     return _mutation_data(envelope)
 
 
@@ -474,12 +491,31 @@ def upload_comment_attachment(
 # re-post on every flush forever.
 MAX_POST_ATTEMPTS = 5
 
+# What a caller hands `flush` so a file an outage stopped can still be uploaded.
+# Returns the Canvas file id, or None when the file is no longer one this machine
+# may send — deleted, moved, or pointed out of the attachment root since it was
+# queued. Raising means the upload itself failed and the file stays pending.
+Uploader = Callable[[str, str, str, Path], "int | None"]
+
+
+def _add_pending_files(conn: sqlite3.Connection) -> None:
+    """A queue written before attachments could outlive an outage."""
+    columns = {row["name"] for row in conn.execute("PRAGMA table_info(post_queue)")}
+    if "pending_files" not in columns:
+        conn.execute("ALTER TABLE post_queue ADD COLUMN pending_files TEXT")
+
 
 class OfflinePostQueue:
     """Queues grade posts when offline; flushes when connectivity returns.
 
     Imported batches grade with no network. Posts queue here and flush on reconnect.
     Each entry carries enough context to retry without re-computing the grade.
+
+    `file_ids` and `pending_files` are the two halves of one attachment: an id
+    is a file Canvas already holds, a path is one it does not have yet. An
+    outage between the two used to lose the file — the grade queued, the path
+    did not, and the flush delivered feedback the teacher had attached with the
+    attachment silently missing.
     """
 
     def __init__(self, db: Database) -> None:
@@ -494,6 +530,7 @@ class OfflinePostQueue:
                 rubric_assessment TEXT,
                 comment     TEXT,
                 file_ids    TEXT,
+                pending_files TEXT,
                 approved_at TEXT NOT NULL,
                 attempts    INTEGER DEFAULT 0,
                 last_error  TEXT,
@@ -501,6 +538,7 @@ class OfflinePostQueue:
             );
             CREATE INDEX IF NOT EXISTS idx_pq_course ON post_queue(course_id, assignment_id);
         """)
+        self.db.migrate("post_queue", [_add_pending_files])
 
     def enqueue(
         self,
@@ -512,15 +550,16 @@ class OfflinePostQueue:
         rubric_assessment: str | None = None,
         comment: str | None = None,
         file_ids: str | None = None,
+        pending_files: str | None = None,
         approved_at: str | None = None,
     ) -> int:
         from datetime import datetime, timezone
         cur = self.db.execute(
             "INSERT INTO post_queue (course_id, assignment_id, user_id, grade, "
-            "rubric_assessment, comment, file_ids, approved_at, created_at) "
-            "VALUES (?,?,?,?,?,?,?,?,?)",
+            "rubric_assessment, comment, file_ids, pending_files, approved_at, created_at) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?)",
             (course_id, assignment_id, user_id, grade,
-             rubric_assessment, comment, file_ids,
+             rubric_assessment, comment, file_ids, pending_files,
              approved_at or datetime.now(timezone.utc).isoformat(),
              datetime.now(timezone.utc).isoformat()),
         )
@@ -544,10 +583,79 @@ class OfflinePostQueue:
         )
         self.db.commit()
 
-    def flush(self, *, base_url: str | None = None, token: str | None = None) -> dict:
+    def _upload_pending(
+        self,
+        item: dict,
+        file_ids: list[int],
+        paths: list[str],
+        upload: Uploader | None,
+    ) -> tuple[list[int], list[str], str]:
+        """Send what the outage left behind. Returns (ids, still pending, error).
+
+        Each success is written back before the post is attempted, so a post
+        that fails again does not re-upload a file Canvas already has — the
+        same reason `canvas_post` carries its uploaded ids into the queue.
+        """
+        if upload is None:
+            raise RuntimeError("no uploader was given for a queued attachment")
+        uploaded = list(file_ids)
+        still: list[str] = []
+        error = ""
+        for path in paths:
+            try:
+                file_id = upload(
+                    item["course_id"], item["assignment_id"], item["user_id"], Path(path)
+                )
+            except Exception as exc:
+                still.append(path)
+                error = str(exc)
+                continue
+            # None is the uploader saying this file is no longer one this
+            # machine may send. It is dropped rather than retried forever.
+            if file_id is not None:
+                uploaded.append(int(file_id))
+        self.db.execute(
+            "UPDATE post_queue SET file_ids = ?, pending_files = ? WHERE id = ?",
+            (json.dumps(uploaded) if uploaded else None,
+             json.dumps(still) if still else None,
+             item["id"]),
+        )
+        self.db.commit()
+        return uploaded, still, error
+
+    def _give_up_on(
+        self, queue_id: int, file_ids: list[int], paths: list[str], error: str
+    ) -> None:
+        """Stop waiting for these files and let the grade go.
+
+        The row is cleared of them and the reason is left on the entry, so the
+        flush that deletes it still reports why the feedback never went — the
+        teacher attached it and is entitled to know it did not arrive.
+        """
+        self.db.execute(
+            "UPDATE post_queue SET file_ids = ?, pending_files = NULL, last_error = ? "
+            "WHERE id = ?",
+            (json.dumps(file_ids) if file_ids else None,
+             f"gave up on {len(paths)} attachment(s): {error}"[:300],
+             queue_id),
+        )
+        self.db.commit()
+
+    def flush(
+        self,
+        *,
+        base_url: str | None = None,
+        token: str | None = None,
+        upload: Uploader | None = None,
+    ) -> dict:
         """Attempt to post all queued grades.
 
         Returns {posted, failed, abandoned, remaining}.
+
+        `upload` is how an entry whose attachment never reached Canvas finishes
+        the job. Without one, such an entry fails rather than posting a grade
+        the teacher attached feedback to — a post missing its attachment reads
+        as complete and is not retried.
 
         `canvas-pp-cli` reports every failure as one RuntimeError, so the queue
         cannot tell a network outage from a grade Canvas will never accept — a
@@ -560,17 +668,29 @@ class OfflinePostQueue:
         posted = 0
         failed = 0
         abandoned = 0
+        attachments_abandoned = 0
         for item in self.pending():
             if item["attempts"] >= MAX_POST_ATTEMPTS:
                 abandoned += 1
                 continue
             try:
                 ra = json.loads(item["rubric_assessment"]) if item["rubric_assessment"] else None
-                fids = json.loads(item["file_ids"]) if item["file_ids"] else None
+                fids = json.loads(item["file_ids"]) if item["file_ids"] else []
+                paths = json.loads(item["pending_files"]) if item["pending_files"] else []
+                if paths:
+                    fids, still, error = self._upload_pending(item, fids, paths, upload)
+                    if still and item["attempts"] + 1 < MAX_POST_ATTEMPTS:
+                        raise RuntimeError(f"attachment upload failed: {error}")
+                    if still:
+                        # Out of attempts. Holding the grade back any longer is
+                        # worse than the silent drop this replaced: the file is
+                        # gone either way, and now so is the student's grade.
+                        self._give_up_on(item["id"], fids, still, error)
+                        attachments_abandoned += 1
                 post_grade(
                     item["course_id"], item["assignment_id"], item["user_id"],
                     grade=item["grade"], rubric_assessment=ra,
-                    comment=item["comment"], comment_file_ids=fids,
+                    comment=item["comment"], comment_file_ids=fids or None,
                     base_url=base_url, token=token,
                 )
                 self.mark_done(item["id"])
@@ -583,5 +703,6 @@ class OfflinePostQueue:
             "posted": posted,
             "failed": failed,
             "abandoned": abandoned,
+            "attachments_abandoned": attachments_abandoned,
             "remaining": remaining,
         }

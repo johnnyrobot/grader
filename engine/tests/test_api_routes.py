@@ -590,7 +590,8 @@ def test_flushing_an_empty_queue_reports_nothing_to_do(client, auth, api, monkey
 
     assert response.status_code == 200
     assert response.json() == {
-        "posted": 0, "failed": 0, "abandoned": 0, "remaining": 0,
+        "posted": 0, "failed": 0, "abandoned": 0,
+        "attachments_abandoned": 0, "remaining": 0,
     }
 
 

@@ -93,3 +93,8 @@ app/src-tauri/resources/
 *.swp
 *.swo
 *~
+
+# Engine runtime state, written into the default data directory. settings.json
+# holds the teacher's Canvas token; live-e2e/ is what the Canvas harness sends.
+fixtures/settings.json
+fixtures/live-e2e/

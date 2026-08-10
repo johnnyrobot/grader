@@ -67,15 +67,20 @@ def test_run_passes_saved_canvas_credentials_only_through_environment(monkeypatc
     assert "saved-test-token" not in " ".join(captured["cmd"])
 
 
-def test_post_grade_uses_current_canvas_cli_flag_names(monkeypatch):
+def test_post_grade_sends_a_nested_body_canvas_can_actually_read(monkeypatch):
+    """`submission[posted_grade]` is form-encoding, not a JSON key.
+
+    Sent as a flat JSON key the brackets are part of the key name, so Canvas
+    finds no `submission` to update, answers 200, and echoes back the
+    submission it did not change. A live read-back is the only thing that shows
+    it: the flags are spelled exactly as the CLI's help describes them, and the
+    call reports success. Nest the body instead.
+    """
     captured = {}
 
     def fake_run(*args, timeout=30, stdin_json=None, base_url=None, token=None):
         captured["args"] = args
-        captured["timeout"] = timeout
         captured["stdin_json"] = stdin_json
-        captured["base_url"] = base_url
-        captured["token"] = token
         return {"success": True, "data": {"id": "submission_1"}}
 
     monkeypatch.setattr(canvas, "_run", fake_run)
@@ -91,18 +96,27 @@ def test_post_grade_uses_current_canvas_cli_flag_names(monkeypatch):
     )
 
     assert result == {"id": "submission_1"}
-    assert captured["args"] == (
-        "submissions",
-        "update",
-        "10",
-        "20",
-        "30",
-        "--submission-posted-grade=7",
-        "--comment-text-comment=Looks good.",
-        '--rubric-assessment={"criterion_1": {"points": 4}}',
-        "--comment-file-ids=123",
+    assert captured["args"] == ("submissions", "update", "10", "20", "30", "--stdin")
+    assert captured["stdin_json"] == {
+        "submission": {"posted_grade": "7"},
+        "rubric_assessment": {"criterion_1": {"points": 4}},
+        "comment": {"text_comment": "Looks good.", "file_ids": [123]},
+    }
+
+
+def test_post_grade_sends_no_comment_when_there_is_nothing_to_say(monkeypatch):
+    """An empty `comment` object would post a blank comment on the submission."""
+    captured = {}
+
+    monkeypatch.setattr(
+        canvas,
+        "_run",
+        lambda *args, **kw: (captured.update(kw), {"success": True, "data": {}})[1],
     )
-    assert captured["stdin_json"] is None
+
+    canvas.post_grade(10, 20, 30, grade=7)
+
+    assert captured["stdin_json"] == {"submission": {"posted_grade": "7"}}
 
 
 def test_post_grades_batch_flattens_grade_data_for_stdin(monkeypatch):
