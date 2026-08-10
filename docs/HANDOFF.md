@@ -119,6 +119,15 @@ Both remaining promises were then implemented, and a fourth defect surfaced on t
   envelope carries no pagination metadata, so page one *is* the answer it gives. `imported: 10` on
   a class of thirty looks exactly like success. Now paginated straight against Canvas over the
   `Link` `rel="next"` header — the same CLI gap `download_attachment` already goes around.
+- **A student who never submitted could take down the whole import.** Canvas sends `"body": null`
+  — the key is present — for a student who uploaded a file instead of typing, or who submitted
+  nothing. `sub.get("body", "").strip()` therefore hit `None`, and one such row was a 500 for the
+  entire class: nobody imported. Latent until `list_submissions` started reading Canvas directly;
+  `canvas-pp-cli --compact` had been dropping the key, so the default stood in.
+- **A cleared grade was invisible to import.** `list_ungraded` tested `workflow_state != "graded"`,
+  but Canvas leaves that at `graded` when a teacher *removes* a score — and removing a score is how
+  a teacher says "do this one over". `needs_grading()` now reads the score, with `excused` checked
+  first because it reads identically: graded, no score.
 - **Scanned work now routes to REVIEW_FIRST.** `submissions.source_kind`, written at import,
   carried through `SubmissionText` into `triage(scanned=...)` as a floor on the lane. Covers
   *photo* attachments only: a scanned PDF goes through Docling, returns `source_type='pdf'`, and
@@ -804,10 +813,15 @@ passed on course `106`, assignment `2841`, with teacher override/approval, post,
 all read back. Canvas rubric-assessment posting remains separate remaining evidence, not covered by
 that beta scope.
 
-The harness needs **two ungraded submissions** — one for the ordinary post path and one for the
-upload-failure probe, since a grade Canvas has already taken cannot be posted again. When the
-sandbox runs out, add students and submissions with the seeder's own `ensure_students` /
-`submit_for_cohort` rather than pointing the run at a real course.
+The harness needs **two ungraded submissions with work in them** — one for the ordinary post path
+and one for the upload-failure probe, since a grade Canvas has already taken cannot be posted
+again. Recycle the existing students rather than provisioning more:
+
+    python scripts/seed_canvas_sandbox.py --reset-grades --course-id 106 --assignment-id 2841 --apply
+
+That clears the grades and leaves the submissions, which is the same run over. It refuses any
+course without the sandbox marker and never touches a submission whose owner is not a
+`ZZGraderTest` user.
 
 ---
 

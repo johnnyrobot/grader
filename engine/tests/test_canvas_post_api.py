@@ -142,6 +142,36 @@ def test_canvas_post_skips_grade_without_canvas_user_id(tmp_path, monkeypatch, a
     assert "no approved grades to post" in str(exc_info.value)
 
 
+def test_one_student_with_no_typed_text_does_not_take_down_the_whole_import(
+    tmp_path, monkeypatch, api_module
+):
+    """Canvas sends `"body": null` for a student who uploaded a file instead of
+    typing, and for one who never submitted at all. Reading it as a string made
+    that one row a 500 for the entire class — nobody imported."""
+    api = api_module
+    monkeypatch.setattr(api, "DB_PATH", tmp_path / "grader_engine.db")
+    monkeypatch.setattr(
+        "grader.canvas.list_ungraded",
+        lambda course_id, assignment_id, **connection: [
+            {"user_id": 1, "body": None, "attachments": []},
+            {"user_id": 2, "body": "student text", "attachments": []},
+        ],
+    )
+    monkeypatch.setattr(
+        "grader.canvas.download_submission_attachments",
+        lambda submission, dest_dir, **connection: [],
+    )
+
+    result = api.canvas_import(
+        api.CanvasImportReq(course_id=10, assignment_id=20, download_attachments=True),
+        settings=api.current_settings(),
+    )
+
+    # Whether an empty submission belongs in the queue at all is a separate
+    # question; what this pins is that reaching one no longer costs the class.
+    assert [row["canvas_user_id"] for row in result["submissions"]] == ["1", "2"]
+
+
 def test_canvas_import_returns_local_submission_ids(tmp_path, monkeypatch, api_module):
     api = api_module
     monkeypatch.setattr(api, "DB_PATH", tmp_path / "grader_engine.db")

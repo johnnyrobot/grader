@@ -273,6 +273,24 @@ def test_select_submissions_returns_what_it_has_when_that_is_too_few():
     assert live_canvas_e2e._select_submissions({"submissions": []}, None, 2) == []
 
 
+def test_select_submissions_skips_students_who_submitted_nothing():
+    """A score read back off an empty submission is weak evidence.
+
+    Canvas keeps a row for a student who never submitted, and the engine
+    imports it, so the harness would otherwise grade nothing and read the
+    result back as if it had graded work.
+    """
+    selected = live_canvas_e2e._select_submissions(
+        IMPORTED, None, 2, with_work={"8", "7"}
+    )
+
+    assert selected == ["sub_b", "sub_c"]
+
+
+def test_select_submissions_blocks_rather_than_grading_an_empty_submission():
+    assert live_canvas_e2e._select_submissions(IMPORTED, None, 2, with_work={"9"}) == []
+
+
 def test_the_batch_grades_against_the_rubric_this_harness_created(monkeypatch):
     """A teacher's engine has other rubrics saved, and grading against the
     wrong one is silent — the scores still look plausible."""
@@ -293,6 +311,9 @@ def test_the_batch_grades_against_the_rubric_this_harness_created(monkeypatch):
 
     monkeypatch.setattr(live_canvas_e2e, "_engine_request", fake_engine_request)
     monkeypatch.setattr("grader.canvas.missing_canvas_credentials", lambda: [])
+    monkeypatch.setattr(
+        live_canvas_e2e, "_canvas_user_ids_with_work", lambda *a: {"8", "9"}
+    )
 
     with pytest.raises(SystemExit):
         live_canvas_e2e.run(

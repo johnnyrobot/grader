@@ -123,6 +123,46 @@ def test_listing_submissions_asks_for_the_comments_it_reads_back(monkeypatch):
     assert "submission_comments" in seen[0]
 
 
+def test_a_submission_nobody_has_graded_needs_grading():
+    assert canvas.needs_grading({"workflow_state": "submitted", "score": None}) is True
+
+
+def test_a_graded_submission_does_not_need_grading_again():
+    assert canvas.needs_grading({"workflow_state": "graded", "score": 4.0}) is False
+
+
+def test_a_zero_is_a_grade_and_not_an_absent_one():
+    assert canvas.needs_grading({"workflow_state": "graded", "score": 0}) is False
+
+
+def test_a_grade_the_teacher_cleared_needs_grading_again():
+    """Canvas leaves `workflow_state` at `graded` when a grade is removed.
+
+    Clearing a score is how a teacher says "do this one over" — and reading
+    only the workflow state made that submission invisible to import, so the
+    one thing they asked Grader to re-do was the one thing it could not see.
+    """
+    assert canvas.needs_grading({"workflow_state": "graded", "score": None}) is True
+
+
+def test_an_excused_student_is_not_waiting_to_be_graded():
+    """Excused reads exactly like a cleared grade: graded, with no score."""
+    assert canvas.needs_grading(
+        {"workflow_state": "graded", "score": None, "excused": True}
+    ) is False
+
+
+def test_list_ungraded_keeps_the_cleared_grade_and_drops_the_excused_one(monkeypatch):
+    monkeypatch.setattr(canvas, "list_submissions", lambda *a, **k: [
+        {"user_id": 1, "workflow_state": "submitted", "score": None},
+        {"user_id": 2, "workflow_state": "graded", "score": 4.0},
+        {"user_id": 3, "workflow_state": "graded", "score": None},
+        {"user_id": 4, "workflow_state": "graded", "score": None, "excused": True},
+    ])
+
+    assert [s["user_id"] for s in canvas.list_ungraded(10, 20)] == [1, 3]
+
+
 def test_post_grade_sends_a_nested_body_canvas_can_actually_read(monkeypatch):
     """`submission[posted_grade]` is form-encoding, not a JSON key.
 

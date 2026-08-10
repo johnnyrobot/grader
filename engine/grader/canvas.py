@@ -195,9 +195,28 @@ def list_ungraded(
     base_url: str | None = None,
     token: str | None = None,
 ) -> list[dict]:
-    """Filter to submissions that need grading (workflow_state != 'graded')."""
+    """Filter to the submissions that still need a grade."""
     subs = list_submissions(course_id, assignment_id, base_url=base_url, token=token)
-    return [s for s in subs if s.get("workflow_state") != "graded"]
+    return [s for s in subs if needs_grading(s)]
+
+
+def needs_grading(submission: dict) -> bool:
+    """Is Canvas still waiting for a grade on this submission?
+
+    `workflow_state` alone is not the answer. Canvas leaves it at `graded` when
+    a teacher *removes* a score, and removing a score is how a teacher says "do
+    this one over" — so the one submission they asked Grader to re-do was the
+    one it could not see. An absent score is the truer signal.
+
+    Excused is the case that breaks the simple version of that rule: it reads
+    identically — `graded`, no score — and grading an excused student is worse
+    than missing one, so it is checked first.
+    """
+    if submission.get("excused"):
+        return False
+    if submission.get("workflow_state") != "graded":
+        return True
+    return submission.get("score") is None
 
 
 def get_submission(

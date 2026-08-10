@@ -551,6 +551,53 @@ def verify_cohort(cv: Canvas, cid: Any, aid: Any, students: list[dict]) -> bool:
     return ok
 
 
+def reset_grades(cv: Canvas, course_id: Any, assignment_id: Any) -> list[Any]:
+    """Clear the grades off the fake students' submissions. Returns whose.
+
+    `live_canvas_e2e.py` needs two *ungraded* submissions per run and grades
+    both, so topping it up by provisioning two more students each time is how a
+    throwaway course grows without bound. The submissions are still there —
+    only the grade has to go — so clearing it is the same run again.
+
+    Two guards, because this deletes grades: the course name must carry the
+    sandbox marker, and only submissions belonging to a `ZZGraderTest` user are
+    touched. A real name in a sandbox course is still a real student's grade.
+
+    Canvas keeps `workflow_state` at `graded` after a score is removed, which
+    is why `grader.canvas.needs_grading` reads the score rather than the state.
+    """
+    course = cv.get(f"/courses/{course_id}")
+    guard_sandbox(course.get("name", ""))
+    print(f"\n[R1] Clearing {STUDENT_PREFIX} grades on assignment {assignment_id}")
+
+    submissions = cv.get(
+        f"/courses/{course_id}/assignments/{assignment_id}/submissions"
+        "?include[]=user&per_page=100"
+    )
+    rows = submissions if isinstance(submissions, list) else []
+    if len(rows) == 100:
+        print("    warning: 100 submissions came back — there may be a page this did not read")
+
+    cleared: list[Any] = []
+    for submission in rows:
+        name = (submission.get("user") or {}).get("name", "")
+        if not name.startswith(STUDENT_PREFIX):  # never touch a real user
+            continue
+        if submission.get("score") is None:
+            continue
+        user_id = submission.get("user_id")
+        cv.put(
+            f"/courses/{course_id}/assignments/{assignment_id}/submissions/{user_id}",
+            {"submission[posted_grade]": ""},
+        )
+        cleared.append(user_id)
+        print(f"    cleared grade for id={user_id} ({name})")
+
+    if not cleared:
+        print("    nothing to clear")
+    return cleared
+
+
 def teardown(cv: Canvas, course_id: str, account_id: str = "self", delete_users: bool = False) -> None:
     course = cv.get(f"/courses/{course_id}")
     name = course.get("name", "")
@@ -582,7 +629,11 @@ def main() -> None:
     ap.add_argument("--teardown", action="store_true", help="delete the sandbox course")
     ap.add_argument("--delete-users", action="store_true",
                     help="with --teardown, also delete the fake ZZGraderTest users")
-    ap.add_argument("--course-id", help="course id (required with --teardown)")
+    ap.add_argument("--course-id", help="course id (required with --teardown or --reset-grades)")
+    ap.add_argument("--reset-grades", action="store_true",
+                    help="clear the ZZGraderTest students' grades on --assignment-id so "
+                         "live_canvas_e2e.py can run again without provisioning more students")
+    ap.add_argument("--assignment-id", help="assignment id (required with --reset-grades)")
     ap.add_argument("--out", type=Path, default=Path("fixtures/canvas_sandbox.json"))
     args = ap.parse_args()
 
@@ -596,6 +647,13 @@ def main() -> None:
         if not args.course_id:
             raise SystemExit("--teardown requires --course-id")
         teardown(cv, args.course_id, args.account_id, args.delete_users)
+        return
+
+    if args.reset_grades:
+        if not args.course_id or not args.assignment_id:
+            raise SystemExit("--reset-grades requires --course-id and --assignment-id")
+        cleared = reset_grades(cv, args.course_id, args.assignment_id)
+        print(f"\n  cleared {len(cleared)} grade(s)")
         return
 
     result = seed(cv, args.account_id, args.course_name, students=args.students)

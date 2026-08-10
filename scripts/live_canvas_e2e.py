@@ -294,14 +294,27 @@ def _teacher_override(config: CanvasE2EConfig, grade: dict[str, Any]) -> dict:
 
 
 def _select_submissions(
-    imported: dict[str, Any], target_canvas_user_id: int | None, count: int
+    imported: dict[str, Any],
+    target_canvas_user_id: int | None,
+    count: int,
+    with_work: set[str] | None = None,
 ) -> list[str]:
     """Pick `count` imported submissions, the requested student first.
 
     Returns fewer than asked for — including none — rather than substituting a
     student the caller did not name, and the caller blocks on that.
+
+    `with_work` narrows it to students who actually submitted something.
+    Canvas keeps a row for one who never did, and the engine imports it, so
+    without this the run can grade an empty submission and read the score back
+    as though it had graded work.
     """
     submissions = imported.get("submissions") or []
+    if with_work is not None:
+        submissions = [
+            row for row in submissions
+            if str(row.get("canvas_user_id")) in with_work
+        ]
     ordered = [row.get("id") for row in submissions]
     if target_canvas_user_id is not None:
         target = str(target_canvas_user_id)
@@ -315,6 +328,23 @@ def _select_submissions(
         ordered = [first] + [sub_id for sub_id in ordered if sub_id != first]
     selected = [sub_id for sub_id in ordered if sub_id][:count]
     return selected if len(selected) == count else []
+
+
+def _canvas_user_ids_with_work(course_id: int, assignment_id: int) -> set[str]:
+    """Who actually handed something in.
+
+    Canvas returns a submission row for every enrolled student, submitted or
+    not. Grading one that is empty produces a plausible-looking score for a
+    student who wrote nothing — and read back off Canvas it is indistinguishable
+    from a real one.
+    """
+    from grader.canvas import list_submissions
+
+    return {
+        str(submission.get("user_id"))
+        for submission in list_submissions(course_id, assignment_id)
+        if (submission.get("body") or "").strip() or submission.get("attachments")
+    }
 
 
 def _find_comment_attachment(submission: dict[str, Any], filename: str) -> dict | None:
@@ -547,12 +577,17 @@ def run(config: CanvasE2EConfig) -> dict[str, Any]:
         # Two: one for the ordinary post path, one for the upload-failure
         # probe. A grade Canvas has already taken cannot be posted again, so
         # the probe cannot reuse the first submission.
-        selected = _select_submissions(imported, config.target_canvas_user_id, 2)
+        selected = _select_submissions(
+            imported,
+            config.target_canvas_user_id,
+            2,
+            with_work=_canvas_user_ids_with_work(config.course_id, config.assignment_id),
+        )
         if not selected:
             return _blocked(
                 "BLOCKED_CANVAS_DATA",
-                "need two ungraded Canvas submissions — one for the post path and "
-                f"one for the upload-failure probe: {imported}",
+                "need two ungraded Canvas submissions with work in them — one for the "
+                f"post path and one for the upload-failure probe: {imported}",
                 config,
             )
         selected_submission_id, queue_submission_id = selected

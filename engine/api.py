@@ -948,7 +948,9 @@ def canvas_import(req: CanvasImportReq,
         if not user_id:
             continue
 
-        body = sub.get("body", "").strip()
+        # Canvas sends `"body": null` — the key is there — for a student who
+        # uploaded a file instead of typing, so a default cannot stand in.
+        body = (sub.get("body") or "").strip()
         texts: list[str] = [body] if body else []
 
         scanned = False

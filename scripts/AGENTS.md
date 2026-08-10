@@ -128,10 +128,14 @@ scripts/
   states such as approved + "Teacher changes not saved yet" or "Score updated from N to N". Include
   the PASS JSON in clean-machine manual evidence for `computer_use_instructor_sweep`.
 - **`seed_canvas_sandbox.py`**: dry-run by default. `--apply` to write. Refuses courses without `ZZ-GRADER-TEST` marker.
+  `--reset-grades --course-id N --assignment-id M` clears the `ZZGraderTest` students' grades so the
+  live E2E can run again on the same students; it never touches a submission whose owner's name
+  lacks the prefix.
 - **`live_canvas_e2e.py`**: dry-run by default; `--apply` writes to live Canvas and the course name
-  must start with `ZZ-GRADER-TEST`. Needs **two ungraded submissions** — one for the ordinary post
-  path, one for the upload-failure probe, since a grade Canvas has taken cannot be posted again.
-  Top up with `seed_canvas_sandbox.py`'s `ensure_students` / `submit_for_cohort`. Writes its
+  must start with `ZZ-GRADER-TEST`. Needs **two ungraded submissions with work in them** — one for
+  the ordinary post path, one for the upload-failure probe, since a grade Canvas has taken cannot be
+  posted again. Recycle the ones already there rather than provisioning more students:
+  `seed_canvas_sandbox.py --reset-grades --course-id 106 --assignment-id 2841 --apply`. Writes its
   feedback file under `--attachment-dir` (default `$GRADER_DATA_DIR`, else `fixtures`), because the
   engine refuses to send a file from anywhere else. The probe **PUTs an unroutable Canvas URL into
   the running engine's settings** and restores it in a `finally`; a `SIGKILL` mid-probe leaves the
