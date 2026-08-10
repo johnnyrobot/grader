@@ -187,6 +187,6 @@ scripts/
 ## NOTES
 
 - **Why `make_models.sh` exists**: Ollama loads at full default context. Qwen3-VL's 262k default → 4B model consumed 41 GB. Capping at 16k → ~6 GB. Grading needs ~5,500 tokens.
-- **Canvas gotchas in code**: bulk-update is async (poll Progress); submission files need `as_user_id` masquerade; Canvas returns HTML without `Accept: application/json`; Canvas Free-for-Teacher is dead.
+- **Canvas gotchas in code**: bulk-update is async (poll Progress); submission files need `as_user_id` masquerade; Canvas returns HTML without `Accept: application/json`; Canvas Free-for-Teacher is dead. Two more, both found by reading results back off Canvas rather than trusting a 200: `submissions update` needs a **nested** JSON body over `--stdin` (bracket keys are form-encoding, and as JSON keys Canvas ignores them and echoes the unchanged submission), and `submissions index` returns **only Canvas's first page of ten** with no flag to ask for more — `grader/canvas.py` paginates that one itself.
 - Live sandbox: course 106, assignment 2836, rubric 189, test student 8, cohort 9-14
 - `seed_canvas_sandbox.py` is 621 lines — the cohort section (C1-C5) exercises multi-student paths the Test Student can't reach

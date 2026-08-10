@@ -3,6 +3,8 @@ import sys
 from pathlib import Path
 from types import SimpleNamespace
 
+import httpx
+
 sys.path.insert(0, str(Path(__file__).parents[1]))
 
 from grader import canvas
@@ -65,6 +67,60 @@ def test_run_passes_saved_canvas_credentials_only_through_environment(monkeypatc
     assert captured["env"]["CANVAS_API_TOKEN"] == "saved-test-token"
     assert captured["env"]["CANVAS_ACCESS_TOKEN"] == "saved-test-token"
     assert "saved-test-token" not in " ".join(captured["cmd"])
+
+
+def test_listing_submissions_follows_canvas_pagination_to_the_last_page(monkeypatch):
+    """Canvas answers 10 per page by default and `canvas-pp-cli` exposes no
+    cursor, so the CLI returns page one and nothing else. A class of 30 then
+    imports 10 submissions and reports it as a complete import."""
+    pages = {
+        "https://canvas.example.test/api/v1/courses/10/assignments/20/submissions": (
+            [{"user_id": i} for i in range(1, 11)],
+            {"next": {"url": "https://canvas.example.test/next-page"}},
+        ),
+        "https://canvas.example.test/next-page": ([{"user_id": 11}], {}),
+    }
+    seen = []
+
+    def handler(request):
+        url = str(request.url).split("?")[0]
+        seen.append(str(request.url))
+        body, links = pages[url]
+        headers = {}
+        if links:
+            headers["Link"] = f'<{links["next"]["url"]}>; rel="next"'
+        return httpx.Response(200, json=body, headers=headers)
+
+    real_client = httpx.Client
+    monkeypatch.setattr(
+        httpx, "Client",
+        lambda **kw: real_client(transport=httpx.MockTransport(handler), **kw),
+    )
+
+    result = canvas.list_submissions(
+        10, 20, base_url="https://canvas.example.test", token="t"
+    )
+
+    assert [row["user_id"] for row in result] == list(range(1, 12))
+    assert "per_page=100" in seen[0]
+
+
+def test_listing_submissions_asks_for_the_comments_it_reads_back(monkeypatch):
+    seen = []
+
+    def handler(request):
+        seen.append(str(request.url))
+        return httpx.Response(200, json=[])
+
+    real_client = httpx.Client
+    monkeypatch.setattr(
+        httpx, "Client",
+        lambda **kw: real_client(transport=httpx.MockTransport(handler), **kw),
+    )
+
+    canvas.list_submissions(10, 20, base_url="https://canvas.example.test", token="t")
+
+    assert "submission_comments" in seen[0]
 
 
 def test_post_grade_sends_a_nested_body_canvas_can_actually_read(monkeypatch):

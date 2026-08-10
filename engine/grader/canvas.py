@@ -149,15 +149,43 @@ def list_submissions(
 
     Returns per-student: user_id, score, workflow_state, attachments[], submission_comments[],
     rubric_assessment (if already graded).
+
+    Paginated straight against Canvas rather than through `canvas-pp-cli`. The
+    CLI has no page-size flag and no cursor, and its read envelope carries no
+    pagination metadata, so it returns Canvas's default first page — **ten
+    submissions** — and nothing says the rest exist. A class of thirty imported
+    ten and reported a complete import. This is the same CLI gap as
+    `download_attachment`, found the same way: by counting what came back.
     """
-    envelope = _run(
-        "submissions", "index", str(course_id), str(assignment_id),
-        "--include", "submission_comments",
-        timeout=30,
-        base_url=base_url,
-        token=token,
+    tok = token or resolve_canvas_token()
+    if not tok:
+        raise RuntimeError("no Canvas token set")
+    base = (base_url or resolve_canvas_base_url() or "https://canvas.instructure.com").rstrip("/")
+
+    url: str | None = (
+        f"{base}/api/v1/courses/{course_id}/assignments/{assignment_id}/submissions"
     )
-    return _read_results(envelope)
+    params: dict[str, Any] | None = {
+        "include[]": "submission_comments",
+        "per_page": 100,
+    }
+    submissions: list[dict] = []
+    with httpx.Client(timeout=60, follow_redirects=True) as client:
+        while url:
+            response = client.get(
+                url,
+                params=params,
+                headers={"Authorization": f"Bearer {tok}", "Accept": "application/json"},
+            )
+            response.raise_for_status()
+            page = response.json()
+            submissions.extend(page if isinstance(page, list) else [page])
+            # The next link already carries the cursor; re-sending params would
+            # reset it and fetch page two forever.
+            next_link = response.links.get("next") or {}
+            url = next_link.get("url")
+            params = None
+    return submissions
 
 
 def list_ungraded(

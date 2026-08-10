@@ -113,6 +113,12 @@ Both remaining promises were then implemented, and a fourth defect surfaced on t
   JSON over `--stdin`, the same shape `post_grades_batch` already used, which is why bulk posting
   worked and single posting never did. FR-3.5's whole delivery path ran through this, so until
   now flushing the offline queue silently delivered nothing.
+- **`list_submissions()` imported at most ten students, and called it a complete import.** Found
+  while re-running the same harness: an eleventh sandbox submission was invisible. Canvas pages at
+  ten by default; `canvas-pp-cli submissions index` has no page-size flag, no cursor, and its read
+  envelope carries no pagination metadata, so page one *is* the answer it gives. `imported: 10` on
+  a class of thirty looks exactly like success. Now paginated straight against Canvas over the
+  `Link` `rel="next"` header — the same CLI gap `download_attachment` already goes around.
 - **Scanned work now routes to REVIEW_FIRST.** `submissions.source_kind`, written at import,
   carried through `SubmissionText` into `triage(scanned=...)` as a floor on the lane. Covers
   *photo* attachments only: a scanned PDF goes through Docling, returns `source_type='pdf'`, and
