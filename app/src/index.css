@@ -303,6 +303,13 @@ button { color: inherit; }
   .model-note strong { color: var(--ink-strong); }
   .model-note p { color: var(--ink-muted); @apply mb-0 mt-1 text-sm; }
   code { background: var(--surface-inset); color: var(--ink-strong); @apply rounded px-1.5 py-0.5 text-xs; }
+  .engine-failure { background: var(--danger-soft); border-left: 4px solid var(--danger); @apply mt-2 rounded-r-xl px-4 py-4; }
+  .engine-failure__message { color: var(--danger); @apply m-0 text-base font-bold; }
+  .engine-failure__detail { color: var(--ink-strong); @apply mb-0 mt-2 text-sm leading-relaxed; }
+  .engine-failure__log { @apply mt-5 rounded-xl p-4; }
+  .engine-failure__log strong { color: var(--ink-strong); @apply block text-sm; }
+  .engine-failure__log p { color: var(--ink-muted); @apply mb-2 mt-1 text-xs; }
+  .engine-failure__log code { @apply block break-all p-2 text-xs; }
   .connection-status { background: var(--warning-soft); color: var(--warning); @apply mt-5 flex items-center gap-3 rounded-xl p-4; }
   .connection-status--ready { background: var(--success-soft); color: var(--success); }
   .connection-status > span { @apply text-xl font-black; }

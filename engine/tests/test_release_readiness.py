@@ -688,6 +688,7 @@ def test_normalize_clean_machine_artifact_accepts_complete_pass(tmp_path):
         "checks": {name: True for name in CLEAN_MACHINE_REQUIRED_CHECKS},
         "details": {
             "manual_evidence": {
+                "foreign_machine_first_run": {"ok": True},
                 "first_run_models": {"ok": True},
                 "crash_recovery": {"ok": True},
                 "keyboard_only_review": {"ok": True},
@@ -714,6 +715,7 @@ def test_normalize_clean_machine_artifact_rejects_wrong_release_version(tmp_path
                 "updater_manifest": {"ok": True, "version": "0.0.9"},
             },
             "manual_evidence": {
+                "foreign_machine_first_run": {"ok": True},
                 "first_run_models": {"ok": True},
                 "crash_recovery": {"ok": True},
                 "keyboard_only_review": {"ok": True},

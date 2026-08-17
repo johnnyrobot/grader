@@ -61,6 +61,7 @@ def test_collect_checks_runs_app_and_dmg_commands(tmp_path):
         updater_manifest=manifest,
         expected_version="0.1.0",
         manual_passes=[
+            "foreign_machine_first_run",
             "first_run_models",
             "crash_recovery",
             "keyboard_only_review",
@@ -110,6 +111,7 @@ def test_collect_checks_can_use_app_inside_dmg_when_loose_app_signature_fails(tm
         updater_manifest=manifest,
         expected_version="0.1.0",
         manual_passes=[
+            "foreign_machine_first_run",
             "first_run_models",
             "crash_recovery",
             "keyboard_only_review",

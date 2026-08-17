@@ -21,6 +21,8 @@ if str(PROJECT_ROOT / "engine") not in sys.path:
 
 from gates.result import CheckResult
 from grader.draftbias import EVIDENCE_FLOOR
+from scripts.clean_machine_evidence import MANUAL_CHECKS as CLEAN_MACHINE_EVIDENCE_MANUAL_CHECKS
+from scripts.clean_machine_evidence import REQUIRED_CHECKS as CLEAN_MACHINE_EVIDENCE_REQUIRED_CHECKS
 from scripts.frontend_evidence import REQUIRED_CONTROL_LABELS, REQUIRED_VISUAL_SCREENS
 from scripts.signing_doctor import collect_signing_diagnostics
 
@@ -47,25 +49,10 @@ REQUIRED_GATES = (
     "clean_machine",
 )
 
-CLEAN_MACHINE_REQUIRED_CHECKS = (
-    "codesign_verify",
-    "stapler_validate",
-    "spctl_assess",
-    "release_provenance",
-    "first_run_models",
-    "crash_recovery",
-    "keyboard_only_review",
-    "computer_use_instructor_sweep",
-    "updater_path",
-)
-
-CLEAN_MACHINE_MANUAL_CHECKS = (
-    "first_run_models",
-    "crash_recovery",
-    "keyboard_only_review",
-    "computer_use_instructor_sweep",
-    "updater_path",
-)
+# Taken from the collector rather than restated: two copies of this list drift, and a
+# check missing from one side is a gate that silently stops being required.
+CLEAN_MACHINE_REQUIRED_CHECKS = CLEAN_MACHINE_EVIDENCE_REQUIRED_CHECKS
+CLEAN_MACHINE_MANUAL_CHECKS = CLEAN_MACHINE_EVIDENCE_MANUAL_CHECKS
 
 PASSING_STATUSES = {"PASS", "PASS_EXPERIMENTAL"}
 

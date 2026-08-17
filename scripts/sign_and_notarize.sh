@@ -73,24 +73,61 @@ if [[ "$DO_PREFLIGHT" == "true" ]]; then
     uv run python "$PROJECT_ROOT/scripts/signing_doctor.py" "${PREFLIGHT_ARGS[@]}"
 fi
 
-# Sign the Python sidecar first (innermost)
-SIDECAR="$APP_PATH/Contents/Resources/engine"
-if [[ -d "$SIDECAR" ]]; then
-    echo "  Signing sidecar: engine/"
-    find "$SIDECAR" -type f \( -name "*.py" -o -name "*.so" -o -perm +111 \) | while read -r f; do
-        codesign --force --sign "$SIGNING_IDENTITY" --options runtime "$f" 2>/dev/null || true
-    done
+ENTITLEMENTS="$PROJECT_ROOT/app/src-tauri/Entitlements.plist"
+if [[ ! -f "$ENTITLEMENTS" ]]; then
+    echo "ERROR: entitlements not found at $ENTITLEMENTS"
+    exit 1
 fi
 
-# Sign all dylibs/frameworks first (deep, inside-out)
+RESOURCES="$APP_PATH/Contents/Resources"
+if [[ ! -x "$RESOURCES/runtime/bin/python3" ]]; then
+    echo "ERROR: $APP_PATH carries no engine runtime."
+    echo "  Grader must ship its own Python; an app without one cannot start on a machine"
+    echo "  that has no checkout of this repository (issue #23)."
+    echo "  Build the bundle and rebuild the app:"
+    echo "    uv run python scripts/build_engine_bundle.py"
+    echo "    cd app && npx tauri build --bundles app --no-sign --ci"
+    exit 1
+fi
+
+# Every Mach-O in the bundle is signed individually, deepest first. --deep is not used:
+# it would re-sign the interpreter without its entitlements, and the extension modules
+# it loads would then be refused at import time under the hardened runtime.
+echo "  Signing the bundled engine runtime (this takes a few minutes)..."
+MACHO_LIST="$(mktemp)"
+trap 'rm -f "$MACHO_LIST"' EXIT
+
+# Classify first, sign second. Only Mach-O files carry a code signature; handing codesign
+# a .py would attach a pointless extended attribute instead.
+MACHO_COUNT=0
+while IFS= read -r -d '' f; do
+    if [[ "$(file -b "$f")" == Mach-O* ]]; then
+        printf '%s\0' "$f" >> "$MACHO_LIST"
+        MACHO_COUNT=$((MACHO_COUNT + 1))
+    fi
+done < <(find "$RESOURCES" -depth -type f \( -name "*.so" -o -name "*.dylib" -o -perm +111 \) -print0)
+
+if [[ "$MACHO_COUNT" -eq 0 ]]; then
+    echo "ERROR: found no Mach-O files under $RESOURCES — the runtime looks empty"
+    exit 1
+fi
+
+# In batches: ~500 extension modules is too many codesign invocations otherwise.
+xargs -0 -n 25 codesign --force --sign "$SIGNING_IDENTITY" --options runtime \
+    --entitlements "$ENTITLEMENTS" --timestamp < "$MACHO_LIST"
+echo "    signed $MACHO_COUNT Mach-O files under Resources/"
+
+# Frameworks and libraries outside Resources (Tauri's own).
 echo "  Signing frameworks and libraries..."
-find "$APP_PATH" \( -type f -name "*.dylib" -o -type d -name "*.framework" \) | while read -r f; do
-    codesign --force --sign "$SIGNING_IDENTITY" --options runtime "$f" 2>/dev/null || true
+find "$APP_PATH" -depth \( -type f -name "*.dylib" -o -type d -name "*.framework" \) \
+    -not -path "$RESOURCES/*" | while read -r f; do
+    codesign --force --sign "$SIGNING_IDENTITY" --options runtime --timestamp "$f" 2>/dev/null || true
 done
 
-# Sign the main bundle (deep + runtime hardening)
+# Sign the main bundle last, sealing everything beneath it.
 echo "  Signing main bundle..."
-codesign --deep --force --options runtime --sign "$SIGNING_IDENTITY" "$APP_PATH"
+codesign --force --options runtime --entitlements "$ENTITLEMENTS" --timestamp \
+    --sign "$SIGNING_IDENTITY" "$APP_PATH"
 
 # Verify
 echo "  Verifying signature..."

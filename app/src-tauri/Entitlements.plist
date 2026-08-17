@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Entitlements for the hardened runtime.
+
+  Grader bundles a CPython interpreter and its native extension modules (torch, numpy,
+  pyarrow, OpenCV). Python loads those with dlopen at import time, and several of them
+  allocate executable memory for their own kernels. Under the hardened runtime that
+  needs saying out loud, or the engine dies on its first import with a code-signing
+  error and the app is back to "waiting for local engine" (#23).
+
+  Nothing here weakens the sandbox — Grader is not sandboxed. These relax code-signing
+  enforcement inside our own bundle only.
+-->
+<plist version="1.0">
+<dict>
+    <!-- Python imports extension modules via dlopen. -->
+    <key>com.apple.security.cs.disable-library-validation</key>
+    <true/>
+
+    <!-- Numerical kernels in torch/numpy generate code at runtime. -->
+    <key>com.apple.security.cs.allow-jit</key>
+    <true/>
+    <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+    <true/>
+</dict>
+</plist>

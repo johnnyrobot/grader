@@ -134,24 +134,28 @@ See [`docs/FERPA.md`](FERPA.md) for the privacy audit.
 
 ## Troubleshooting
 
-### "Engine not found" on launch
+### "The grading engine did not start"
 
-The app looks for the engine directory in this order:
-1. Relative to the app bundle (production builds)
-2. `CARGO_MANIFEST_DIR/../../engine` (dev builds)
-3. Current working directory
+Grader ships its own Python engine inside the app bundle, at
+`Grader.app/Contents/Resources/`. It does not need a checkout of this repository, `uv`, or a
+system Python, and it does not search your home directory for any of them.
 
-If none are found, the app runs in limited mode. Start the engine manually:
+The screen names which part is missing and points at the engine log,
+`~/Library/Logs/com.grader.app/engine.log`. Include that log if you report the problem.
+
+- **"missing its grading engine" / "missing its Python runtime"** — the app bundle is
+  incomplete. Reinstall from the signed release; a partial copy (for example a `.app` moved
+  without its `Contents/Resources`) causes this.
+- **"The local grading engine stopped"** — the engine started and then exited. The end of the
+  log appears on screen.
+
+**Developers:** a build from source carries no engine until you make one:
 ```bash
-uv run uvicorn engine.api:app --host 127.0.0.1 --port 8756
+uv run python scripts/build_engine_bundle.py   # ~1.1 GB, a few minutes
+cd app && npx tauri build --bundles app
 ```
-
-### "uv not found"
-
-Install uv:
-```bash
-curl -LsSf https://astral.sh/uv/install.sh | sh
-```
+`npm run build` fails early if the bundle is absent, and
+`scripts/verify_engine_bundle.py` proves a built bundle runs with the checkout unavailable.
 
 ### Ollama connection refused
 

@@ -86,7 +86,8 @@ app/playwright-report/
 app/artifacts/
 artifacts/
 
-# Python venv in app (sidecar)
+# Bundled engine: interpreter + libraries + engine source, ~1.1 GB.
+# Built by scripts/build_engine_bundle.py, never committed.
 app/src-tauri/resources/
 
 # OS artifacts

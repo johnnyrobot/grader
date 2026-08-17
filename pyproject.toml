@@ -26,6 +26,10 @@ dev = ["pytest>=8.0"]
 [tool.pytest.ini_options]
 testpaths = ["engine/tests"]
 pythonpath = ["engine"]
+# `testpaths` only applies when pytest is invoked from the repository root. The engine
+# bundle puts a 1.1 GB site-packages inside the tree, so a run started from a
+# subdirectory would otherwise try to collect torch's own test suite.
+norecursedirs = ["target", "node_modules", ".venv", "site-packages", "runtime", "humanizer-main"]
 
 [tool.uv]
 package = false

@@ -11,6 +11,8 @@ scripts/
 ├── make_models.sh              # bake context-capped Ollama variants (CRITICAL for 16 GB tier)
 ├── build_public_proxy.py       # build gitignored Mohler ASAG public-proxy evidence
 ├── dev_mock_engine.py          # synthetic loopback engine for safe local UI/Computer Use inspection
+├── build_engine_bundle.py      # assemble the Python engine Grader.app ships (interpreter + deps + engine/)
+├── verify_engine_bundle.py     # prove that bundle runs with no checkout, no uv, no system Python
 ├── frontend_evidence.py        # collect component/build/E2E/visual-sweep release artifact
 ├── bump_release_version.py     # dry-run-first N+1 version metadata updater
 ├── release_version_guard.py    # fail closed when tag/app/runtime versions drift
@@ -37,6 +39,8 @@ scripts/
 | Fix OOM on 16 GB machines | `make_models.sh` | Caps `num_ctx=16384`, sets `temperature=0` |
 | Build public-proxy evidence | `build_public_proxy.py` | Writes Mohler ASAG artifacts under `artifacts/public_proxy/`; optional local grading |
 | Inspect UI safely | `dev_mock_engine.py` | Serves synthetic queue/settings/models/rubric responses on loopback for local browser/Computer Use inspection only |
+| Build the engine Grader.app ships | `build_engine_bundle.py` | Writes `app/src-tauri/resources/` (~1.1 GB: relocatable CPython from uv's managed store, runtime deps via `--target`, and `engine/`). `--check` verifies a complete bundle and is what `npm run build` runs; `--skip-runtime` refreshes only the engine source, for iterating on Python without a multi-minute rebuild |
+| Prove the app can leave this machine | `verify_engine_bundle.py` | Relocates the bundle outside the checkout and starts it with no `uv`, no Homebrew, and a throwaway `HOME`; asserts `/health`, an authenticated request, that `lsof` shows no file open under the repo, and that the engine wrote nothing into the bundle. Run by `clean_machine_evidence.py` as `engine_bundle_self_contained`. Not a substitute for `foreign_machine_first_run` (issue #23) |
 | Collect frontend release evidence | `frontend_evidence.py` | Runs component tests, production build, managed Playwright E2E, and validates visual-sweep screenshots/control coverage |
 | Prepare N+1 version | `bump_release_version.py` | Dry-run-first helper that moves Tauri config, Rust crate/lockfile, frontend package/lockfile, Python project, engine launcher, and dev mock update fixture together |
 | Guard release version | `release_version_guard.py` | Requires the release tag/version to match Tauri config, Rust crate/lockfile, frontend package/lockfile, Python project, engine launcher, and dev mock update fixture before publishing assets |
@@ -49,7 +53,7 @@ scripts/
 | Validate updater evidence | `updater_evidence.py` | Requires updater config, signed latest.json, artifact filename/hash/source-freshness checks, and local artifact signature/notarization checks |
 | Preflight updater channel | `updater_channel_preflight.py` | Fails fast when the configured GitHub `latest.json` is absent, unsigned, points at the wrong artifact/channel, is not newer than installed N, or advertises unreachable release assets |
 | Validate signed-app Computer Use sweep | `computer_use_sweep_evidence.py` | Produces PASS/FAIL JSON from `.ax.txt` + `.png` captures and fails stale approved/unsaved review states |
-| Clean-machine release evidence | `clean_machine_evidence.py` | Writes `artifacts/release-evidence/clean-machine.json`; PASS requires signing, app/DMG/latest.json provenance, current-source freshness, plus structured manual evidence for first-run/crash/keyboard/Computer Use/updater checks |
+| Clean-machine release evidence | `clean_machine_evidence.py` | Writes `artifacts/release-evidence/clean-machine.json`; PASS requires signing, app/DMG/latest.json provenance, current-source freshness, the automated `engine_bundle_self_contained` check, plus structured manual evidence for foreign-machine-first-run/first-run/crash/keyboard/Computer Use/updater checks |
 | Package clean-machine handoff | `release_evidence_package.py` | Copies or references signed release artifacts, evidence JSON, clean-machine runbook, and manual template for a clean-Mac tester |
 | Seed Canvas sandbox | `seed_canvas_sandbox.py` | `--apply --students 6` to create + exercise |
 | Tear down sandbox | `seed_canvas_sandbox.py` | `--teardown --course-id 106 --apply` |
@@ -153,7 +157,12 @@ scripts/
   `computer_use_instructor_sweep`; this is the required signed-app Computer Use inspection and
   complements the automated Playwright visual sweep. That manual check requires a PASS JSON artifact
   from `computer_use_sweep_evidence.py`. Manual flags without evidence are legacy-only and should not
-  be used for release claims.
+  be used for release claims. The template also includes `foreign_machine_first_run`: the signed app
+  launched on a Mac that has **never held this repository**. A fresh user profile on the build
+  machine does not satisfy it — that is exactly what produced the 0.1.1 evidence that missed #23,
+  because the old engine was found on the filesystem, which a new profile does not change. The
+  automated `engine_bundle_self_contained` check runs `verify_engine_bundle.py` and narrows the gap
+  on the build machine; it does not close it.
 - **`release_evidence_package.py`**: build this after signing/notarization and updater evidence so a
   clean-machine tester receives one deterministic, gitignored handoff folder:
   `uv run python scripts/release_evidence_package.py --out-dir artifacts/release-evidence/clean-machine-handoff`.

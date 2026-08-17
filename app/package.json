@@ -4,7 +4,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build": "tsc && vite build && npm run engine:check",
+    "engine:check": "uv run python ../scripts/build_engine_bundle.py --check",
+    "engine:build": "uv run python ../scripts/build_engine_bundle.py",
     "test": "vitest",
     "test:e2e": "playwright test",
     "preview": "vite preview",

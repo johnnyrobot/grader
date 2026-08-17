@@ -39,6 +39,8 @@ REQUIRED_CHECKS = (
     "stapler_validate",
     "spctl_assess",
     "release_provenance",
+    "engine_bundle_self_contained",
+    "foreign_machine_first_run",
     "first_run_models",
     "crash_recovery",
     "keyboard_only_review",
@@ -47,6 +49,7 @@ REQUIRED_CHECKS = (
 )
 
 MANUAL_CHECKS = (
+    "foreign_machine_first_run",
     "first_run_models",
     "crash_recovery",
     "keyboard_only_review",
@@ -55,6 +58,41 @@ MANUAL_CHECKS = (
 )
 
 CHECK_DEFINITIONS: dict[str, dict[str, object]] = {
+    "foreign_machine_first_run": {
+        "title": "First run on a Mac that has never held this repository",
+        "objective": (
+            "Launch the signed app on physically separate hardware that has never held a checkout "
+            "of this repository, no uv, and no Python, and reach the queue."
+        ),
+        "required_assertions": [
+            {
+                "id": "never_held_repository",
+                "label": (
+                    "The test Mac has never held a checkout of this repository. A fresh user "
+                    "profile on the build machine does NOT satisfy this: the engine used to be "
+                    "found on the filesystem, which a new profile does not change (issue #23)."
+                ),
+            },
+            {"id": "no_uv_installed", "label": "Confirmed `uv` is not installed on the test Mac (`which uv` finds nothing)."},
+            {"id": "no_developer_python", "label": "Confirmed no Homebrew or pyenv Python is installed on the test Mac."},
+            {"id": "engine_started_from_bundle", "label": "The app reached a ready engine without any terminal step."},
+            {"id": "queue_reachable", "label": "Reached the queue/review workflow."},
+            {"id": "hardware_recorded", "label": "Recorded the test Mac's model, OS version, and how it is known never to have held the repository."},
+        ],
+        "steps": [
+            "Choose a Mac that has never had this repository on it. Borrowed hardware or a fresh VM both qualify; another account on the build machine does not.",
+            "On that Mac, confirm the absence of the old dependencies: `which uv`, `which python3`, `ls ~/code/grader`.",
+            "Copy over only the signed/notarized release artifact.",
+            "Install and launch Grader from Finder — no Terminal.",
+            "Confirm the engine becomes ready and the queue is reachable.",
+            "Record the machine's model identifier and OS version in the notes.",
+        ],
+        "expected_result": (
+            "Grader starts its own engine and reaches the queue on hardware that has never held "
+            "this repository, with no uv and no Python installed."
+        ),
+        "suggested_files": ["foreign_machine_first_run.png", "foreign_machine_first_run.log"],
+    },
     "first_run_models": {
         "title": "First-run model setup",
         "objective": "Install Grader on a clean supported Mac and verify the first-run model flow completes without hidden terminal help.",
@@ -349,6 +387,36 @@ def _run_check(
         "ok": proc.returncode == 0,
         "output": output if output_limit is None else output[:output_limit],
     }
+
+
+def _check_engine_bundle(app_path: Path | None, *, runner: Runner = subprocess.run) -> tuple[bool, dict[str, object]]:
+    """Ask whether the app carries a working engine, rather than expecting to find one.
+
+    This is the check that would have caught #23 on the build machine. It relocates the
+    app's engine outside this checkout and starts it with no uv, no Homebrew, and a
+    throwaway HOME. It does not replace `foreign_machine_first_run`, which is the only
+    evidence that genuinely foreign hardware can run the release.
+    """
+    if app_path is None:
+        return False, {"ok": False, "reason": "no app path supplied"}
+    if not app_path.exists():
+        return False, {"ok": False, "reason": "app path does not exist", "path": str(app_path)}
+
+    result = _run_check(
+        [
+            sys.executable,
+            str(PROJECT_ROOT / "scripts" / "verify_engine_bundle.py"),
+            "--app",
+            str(app_path),
+        ],
+        runner=runner,
+    )
+    if not result["ok"]:
+        result["reason"] = (
+            "the app's engine did not start outside this checkout; it cannot run on a "
+            "machine without this repository (issue #23)"
+        )
+    return bool(result["ok"]), result
 
 
 def _check_app_signature(app_path: Path, *, runner: Runner = subprocess.run) -> tuple[bool, bool, dict[str, object]]:
@@ -681,6 +749,10 @@ def collect_checks(
             "reason": "stapler target does not exist",
             "path": str(stapler_target),
         }
+
+    bundle_ok, bundle_details = _check_engine_bundle(app_path, runner=runner)
+    checks["engine_bundle_self_contained"] = bundle_ok
+    details["engine_bundle_self_contained"] = bundle_details
 
     for name in manual_passes:
         if name in MANUAL_CHECKS:

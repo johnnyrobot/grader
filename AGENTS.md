@@ -39,9 +39,14 @@ PYTHONPATH=engine GRADER_ENGINE_TOKEN=dev uv run uvicorn engine.api:app \
 cd app && npm run tauri dev
 
 # Production builds
-cd app && npm run build           # tsc && vite build (frontend)
+uv run python scripts/build_engine_bundle.py   # the engine Grader.app ships (~1.1 GB, minutes)
+cd app && npm run build           # tsc && vite build, then build_engine_bundle.py --check
 cd app/src-tauri && cargo check   # Rust host
 ```
+- **The app ships its own Python engine.** `Grader.app/Contents/Resources/` carries a relocatable
+  CPython, the runtime dependencies, and `engine/`; `engine.rs` resolves all three from the bundle
+  and searches nowhere else. A build without that bundle fails at `npm run build` rather than at a
+  tester's first launch — see ADR-0002 and issue #23.
 - The desktop app talks to the engine over a **dynamic loopback HTTP port + per-launch bearer
   token**; dev fallback is `127.0.0.1:8756`. All frontend↔engine calls go through `app/src/api.ts`.
 - Packaging/signing/notarization and in-app updates are driven by `scripts/` and
@@ -49,8 +54,9 @@ cd app/src-tauri && cargo check   # Rust host
 
 ## Testing
 ```bash
-uv run pytest engine/tests/ -q            # Python engine (209 passing as of 2026-07-13)
-cd app && npm test -- --run               # vitest component tests (15)
+uv run pytest engine/tests/ -q            # Python engine (684 passing as of 2026-08-17)
+cd app && npm test -- --run               # vitest component tests (65)
+cd app/src-tauri && cargo test --lib      # engine bundle resolution (9)
 cd app && npm run dev -- --host 127.0.0.1 # then in another terminal:
 cd app && npm run test:e2e                # Playwright E2E (mocked workflow, 4 tests)
 cd app/src-tauri && cargo check           # Rust must compile
