@@ -161,14 +161,23 @@ if [[ "$DO_NOTARIZE" == "true" ]]; then
         DMG_DIR="$(dirname "$DMG_PATH")"
         mkdir -p "$DMG_DIR"
 
-        echo "  Creating DMG..."
-        # Use hdiutil to create a DMG
+        echo "  Creating DMG (compressing ~1.2 GB, takes a few minutes)..."
         TEMP_DMG="$DMG_DIR/Grader_temp.dmg"
-        hdiutil create -volname "Grader" -srcfolder "$APP_PATH" -ov -format UDBZ "$TEMP_DMG"
+        # Clear both first. A failed hdiutil run that leaves the previous release's DMG
+        # in place is worse than no DMG: it is the right name and a plausible size, and
+        # nothing downstream re-reads what is inside it.
+        rm -f "$TEMP_DMG" "$DMG_PATH"
+
+        if ! hdiutil create -volname "Grader" -srcfolder "$APP_PATH" -ov -format UDBZ "$TEMP_DMG"; then
+            echo "ERROR: hdiutil could not build the DMG. No DMG has been left behind."
+            echo "  Quit any running copy of Grader and retry; hdiutil fails with"
+            echo "  'No child processes' when the app is running from the bundle it is reading."
+            exit 1
+        fi
         mv "$TEMP_DMG" "$DMG_PATH"
 
         echo "  Signing DMG..."
-        codesign --force --sign "$SIGNING_IDENTITY" "$DMG_PATH"
+        codesign --force --sign "$SIGNING_IDENTITY" --timestamp "$DMG_PATH"
         codesign --verify "$DMG_PATH"
 
         echo "  Submitting DMG for notarization..."
