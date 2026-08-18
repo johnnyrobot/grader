@@ -4,11 +4,15 @@
 
 | Requirement | Minimum | Recommended |
 |---|---|---|
+| Processor | Apple Silicon (M1 or later) | Apple Silicon (M1 or later) |
 | macOS | 13.0 (Ventura) | 14.0 (Sonoma) or later |
 | RAM | 16 GB | 32 GB+ |
 | Storage | 10 GB free | 20 GB free |
 | Python | 3.12+ (bundled with uv) | — |
 | Ollama | 0.4+ | latest |
+
+Grader is an Apple Silicon build. It does not run on Intel Macs, and the in-app
+updater will not offer them a release rather than install one that cannot launch.
 
 ## Install Grader
 
