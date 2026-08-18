@@ -134,7 +134,9 @@ def test_generate_manifest_writes_signed_platform_manifest(tmp_path, monkeypatch
     manifest = json.loads(output.read_text())
     assert manifest["version"] == "0.1.0"
     assert manifest["platforms"]["darwin-aarch64"]["signature"] == "signed-update"
-    assert manifest["platforms"]["darwin-x86_64"]["url"] == "https://example.invalid/Grader.app.tar.gz"
+    assert manifest["platforms"]["darwin-aarch64"]["url"] == "https://example.invalid/Grader.app.tar.gz"
+    # Intel is never offered an arm64-only build: it could not launch what it downloaded.
+    assert list(manifest["platforms"]) == ["darwin-aarch64"]
 
 
 def test_load_password_from_keychain_returns_secret_without_logging(monkeypatch):

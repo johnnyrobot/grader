@@ -56,10 +56,6 @@ def test_updater_evidence_passes_signed_manifest_and_artifact(tmp_path):
                 "signature": "signed-aarch64",
                 "url": "https://example.invalid/releases/Grader.app.tar.gz",
             },
-            "darwin-x86_64": {
-                "signature": "signed-x86",
-                "url": "https://example.invalid/releases/Grader.app.tar.gz",
-            },
         },
     }))
 
@@ -102,7 +98,6 @@ def test_updater_evidence_blocks_when_local_artifact_signature_fails(tmp_path):
         "pub_date": "2026-07-13T00:00:00Z",
         "platforms": {
             "darwin-aarch64": {"signature": "signed", "url": "https://example.invalid/Grader.app.tar.gz"},
-            "darwin-x86_64": {"signature": "signed", "url": "https://example.invalid/Grader.app.tar.gz"},
         },
     }))
 
@@ -142,7 +137,6 @@ def test_updater_evidence_blocks_unsigned_manifest(tmp_path):
         "pub_date": "2026-07-13T00:00:00Z",
         "platforms": {
             "darwin-aarch64": {"signature": "", "url": "https://example.invalid/Grader.dmg"},
-            "darwin-x86_64": {"signature": "", "url": "https://example.invalid/Grader.dmg"},
         },
     }))
 
@@ -173,7 +167,6 @@ def test_updater_evidence_blocks_artifacts_older_than_source_commit(tmp_path, mo
         "pub_date": "2026-07-13T00:00:00Z",
         "platforms": {
             "darwin-aarch64": {"signature": "signed", "url": "https://example.invalid/Grader.app.tar.gz"},
-            "darwin-x86_64": {"signature": "signed", "url": "https://example.invalid/Grader.app.tar.gz"},
         },
     }))
     monkeypatch.setattr(

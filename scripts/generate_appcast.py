@@ -158,12 +158,13 @@ def generate_manifest(
         "version": version,
         "notes": f"Grader v{version}",
         "pub_date": pub_date,
+        # arm64 only, deliberately. Grader.app and the CPython it carries are both
+        # built for arm64, and Rosetta translates x86_64 to arm64, never the reverse.
+        # Advertising darwin-x86_64 here pointed Intel Macs at this same tarball: they
+        # would spend a ~450 MB download to install an app that cannot launch. Offering
+        # no update at all is the honest answer until a universal build exists.
         "platforms": {
             "darwin-aarch64": {
-                "signature": signature or "",
-                "url": release_url,
-            },
-            "darwin-x86_64": {
                 "signature": signature or "",
                 "url": release_url,
             },

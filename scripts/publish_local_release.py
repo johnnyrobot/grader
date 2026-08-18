@@ -21,7 +21,7 @@ from typing import Any, Callable
 
 SOURCE_REPO = "johnnyrobot/grader"
 RELEASE_REPO = "johnnyrobot/grader-releases"
-REQUIRED_PLATFORMS = ("darwin-aarch64", "darwin-x86_64")
+REQUIRED_PLATFORMS = ("darwin-aarch64",)
 Runner = Callable[..., subprocess.CompletedProcess[str]]
 
 
@@ -81,6 +81,12 @@ def collect(
     expected_prefix = f"https://github.com/{release_repo}/releases/download/{tag}/"
     platforms = payload.get("platforms") if isinstance(payload, dict) else {}
     platforms = platforms if isinstance(platforms, dict) else {}
+    for platform in sorted(platforms):
+        if platform not in REQUIRED_PLATFORMS:
+            failures.append(
+                f"manifest advertises {platform} but every Grader build is arm64-only; "
+                "an update offered there installs an app that cannot launch"
+            )
     platform_checks: dict[str, Any] = {}
     for platform in REQUIRED_PLATFORMS:
         entry = platforms.get(platform) if isinstance(platforms, dict) else None

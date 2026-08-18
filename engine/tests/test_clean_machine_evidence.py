@@ -383,7 +383,7 @@ def test_collect_release_provenance_requires_artifact_hashes_and_signed_manifest
     (app / "Contents").mkdir(parents=True)
     (app / "Contents" / "Info.plist").write_text("plist")
     dmg.write_text("fake dmg")
-    manifest.write_text('{"version":"0.1.0","pub_date":"2026-07-13T00:00:00Z","platforms":{"darwin-aarch64":{"signature":"sig","url":"https://example.invalid/Grader.dmg"},"darwin-x86_64":{"signature":"sig","url":"https://example.invalid/Grader.dmg"}}}')
+    manifest.write_text('{"version":"0.1.0","pub_date":"2026-07-13T00:00:00Z","platforms":{"darwin-aarch64":{"signature":"sig","url":"https://example.invalid/Grader.dmg"}}}')
 
     ok, details = collect_release_provenance(
         app_path=app,
@@ -424,7 +424,7 @@ def test_collect_release_provenance_rejects_artifacts_older_than_source_commit(t
     manifest = tmp_path / "latest.json"
     app.mkdir()
     dmg.write_text("fake dmg")
-    manifest.write_text('{"version":"0.1.0","pub_date":"2026-07-13T00:00:00Z","platforms":{"darwin-aarch64":{"signature":"sig","url":"https://example.invalid/Grader.dmg"},"darwin-x86_64":{"signature":"sig","url":"https://example.invalid/Grader.dmg"}}}')
+    manifest.write_text('{"version":"0.1.0","pub_date":"2026-07-13T00:00:00Z","platforms":{"darwin-aarch64":{"signature":"sig","url":"https://example.invalid/Grader.dmg"}}}')
     monkeypatch.setattr(
         clean_machine_evidence,
         "_git_source_revision",

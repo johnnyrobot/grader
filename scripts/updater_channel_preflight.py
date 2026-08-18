@@ -25,7 +25,7 @@ import httpx
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-REQUIRED_PLATFORMS = ("darwin-aarch64", "darwin-x86_64")
+REQUIRED_PLATFORMS = ("darwin-aarch64",)
 
 
 def _load_config(path: Path) -> dict[str, Any]:
@@ -175,6 +175,12 @@ def collect(
     if not isinstance(platforms, dict):
         failures.append("manifest platforms object is missing")
         platforms = {}
+    for platform in sorted(platforms):
+        if platform not in REQUIRED_PLATFORMS:
+            failures.append(
+                f"manifest advertises {platform} but every Grader build is arm64-only; "
+                "an update offered there installs an app that cannot launch"
+            )
     platform_details: dict[str, Any] = {}
     for platform in REQUIRED_PLATFORMS:
         entry = platforms.get(platform)

@@ -35,10 +35,6 @@ def test_updater_channel_preflight_passes_newer_signed_manifest(tmp_path, monkey
                         "signature": "signed",
                         "url": "https://github.com/johnnyrobot/grader-releases/releases/download/v0.1.1/Grader.app.tar.gz",
                     },
-                    "darwin-x86_64": {
-                        "signature": "signed",
-                        "url": "https://github.com/johnnyrobot/grader-releases/releases/download/v0.1.1/Grader.app.tar.gz",
-                    },
                 },
             }
 
@@ -88,7 +84,6 @@ def test_updater_channel_preflight_blocks_not_newer_version(tmp_path, monkeypatc
                 "version": "0.1.0",
                 "platforms": {
                     "darwin-aarch64": {"signature": "signed", "url": "https://github.com/johnnyrobot/grader-releases/releases/download/v0.1.0/Grader.app.tar.gz"},
-                    "darwin-x86_64": {"signature": "signed", "url": "https://github.com/johnnyrobot/grader-releases/releases/download/v0.1.0/Grader.app.tar.gz"},
                 },
             }
 
@@ -122,10 +117,6 @@ def test_updater_channel_preflight_blocks_missing_artifact_url(tmp_path, monkeyp
                         "signature": "signed",
                         "url": "https://github.com/johnnyrobot/grader-releases/releases/download/v0.1.1/Grader.app.tar.gz",
                     },
-                    "darwin-x86_64": {
-                        "signature": "signed",
-                        "url": "https://github.com/johnnyrobot/grader-releases/releases/download/v0.1.1/Grader.app.tar.gz",
-                    },
                 },
             }
 
@@ -141,4 +132,44 @@ def test_updater_channel_preflight_blocks_missing_artifact_url(tmp_path, monkeyp
 
     assert result["status"] == "BLOCKED_UPDATER_CHANNEL"
     assert "manifest platform darwin-aarch64 artifact URL is not reachable (HTTP 404)" in result["failures"]
-    assert "manifest platform darwin-x86_64 artifact URL is not reachable (HTTP 404)" in result["failures"]
+
+
+def test_updater_channel_preflight_blocks_intel_platform_entry(tmp_path, monkeypatch):
+    """Grader is arm64-only, so an Intel entry offers a build that cannot launch."""
+    config = tmp_path / "tauri.conf.json"
+    _write_config(config)
+
+    class ManifestResponse:
+        status_code = 200
+        url = "https://github.com/johnnyrobot/grader-releases/releases/latest/download/latest.json"
+
+        def json(self):
+            return {
+                "version": "0.1.1",
+                "pub_date": "2026-07-13T00:00:00Z",
+                "platforms": {
+                    "darwin-aarch64": {
+                        "signature": "signed",
+                        "url": "https://github.com/johnnyrobot/grader-releases/releases/download/v0.1.1/Grader.app.tar.gz",
+                    },
+                    "darwin-x86_64": {
+                        "signature": "signed",
+                        "url": "https://github.com/johnnyrobot/grader-releases/releases/download/v0.1.1/Grader.app.tar.gz",
+                    },
+                },
+            }
+
+    class HeadResponse:
+        status_code = 200
+        url = "https://github.com/johnnyrobot/grader-releases/releases/download/v0.1.1/Grader.app.tar.gz"
+        headers = {"content-length": "123"}
+
+    monkeypatch.setattr(preflight.httpx, "get", lambda *_args, **_kwargs: ManifestResponse())
+    monkeypatch.setattr(preflight.httpx, "head", lambda *_args, **_kwargs: HeadResponse())
+
+    result = preflight.collect(config_path=config, current_version="0.1.0")
+
+    assert result["status"] == "BLOCKED_UPDATER_CHANNEL"
+    assert any(
+        "manifest advertises darwin-x86_64" in failure for failure in result["failures"]
+    ), result["failures"]

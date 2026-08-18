@@ -30,7 +30,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from scripts.ports import CodeSigner, DiskImage, find_app_bundle, source_revision
-REQUIRED_PLATFORMS = ("darwin-aarch64", "darwin-x86_64")
+REQUIRED_PLATFORMS = ("darwin-aarch64",)
 
 
 class CompletedProcessLike(Protocol):
@@ -256,6 +256,12 @@ def collect(
         if not manifest.get("pub_date"):
             failures.append("manifest pub_date is missing")
         platforms = manifest.get("platforms") or {}
+        for platform in sorted(platforms):
+            if platform not in REQUIRED_PLATFORMS:
+                failures.append(
+                    f"manifest advertises {platform} but every Grader build is arm64-only; "
+                    "an update offered there installs an app that cannot launch"
+                )
         for platform in REQUIRED_PLATFORMS:
             entry = platforms.get(platform) or {}
             if not entry.get("url"):
