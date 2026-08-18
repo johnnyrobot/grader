@@ -1,6 +1,6 @@
 [package]
 name = "grader-app"
-version = "0.1.2"
+version = "0.1.3"
 description = "Grader — local AI grading copilot"
 authors = ["Johnny"]
 edition = "2021"

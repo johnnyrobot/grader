@@ -19,7 +19,7 @@ export GRADER_ENGINE_TOKEN="${1:-dev-token}"
 PORT="${2:-8756}"
 # Kept literal: scripts/bump_release_version.py and scripts/release_version_guard.py
 # both treat this line as a version surface.
-export GRADER_APP_VERSION="0.1.2"
+export GRADER_APP_VERSION="0.1.3"
 
 export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
 
