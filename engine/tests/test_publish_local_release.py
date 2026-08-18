@@ -113,3 +113,63 @@ def test_publish_creates_release_with_checksums_and_provenance(tmp_path, monkeyp
     assert "--latest" in create
     assert str(dmg) in create
     assert str(updater_bundle) in create
+
+
+def test_publish_reports_upload_timeout_and_names_the_partial_draft(tmp_path, monkeypatch):
+    """A killed upload leaves a draft release holding only the small assets."""
+    dmg, updater_bundle, manifest = _fixture(tmp_path)
+    commands: list[list[str]] = []
+    collect_runner = _runner(commands)
+    monkeypatch.setattr(publish_local_release.shutil, "which", lambda _name: "/usr/bin/gh")
+    result = publish_local_release.collect(
+        dmg=dmg,
+        updater_bundle=updater_bundle,
+        manifest=manifest,
+        version="0.1.1",
+        tag="v0.1.1",
+        runner=collect_runner,
+    )
+    assert result["status"] == "PASS"
+
+    def timing_out_runner(command, **kwargs):
+        if command[:3] == ["gh", "release", "create"]:
+            raise subprocess.TimeoutExpired(command, kwargs.get("timeout", 0))
+        return collect_runner(command, **kwargs)
+
+    applied = publish_local_release.publish(
+        result, out_dir=tmp_path / "publication", runner=timing_out_runner
+    )
+
+    assert applied["status"] == "BLOCKED_LOCAL_RELEASE_PUBLICATION"
+    assert any("timed out" in failure for failure in applied["failures"])
+    assert any("'v0.1.1'" in failure for failure in applied["failures"])
+
+
+def test_publish_gives_the_upload_a_longer_budget_than_a_metadata_query(tmp_path, monkeypatch):
+    """~1 GB of assets cannot upload inside the timeout used for `gh repo view`."""
+    dmg, updater_bundle, manifest = _fixture(tmp_path)
+    commands: list[list[str]] = []
+    collect_runner = _runner(commands)
+    monkeypatch.setattr(publish_local_release.shutil, "which", lambda _name: "/usr/bin/gh")
+    result = publish_local_release.collect(
+        dmg=dmg,
+        updater_bundle=updater_bundle,
+        manifest=manifest,
+        version="0.1.1",
+        tag="v0.1.1",
+        runner=collect_runner,
+    )
+
+    seen: dict[str, float] = {}
+
+    def recording_runner(command, **kwargs):
+        if command[:3] == ["gh", "release", "create"]:
+            seen["create"] = kwargs.get("timeout")
+        return collect_runner(command, **kwargs)
+
+    publish_local_release.publish(
+        result, out_dir=tmp_path / "publication", runner=recording_runner
+    )
+
+    assert seen["create"] == publish_local_release.UPLOAD_TIMEOUT_SECONDS
+    assert seen["create"] > publish_local_release.QUERY_TIMEOUT_SECONDS

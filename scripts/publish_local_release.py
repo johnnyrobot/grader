@@ -33,8 +33,21 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _run(runner: Runner, command: list[str]) -> subprocess.CompletedProcess[str]:
-    return runner(command, text=True, capture_output=True, timeout=120, check=False)
+# Metadata queries answer in seconds. The upload does not: the release carries the DMG
+# and the updater tarball, which together run to roughly a gigabyte, so the ceiling has
+# to be an upload budget rather than a query budget. At 120s the upload was killed
+# mid-flight and left a draft release holding only the small files.
+QUERY_TIMEOUT_SECONDS = 120
+UPLOAD_TIMEOUT_SECONDS = 3600
+
+
+def _run(
+    runner: Runner,
+    command: list[str],
+    *,
+    timeout: float = QUERY_TIMEOUT_SECONDS,
+) -> subprocess.CompletedProcess[str]:
+    return runner(command, text=True, capture_output=True, timeout=timeout, check=False)
 
 
 def collect(
@@ -210,8 +223,25 @@ def publish(
         str(checksums),
         str(provenance),
     ]
-    proc = _run(runner, command)
     applied = dict(result)
+    try:
+        proc = _run(runner, command, timeout=UPLOAD_TIMEOUT_SECONDS)
+    except subprocess.TimeoutExpired:
+        # A timed-out upload does not leave nothing behind: gh creates the release as a
+        # draft and attaches whatever it managed to send. Say so, because the next run
+        # will refuse the tag as already taken and the reason would otherwise be unclear.
+        applied["apply"] = {
+            "returncode": None,
+            "timed_out_after_seconds": UPLOAD_TIMEOUT_SECONDS,
+            "assets": [],
+        }
+        applied["status"] = "BLOCKED_LOCAL_RELEASE_PUBLICATION"
+        applied["failures"] = [
+            *result.get("failures", []),
+            f"gh release create timed out after {UPLOAD_TIMEOUT_SECONDS}s; "
+            f"delete the partial draft release {result['tag']!r} before retrying",
+        ]
+        return applied
     applied["apply"] = {
         "returncode": proc.returncode,
         "stdout": (proc.stdout or "").strip(),
