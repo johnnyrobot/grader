@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { SettingsScreen } from "./Settings";
 import { ThemeProvider } from "../theme";
 
@@ -13,6 +13,21 @@ vi.mock("../api", () => ({
 }));
 
 describe("SettingsScreen", () => {
+  // Each test states the settings it needs outright. Nothing here may use the
+  // `...Once` variants: the screen can load settings more than once per render, and a
+  // one-shot answer leaves the follow-up call falling through to the bare mock, whose
+  // reply carries no data_dir and blanks the field that was just asserted. Which of
+  // the two lands last is a matter of timing, so the failure only ever showed up on CI.
+  beforeEach(async () => {
+    const api = await import("../api");
+    vi.mocked(api.getSettings).mockReset().mockResolvedValue({
+      high_confidence_threshold: 0.95,
+      review_first_threshold: 0.7,
+    });
+    vi.mocked(api.updateSettings).mockReset().mockResolvedValue({ success: true });
+    vi.mocked(api.listRubrics).mockReset().mockResolvedValue([]);
+  });
+
   it("keeps appearance preferences editable, previewable, and resettable", async () => {
     const user = userEvent.setup();
     render(
@@ -33,14 +48,14 @@ describe("SettingsScreen", () => {
 
   it("shows recoverable loading errors as status text", async () => {
     const api = await import("../api");
-    vi.mocked(api.getSettings).mockRejectedValueOnce(new Error("engine unavailable"));
+    vi.mocked(api.getSettings).mockRejectedValue(new Error("engine unavailable"));
     render(<ThemeProvider><SettingsScreen onClose={vi.fn()} /></ThemeProvider>);
     await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("engine unavailable"));
   });
 
   it("labels the attachment directory accurately and saves runtime grading settings", async () => {
     const api = await import("../api");
-    vi.mocked(api.getSettings).mockResolvedValueOnce({
+    vi.mocked(api.getSettings).mockResolvedValue({
       canvas_url: "https://canvas.example.test",
       canvas_token_masked: "1234...cdef",
       data_dir: "/tmp/grader-canvas",

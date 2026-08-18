@@ -103,4 +103,11 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+      # tauri.conf.json bundles the engine from app/src-tauri/resources/, which is
+      # gitignored: it is a 1.1 GB relocatable CPython that scripts/build_engine_bundle.py
+      # assembles at release time. The build script only requires the paths to resolve, so
+      # empty directories are enough to compile. Building the real bundle here would cost
+      # the whole download to check code that never reads it.
+      - name: Stand in for the gitignored engine bundle
+        run: mkdir -p app/src-tauri/resources/engine app/src-tauri/resources/runtime
       - run: cd app/src-tauri && cargo check
