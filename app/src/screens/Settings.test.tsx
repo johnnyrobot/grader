@@ -13,11 +13,10 @@ vi.mock("../api", () => ({
 }));
 
 describe("SettingsScreen", () => {
-  // Each test states the settings it needs outright. Nothing here may use the
-  // `...Once` variants: the screen can load settings more than once per render, and a
-  // one-shot answer leaves the follow-up call falling through to the bare mock, whose
-  // reply carries no data_dir and blanks the field that was just asserted. Which of
-  // the two lands last is a matter of timing, so the failure only ever showed up on CI.
+  // Each test states the settings it needs outright, and none may use the `...Once`
+  // variants: the screen reloads settings after a save, so a one-shot answer leaves the
+  // second call falling through to the bare mock, whose reply carries no data_dir.
+  // That is a real coupling, though not what broke CI — see the wait below.
   beforeEach(async () => {
     const api = await import("../api");
     vi.mocked(api.getSettings).mockReset().mockResolvedValue({
@@ -65,8 +64,11 @@ describe("SettingsScreen", () => {
     const user = userEvent.setup();
     render(<ThemeProvider><SettingsScreen onClose={vi.fn()} /></ThemeProvider>);
 
+    // The input renders before the settings arrive, so findByRole returns it while it is
+    // still empty. Wait for the value rather than the element: locally the load resolves
+    // fast enough to hide the gap, and on CI it did not.
     const directory = await screen.findByRole("textbox", { name: /Canvas attachment directory/i });
-    expect(directory).toHaveValue("/tmp/grader-canvas");
+    await waitFor(() => expect(directory).toHaveValue("/tmp/grader-canvas"));
     expect(screen.getByText(/Core databases and the durable post queue are selected when the local engine starts/i)).toBeInTheDocument();
 
     await user.clear(screen.getByRole("spinbutton", { name: /High-confidence threshold/i }));
