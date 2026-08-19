@@ -46,10 +46,13 @@ jobs:
         working-directory: app
         run: npm test -- --run
 
-      # See gates.yml: app/src-tauri/resources/ is the gitignored 1.1 GB engine bundle,
-      # and cargo check only needs the paths in tauri.conf.json to resolve.
-      - name: Stand in for the gitignored engine bundle
-        run: mkdir -p app/src-tauri/resources/engine app/src-tauri/resources/runtime
+      # app/src-tauri/resources/ is gitignored: scripts/build_engine_bundle.py assembles a
+      # relocatable CPython and the runtime dependencies there. Unlike gates.yml, which only
+      # runs cargo check and can make do with empty directories, this job builds a real app
+      # bundle and runs engine:check against it, so the bundle has to actually exist. That
+      # also makes this workflow the thing that would catch issue #23 coming back.
+      - name: Build the engine bundle
+        run: uv run python scripts/build_engine_bundle.py
 
       - name: Check Rust desktop shell
         working-directory: app/src-tauri
