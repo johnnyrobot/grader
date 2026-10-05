@@ -487,7 +487,7 @@ P0 spike ─► P1 calibration ─► P2 shell/UX ─► P3 canvas ─► P5 rel
 ### 11.2 References
 - `RESEARCH.md` — full cited research report (models, parsing, citations, platform, packaging, reliability literature) — the evidentiary basis for every technical choice above.
 - `docs/SPEC.md` — condensed technical spec sheet.
-- canvas-pp-cli — `/Users/laccd/code/canvas-pp-cli` (local audit summarized in RESEARCH.md §10).
+- canvas-pp-cli — `/Users/johnnyrobot/code/canvas-pp-cli` (local audit summarized in RESEARCH.md §10).
 
 ### 11.3 Change Log
 | Version | Date | Author | Changes |

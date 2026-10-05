@@ -42,7 +42,7 @@ fn find_engine_dir() -> Option<PathBuf> {
         PathBuf::from(&home).join("code/grader/engine"),
         PathBuf::from(&home).join("Projects/grader/engine"),
         PathBuf::from(&home).join("Developer/grader/engine"),
-        PathBuf::from("/Users/laccd/code/grader/engine"),
+        PathBuf::from("/Users/johnnyrobot/code/grader/engine"),
     ];
     for c in &candidates {
         if c.join("api.py").exists() {

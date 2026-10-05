@@ -179,7 +179,7 @@ Expected: PASS.
 - [ ] **Step 1: Add Playwright and axe development dependencies, then inspect the helper CLI.**
 
 Run: `cd app && npm install --save-dev @playwright/test @axe-core/playwright`
-Run: `python /Users/laccd/.codex/skills/anthropics__skills__webapp-testing/scripts/with_server.py --help`
+Run: `python /Users/johnnyrobot/.codex/skills/anthropics__skills__webapp-testing/scripts/with_server.py --help`
 
 - [ ] **Step 2: Write an end-to-end test before any E2E-specific production adjustment.**
 

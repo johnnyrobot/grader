@@ -46,7 +46,7 @@ three you gave 4s"), and it ships zero per-teacher model artifacts. LoRA fine-tu
 ### The very next command
 
 ```bash
-cd /Users/laccd/code/grader
+cd /Users/johnnyrobot/code/grader
 uv run python scripts/bump_release_version.py --target-version 0.1.1 --allow-same --out artifacts/release-evidence/version-bump-plan.json
 uv run python scripts/github_release_preflight.py --candidate-tag v0.1.1 --out artifacts/release-evidence/github-release-preflight-current.json --no-fail
 uv run python scripts/updater_key_doctor.py --signing-key tauri-updater-key.pem --password-keychain-service TAURI_SIGNING_PRIVATE_KEY_PASSWORD --password-keychain-account grader-updater --out artifacts/release-evidence/updater-key-current.json

@@ -2211,7 +2211,7 @@
       "tokens": 53312,
       "toolCalls": 10,
       "durationMs": 196172,
-      "resultPreview": "{\"refuted\":false,\"evidence\":\"Attempted refutation failed — the claim is directly and redundantly supported by the primary source. I fetched the full HTML of arXiv:2603.10233 (\\\"S-GRADES — Studying Generalization of Student Response Assessments in Diverse Evaluative Settings\\\", March 2026, CC BY 4.0) and extracted verbatim text (saved to /private/tmp/claude-503/-Users-laccd-code-grader/080d0017-519…"
+      "resultPreview": "{\"refuted\":false,\"evidence\":\"Attempted refutation failed — the claim is directly and redundantly supported by the primary source. I fetched the full HTML of arXiv:2603.10233 (\\\"S-GRADES — Studying Generalization of Student Response Assessments in Diverse Evaluative Settings\\\", March 2026, CC BY 4.0) and extracted verbatim text (saved to /private/tmp/claude-503/-Users-johnnyrobot-code-grader/080d0017-519…"
     },
     {
       "type": "workflow_agent",

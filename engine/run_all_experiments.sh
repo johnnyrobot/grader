@@ -1,7 +1,7 @@
 #!/bin/bash
 # Run all 4 calibration experiments sequentially to avoid GPU contention.
 set -e
-cd /Users/laccd/code/grader
+cd /Users/johnnyrobot/code/grader
 
 echo "############################################################"
 echo "# Experiment 1: pointer, grader-text:8b, k=6"
