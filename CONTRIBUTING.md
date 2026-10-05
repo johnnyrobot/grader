@@ -32,7 +32,6 @@ engine/gates/      CI ship gates (quality, bias, egress, perf)
 engine/api.py      FastAPI engine — the single interface for the Tauri shell
 app/src/           React + TypeScript frontend
 app/src-tauri/     Tauri Rust shell
-docs/              PRD, SPEC, phase guides, FERPA one-pager, rubric guide
 fixtures/          Citation fixtures (committed), golden set (gitignored — FERPA)
 scripts/           Model baking, Canvas sandbox seeder
 ```

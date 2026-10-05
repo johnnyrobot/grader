@@ -6,19 +6,6 @@ you grade**.
 
 Student work never leaves your machine.
 
-## Product tour
-
-| Privacy-first onboarding | Review-first grading queue |
-| :---: | :---: |
-| ![Grader privacy-first onboarding](docs/images/grader-demo/01-onboarding-welcome.png) | ![Grader grading queue with synthetic submissions](docs/images/grader-demo/02-grading-queue.png) |
-| **Teacher review and explicit approval** | **On-device model manager** |
-| ![Teacher-edited grade after explicit approval](docs/images/grader-demo/03-teacher-review-approved.png) | ![Local text, handwriting, and exemplar models](docs/images/grader-demo/04-local-models.png) |
-
-_Screenshots use synthesized local-only records; no real student data or live Canvas writes._
-
-New to Grader? Follow the **[Instructor User Guide](docs/USER-GUIDE.md)** for setup, model
-readiness, rubrics, grading, teacher approval, Canvas handoff, updates, and recovery.
-
 ---
 
 ## Why
@@ -66,9 +53,6 @@ and teacher-specific accuracy claims still require institution-authorized local 
 | Signing + notarization | 🟢 PASS — Developer ID private key and stored `grader` notarytool profile verified |
 | Updates | 🟢 PASS — public 0.1.1 channel and real signed 0.1.0 → 0.1.1 install/relaunch path verified |
 | Beta rollout | 🟢 `supervised_public_beta` — 19/19 release-matrix rows pass |
-
-See [`docs/HANDOFF.md`](docs/HANDOFF.md) for exact status and [`docs/phases/`](docs/phases/) for
-per-phase detail.
 
 ## Public beta readiness
 
@@ -138,8 +122,6 @@ Tauri + React shell · Python engine (FastAPI) · **Pydantic AI v2** · **Ollama
 Canvas via [canvas-pp-cli](https://github.com/mvanhorn/printing-press-library). Canvas credentials
 can come from `CANVAS_BASE_URL` + `CANVAS_API_TOKEN`/`CANVAS_TOKEN`, or from the already configured
 `canvas-pp-cli` `config.toml` + `credentials.toml` files.
-
-Every choice is justified with citations in [`RESEARCH.md`](RESEARCH.md).
 
 ## Development
 
@@ -242,22 +224,6 @@ signed `Grader.app.tar.gz`, signed `latest.json`, checksums, and source provenan
 `latest.json`, and use `scripts/updater_channel_preflight.py` after publishing N+1 to confirm the
 live release channel advertises a signed newer, reachable `Grader.app.tar.gz` before clean-machine updater
 testing starts.
-
-## Docs
-
-| | |
-|---|---|
-| [`docs/HANDOFF.md`](docs/HANDOFF.md) | **Start here** — status, gotchas, next command |
-| [`docs/USER-GUIDE.md`](docs/USER-GUIDE.md) | **Instructor guide** — setup, grading workflow, approval, Canvas, updates, recovery |
-| [`docs/INSTALL.md`](docs/INSTALL.md) | Installation guide (from source + release builds) |
-| [`docs/PRD.md`](docs/PRD.md) | Product requirements |
-| [`docs/SPEC.md`](docs/SPEC.md) | Technical spec sheet |
-| [`docs/DATA-PLAN.md`](docs/DATA-PLAN.md) | Datasets, licenses, access paths |
-| [`docs/FERPA.md`](docs/FERPA.md) | FERPA privacy one-pager |
-| [`docs/RUBRIC_AUTHORING.md`](docs/RUBRIC_AUTHORING.md) | Rubric authoring guide |
-| [`docs/BETA_ROLLOUT.md`](docs/BETA_ROLLOUT.md) | Beta program guide + feedback form |
-| [`RESEARCH.md`](RESEARCH.md) | The cited architecture report |
-| [`docs/research/`](docs/research/) | Raw research (adversarially verified) |
 
 ## License
 

@@ -1,6 +1,6 @@
 # Citation-Verification Fixtures
 
-Synthetic fixtures for Grader's citation-verification ladder (`docs/PRD.md` FR-4). No public
+Synthetic fixtures for Grader's citation-verification ladder. No public
 corpus of student papers with bibliographies exists, so we build one: **real metadata from
 Crossref, deliberately corrupted in the specific ways the verifier must catch.**
 
@@ -57,4 +57,4 @@ reached, not just that it was right. A `verified` reached by guessing is not a p
 
 The false-positive direction matters more than raw accuracy: calling a real citation fabricated
 harms a student. Track FP rate on `verified` + `unreachable` separately from overall accuracy —
-the same asymmetry the answer-key "weak hint" research warns about (`RESEARCH.md` §8).
+the same asymmetry the answer-key "weak hint" research warns about.
