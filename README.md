@@ -18,6 +18,43 @@ Grader inverts all three. Local models. Your rubric, your source materials, and 
 previously-graded work as the source of truth. And **you approve every score** — the AI drafts,
 you decide.
 
+## How it works
+
+Two processes on your Mac, talking over an authenticated loopback port. Nothing else is involved.
+
+```
+Tauri 2 + React desktop app          app/src/api.ts — every engine call goes through here
+        |
+        |  dynamic loopback port + per-launch bearer token
+        v
+Python FastAPI engine                engine/api.py — SQLite/WAL queue + append-only audit log
+        |
+        +-- grading, calibration, triage      Canvas import/post
+        +-- document parsing, handwriting     citation checks, annotated write-back
+```
+
+A submission travels this path:
+
+1. **Import** — pull ungraded submissions from Canvas, or load local files.
+2. **Read** — documents parse with Docling/pypdf/python-docx. Handwriting and scans go to a vision
+   model that **only transcribes**; a vision model is never allowed to grade directly.
+3. **Retrieve anchors** — embed the submission and pull your most similar previously-graded work.
+4. **Draft** — the text model grades against your rubric at **temperature 0**. Output constraints
+   live in Pydantic schemas rather than prompt wording, so a malformed grade is rejected and
+   retried instead of quietly accepted.
+5. **Triage** — each draft is routed to a review lane by confidence: needs review, standard review,
+   or confident draft. Criteria that are open-ended never reach the confident lane.
+6. **You decide** — approve as drafted, or edit scores and feedback and approve the result. Your
+   correction becomes a new exemplar immediately, so the next draft is already better calibrated.
+7. **Post** — only an approved grade in the data layer may go back to Canvas.
+
+Grading never crashes the queue: a failed draft is recorded as an error on the run and stays
+visible for you to handle, rather than raising.
+
+The models are **capped** local tags (`grader-text:8b`, `grader-vision:1.3b`) built by
+`scripts/make_models.sh`. Raw Ollama base tags are banned in app grading — their default context
+windows are large enough to exhaust memory on a 16 GB machine.
+
 ## How the calibration works
 
 You grade a few papers. Grader embeds them. From then on, every draft grade is conditioned on
@@ -29,6 +66,49 @@ You grade a few papers. Grader embeds them. From then on, every draft grade is c
 This is how human raters calibrate, and it's what the research supports. It works from your first
 graded paper, improves every time you grade one more, and it's explainable — no black box, no
 per-teacher model to train.
+
+Retrieval is deliberately **balanced across score bands** rather than purely nearest-neighbour.
+Pure similarity search happily returns six A-papers, and the model then anchors on "everything here
+is an A." Your corrections are also weighted above imported exemplars, so the most recent signal
+about your standard wins.
+
+## What's in the app
+
+**Grading and review**
+- Queue with three confidence lanes: needs review, standard review, confident drafts
+- Grade review with per-criterion scores, rationale, and the anchors that informed each one
+- Approve as drafted, or edit scores and feedback and approve the result
+- Every override becomes an exemplar immediately — calibration updates as you work
+- **Reflect-and-Revise:** when three or more overrides on a criterion cluster in the same
+  direction, Grader proposes a rubric-text amendment — which you accept, edit, or reject
+
+**Rubrics and models**
+- Paste, build, or import rubrics from Canvas; versioned with amendment history
+- Local model manager: install and verify the text, vision, and embedding models
+- Calibration health panel: rolling agreement, override rate, and cold-start status
+
+**Documents**
+- PDF, DOCX, and XLSX parsing
+- Handwriting and scanned-page transcription
+- Citation verification — **visibly experimental**, see Status below
+- Annotated write-back to a **new** file; your students' originals are never modified
+
+**Canvas**
+- Import ungraded submissions with attachments
+- Post approved scores and feedback comments, polling to completion
+- Durable offline post queue for work done without a connection
+- Live writes are restricted to courses named `ZZ-GRADER-TEST*`
+
+**Interface**
+- Light mode by default; dark mode, comfortable/spacious density, and reduced motion are saved
+  preferences
+- Status is never conveyed by colour alone; visible focus, full keyboard paths, and 200% text
+  reflow are maintained
+
+**Under the hood**
+- Loopback-only engine with a per-launch bearer token
+- SQLite in WAL mode; append-only audit log of every grade, override, and post
+- Signed and notarized builds with an in-app updater
 
 ## Status
 
